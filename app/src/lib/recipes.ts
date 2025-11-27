@@ -48,6 +48,9 @@ export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
     const res = await fetch(url, {
       cache: "no-store",
       next: { revalidate: 0 }, // Désactiver complètement le cache
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      },
     });
 
     if (!res.ok) {
