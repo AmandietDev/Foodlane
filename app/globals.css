@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+:root {
+  /* Palette très colorée et vibrante - dégradé rose pâle à marron foncé (mode clair) */
+  --background: #FFF0F0; /* Rose très pâle et lumineux */
+  --foreground: #6B2E2E; /* Marron-rouge foncé pour le texte */
+  --beige-light: #FFF0F0; /* Rose très pâle */
+  --beige-rose: #FFD9D9; /* Rose pâle et vibrant */
+  --beige-rose-light: #FFC4C4; /* Rose moyen et saturé */
+  --beige-card: #FFD9D9; /* Rose pâle vibrant pour les cartes */
+  --beige-card-alt: #FFC4C4; /* Rose moyen saturé pour cartes alternées */
+  --beige-border: #E8A0A0; /* Rose corail pour bordures */
+  --beige-border-dark: #D47A7A; /* Rose-brun corail pour bordures foncées */
+  --beige-accent: #D44A4A; /* Rouge corail vif pour accents */
+  --beige-accent-hover: #C03A3A; /* Rouge corail foncé pour hover */
+  
+  /* Système de couleurs de texte uniforme et foncé pour une meilleure lisibilité */
+  --text-primary: #6B2E2E;      /* Texte principal - marron-rouge foncé pour une excellente visibilité */
+  --text-secondary: #7A3A3A;   /* Texte secondaire - marron-rouge moyen et lisible */
+  --text-muted: #8A4A4A;        /* Texte atténué - marron-rouge clair, toujours bien visible */
+  --text-light: #9A5A5A;        /* Texte léger - marron-rouge très clair pour les labels */
+  
+  /* Anciennes variables pour compatibilité (dépréciées) */
+  --beige-text-light: #4A4A4A;
+  --beige-text-muted: #6B6B6B;
+}
+
+[data-theme="dark"] {
+  /* Palette mode sombre - tons sombres mais conservant l'identité rose/marron */
+  --background: #2A1F1F;
+  --foreground: #FFD6D6;
+  --beige-light: #2A1F1F;
+  --beige-rose: #3D2A2A;
+  --beige-rose-light: #4A3535;
+  --beige-card: #3D2A2A;
+  --beige-card-alt: #4A3535;
+  --beige-border: #5A4040;
+  --beige-border-dark: #6B4A4A;
+  --beige-accent: #C85A5A;
+  --beige-accent-hover: #B84A4A;
+  
+  /* Système de couleurs de texte uniforme pour mode sombre */
+  --text-primary: #F5F5F5;      /* Texte principal - très clair pour contraste */
+  --text-secondary: #E0E0E0;    /* Texte secondaire - clair et lisible */
+  --text-muted: #C0C0C0;        /* Texte atténué - toujours bien visible */
+  --text-light: #A0A0A0;        /* Texte léger - pour les labels et infos secondaires */
+  
+  /* Anciennes variables pour compatibilité (dépréciées) */
+  --beige-text-light: #E0E0E0;
+  --beige-text-muted: #C0C0C0;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Masquer les scrollbars tout en gardant le défilement */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE et Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari et Opera */
+}
