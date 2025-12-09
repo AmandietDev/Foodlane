@@ -13,7 +13,6 @@ import {
 import RecipeImage from "./components/RecipeImage";
 import { loadPreferences } from "./src/lib/userPreferences";
 import CameraCapture from "./components/CameraCapture";
-import UserFeedback from "./components/UserFeedback";
 import { 
   filterRecipesByDietaryProfile, 
   filterRecipesByEquipment, 
@@ -54,7 +53,14 @@ export default function Home() {
   useSwipeBack(() => {
     if (showResultsPanel) {
       if (selectedRecipe) {
-        setSelectedRecipe(null); // Retour à la liste
+        // Si on vient des recettes du moment (results est vide), fermer complètement le panneau
+        // Sinon, revenir à la liste de résultats
+        if (results.length === 0) {
+          setSelectedRecipe(null);
+          setShowResultsPanel(false);
+        } else {
+          setSelectedRecipe(null); // Retour à la liste
+        }
       } else {
         setShowResultsPanel(false); // Fermer le panneau
       }
@@ -93,23 +99,27 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // Charger les favoris et collections depuis localStorage au démarrage
-    const loadedFavorites = loadFavorites();
-    const loadedCollections = loadCollections();
-    console.log("[HomePage] Chargement initial:", loadedFavorites.length, "favoris");
-    setFavorites(loadedFavorites);
-    setCollections(loadedCollections);
+    // Charger les favoris et collections depuis Supabase au démarrage
+    const loadData = async () => {
+      const loadedFavorites = await loadFavorites();
+      const loadedCollections = await loadCollections();
+      // Chargement initial des favoris
+      setFavorites(loadedFavorites);
+      setCollections(loadedCollections);
+      
+      const preferences = loadPreferences();
+      setUserPrenom(preferences.prenom || "");
+      setShowCalories(preferences.afficherCalories);
+      setRecipeRatings(loadRatings());
+      loadPopularRecipes();
+    };
     
-    const preferences = loadPreferences();
-    setUserPrenom(preferences.prenom || "");
-    setShowCalories(preferences.afficherCalories);
-    setRecipeRatings(loadRatings());
-    loadPopularRecipes();
+    loadData();
     
     // Écouter les changements de favoris depuis d'autres pages
-    const handleFavoritesUpdated = () => {
-      const updated = loadFavorites();
-      console.log("[HomePage] Favoris mis à jour depuis un autre composant:", updated.length, "favoris");
+    const handleFavoritesUpdated = async () => {
+      const updated = await loadFavorites();
+      // Favoris mis à jour depuis un autre composant
       setFavorites(updated);
     };
     
@@ -125,7 +135,7 @@ export default function Home() {
   async function loadPopularRecipes() {
     setLoadingPopular(true);
     try {
-      console.log("[RecettesDuMoment] Chargement des recettes du moment...");
+      // Chargement des recettes du moment
       
       const res = await fetch("/api/recipes", {
         cache: "no-store",
@@ -141,7 +151,7 @@ export default function Home() {
       const data = await res.json();
       const allRecipes: Recipe[] = data.recipes || [];
       
-      console.log(`[RecettesDuMoment] ${allRecipes.length} recettes récupérées depuis l'API`);
+      // Recettes récupérées depuis l'API
       
       if (allRecipes.length === 0) {
         console.warn("[RecettesDuMoment] ⚠️ Aucune recette disponible");
@@ -151,11 +161,11 @@ export default function Home() {
       
       // FILTRER PAR SAISON (c'est le critère principal pour "Recettes du moment")
       let seasonalRecipes = filterRecipesBySeason(allRecipes);
-      console.log(`[RecettesDuMoment] ${seasonalRecipes.length} recettes de saison (sur ${allRecipes.length})`);
+      // Filtrage par saison
       
       // Si pas assez de recettes de saison, prendre toutes les recettes
       if (seasonalRecipes.length < 4) {
-        console.log("[RecettesDuMoment] Pas assez de recettes de saison, on prend toutes les recettes");
+        // Pas assez de recettes de saison, on prend toutes les recettes
         seasonalRecipes = allRecipes;
       }
       
@@ -168,7 +178,7 @@ export default function Home() {
       
       // Prendre 4 recettes aléatoires de saison pour l'affichage sur la page d'accueil
       const selectedRecipes = shuffled.slice(0, 4);
-      console.log(`[RecettesDuMoment] ✅ ${selectedRecipes.length} recettes du moment sélectionnées pour la page d'accueil:`, selectedRecipes.map(r => r.nom));
+      // Recettes du moment sélectionnées
       
       setPopularRecipes(selectedRecipes);
     } catch (error) {
@@ -220,7 +230,7 @@ export default function Home() {
     setGenerateError(null);
 
     try {
-      console.log("[Generate] Début de la génération avec ingrédients:", selectedIngredients.join(", "));
+      // Début de la génération avec ingrédients
       
       const res = await fetch("/api/recipes", {
         cache: "no-store",
@@ -246,7 +256,7 @@ export default function Home() {
       const data = await res.json();
       const recipes: Recipe[] = data.recipes || [];
 
-      console.log(`[Generate] ${recipes.length} recettes récupérées depuis l'API`);
+      // Recettes récupérées depuis l'API
 
       if (recipes.length === 0) {
         console.warn("[Generate] ⚠️ Aucune recette récupérée depuis l'API");
@@ -648,26 +658,27 @@ export default function Home() {
   useEffect(() => {
     // Ne sauvegarder que si les favoris ont vraiment changé (éviter d'écraser une sauvegarde récente)
     // Cette sauvegarde est un backup, la sauvegarde principale se fait dans toggleFavorite
-    const currentSaved = loadFavorites();
-    const currentIds = currentSaved.map(f => f.id).sort().join(',');
-    const newIds = favorites.map(f => f.id).sort().join(',');
-    
-    // Seulement sauvegarder si différent ET si on a au moins un favori (pour éviter d'écraser)
-    if (currentIds !== newIds && favorites.length > 0) {
-      console.log("[Favorites] Sauvegarde de backup depuis useEffect");
-      saveFavorites(favorites);
-    }
+    const syncFavorites = async () => {
+      const currentSaved = await loadFavorites();
+      const currentIds = currentSaved.map(f => f.id).sort().join(',');
+      const newIds = favorites.map(f => f.id).sort().join(',');
+      
+      // Seulement sauvegarder si différent ET si on a au moins un favori (pour éviter d'écraser)
+      if (currentIds !== newIds && favorites.length > 0) {
+        console.log("[Favorites] Sauvegarde de backup depuis useEffect");
+        await saveFavorites(favorites);
+      }
+    };
+    syncFavorites();
   }, [favorites]);
 
 
   function isFavorite(recipeId: string): boolean {
-    // Vérifier à la fois dans l'état et dans localStorage pour être sûr
-    const inState = favorites.some((fav) => fav.id === recipeId);
-    const inStorage = loadFavorites().some((fav) => fav.id === recipeId);
-    return inState || inStorage;
+    // Vérifier dans l'état
+    return favorites.some((fav) => fav.id === recipeId);
   }
 
-  function toggleFavorite(recipe: Recipe) {
+  async function toggleFavorite(recipe: Recipe) {
     // Vérifier que la recette est valide
     if (!recipe || !recipe.id || !recipe.nom) {
       console.error("[Favorites] Tentative d'ajouter une recette invalide:", recipe);
@@ -676,9 +687,9 @@ export default function Home() {
 
     console.log("[Favorites] toggleFavorite appelé pour:", recipe.nom, "ID:", recipe.id);
 
-    // Charger les favoris actuels depuis localStorage pour être sûr
-    const currentFavorites = loadFavorites();
-    console.log("[Favorites] Favoris actuels dans localStorage:", currentFavorites.length, currentFavorites.map(f => f.id));
+    // Charger les favoris actuels depuis Supabase
+    const currentFavorites = await loadFavorites();
+    console.log("[Favorites] Favoris actuels:", currentFavorites.length, currentFavorites.map(f => f.id));
     
     const exists = currentFavorites.some((fav) => fav.id === recipe.id);
     
@@ -686,17 +697,18 @@ export default function Home() {
       // Si la recette est déjà en favoris, la retirer directement
       const newFavorites = currentFavorites.filter((fav) => fav.id !== recipe.id);
       console.log(`[Favorites] Recette "${recipe.nom}" retirée des favoris`);
-      saveFavorites(newFavorites);
+      await saveFavorites(newFavorites);
       setFavorites(newFavorites);
       
       // Retirer aussi de toutes les collections
-      const currentCollections = loadCollections();
-      currentCollections.forEach((collection) => {
+      const currentCollections = await loadCollections();
+      for (const collection of currentCollections) {
         if (collection.recipeIds.includes(recipe.id)) {
-          removeRecipeFromCollection(collection.id, recipe.id);
+          await removeRecipeFromCollection(collection.id, recipe.id);
         }
-      });
-      setCollections(loadCollections());
+      }
+      const updatedCollections = await loadCollections();
+      setCollections(updatedCollections);
     } else {
       // Si la recette n'est pas en favoris, l'ajouter TOUJOURS aux favoris d'abord
       const recipeCopy: Recipe = {
@@ -715,7 +727,7 @@ export default function Home() {
         image_url: recipe.image_url,
       };
       const newFavorites = [...currentFavorites, recipeCopy];
-      saveFavorites(newFavorites);
+      await saveFavorites(newFavorites);
       setFavorites(newFavorites);
       console.log(`[Favorites] Recette "${recipe.nom}" ajoutée aux favoris`);
       
@@ -723,29 +735,31 @@ export default function Home() {
       setRecipeToAddToCollection(recipe);
       setShowCollectionModal(true);
       // Recharger les collections pour avoir les dernières données
-      setCollections(loadCollections());
+      const updatedCollections = await loadCollections();
+      setCollections(updatedCollections);
     }
   }
 
-  function handleAddToCollection(collectionId: string) {
+  async function handleAddToCollection(collectionId: string) {
     if (!recipeToAddToCollection) return;
     
     // La recette est déjà dans les favoris (ajoutée dans toggleFavorite)
     // Il suffit de l'ajouter à la collection
-    addRecipeToCollection(collectionId, recipeToAddToCollection.id);
-    setCollections(loadCollections());
+    await addRecipeToCollection(collectionId, recipeToAddToCollection.id);
+    const updated = await loadCollections();
+    setCollections(updated);
   }
 
-  function handleRemoveFromCollection(collectionId: string, recipeId: string) {
-    removeRecipeFromCollection(collectionId, recipeId);
-    setCollections(loadCollections());
+  async function handleRemoveFromCollection(collectionId: string, recipeId: string) {
+    await removeRecipeFromCollection(collectionId, recipeId);
+    const updated = await loadCollections();
+    setCollections(updated);
   }
 
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return "Bonjour";
-    if (hour < 18) return "Bon après-midi";
+    if (hour < 18) return "Bonjour";
     return "Bonsoir";
   };
 
@@ -1047,8 +1061,6 @@ export default function Home() {
         </section>
       )}
 
-      {/* Section Retour utilisateur */}
-      <UserFeedback />
 
       {/* Fenêtre résultats plein écran */}
       {showResultsPanel && (
@@ -1076,7 +1088,16 @@ export default function Home() {
                 {/* Bouton retour en haut à gauche - cercle marron Foodlane */}
                 <button
                   className="absolute top-4 left-4 w-10 h-10 rounded-full bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] shadow-lg flex items-center justify-center hover:from-[#C03A3A] hover:to-[#6B5F3F] transition-all"
-                  onClick={() => setSelectedRecipe(null)}
+                  onClick={() => {
+                    // Si on vient des recettes du moment (results est vide), fermer complètement le panneau
+                    // Sinon, revenir à la liste de résultats
+                    if (results.length === 0) {
+                      setSelectedRecipe(null);
+                      setShowResultsPanel(false);
+                    } else {
+                      setSelectedRecipe(null);
+                    }
+                  }}
                   aria-label="Retour"
                 >
                   <span className="text-white text-lg font-bold">←</span>
@@ -1571,22 +1592,24 @@ export default function Home() {
             <div className="flex gap-3">
               <button
                 className="flex-1 px-4 py-2 rounded-xl bg-[var(--beige-card-alt)] border border-[var(--beige-border)] text-sm text-[var(--text-primary)] font-semibold hover:border-[var(--beige-accent)] transition-colors"
-                onClick={() => {
+                onClick={async () => {
                   setShowCollectionModal(false);
                   setRecipeToAddToCollection(null);
                   // Recharger les favoris au cas où une recette a été ajoutée
-                  setFavorites(loadFavorites());
+                  const updated = await loadFavorites();
+                  setFavorites(updated);
                 }}
               >
                 Passer
               </button>
               <button
                 className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md"
-                onClick={() => {
+                onClick={async () => {
                   setShowCollectionModal(false);
                   setRecipeToAddToCollection(null);
                   // Recharger les favoris au cas où une recette a été ajoutée
-                  setFavorites(loadFavorites());
+                  const updated = await loadFavorites();
+                  setFavorites(updated);
                 }}
               >
                 Terminer

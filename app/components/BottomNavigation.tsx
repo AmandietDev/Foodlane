@@ -96,7 +96,7 @@ export default function BottomNavigation() {
         <Link 
           href="/menu" 
           className={`flex flex-col items-center gap-1 py-1 px-2 transition-all ${
-            isActive("/menu") ? "text-[#6B2E2E]" : "text-[#8A4A4A] hover:text-[#6B2E2E]"
+            isActive("/menu") || isActive("/compte") ? "text-[#6B2E2E]" : "text-[#8A4A4A] hover:text-[#6B2E2E]"
           }`}
         >
           <Image
@@ -114,8 +114,14 @@ export default function BottomNavigation() {
       {/* Bandeau pub sous les onglets - masqué si premium */}
       {/* Ne rendre que côté client pour éviter les erreurs d'hydratation */}
       {mounted && !isPremium && (
-        <div className="h-10 bg-[var(--beige-card-alt)] border-t border-[var(--beige-border)] flex items-center justify-center text-xs text-[var(--beige-text-light)]">
-          Espace publicité (bandeau fixe)
+        <div className="h-10 bg-[var(--beige-card-alt)] border-t border-[var(--beige-border)] flex items-center justify-between px-4 text-xs">
+          <span className="text-[var(--beige-text-light)]">Espace publicité</span>
+          <Link
+            href="/premium"
+            className="px-3 py-1 rounded-lg bg-[var(--beige-accent)] text-white text-xs font-semibold hover:bg-[var(--beige-accent-hover)] transition-colors"
+          >
+            Arrêter les pubs
+          </Link>
         </div>
       )}
     </div>

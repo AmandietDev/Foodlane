@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { loadPreferences } from "../src/lib/userPreferences";
-import UserFeedback from "../components/UserFeedback";
 import {
   loadNutritionAdvices,
   analyzeMealContext,
@@ -37,6 +36,12 @@ export default function EquilibrePage() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [expertAdvices, setExpertAdvices] = useState<NutritionAdvice[]>([]);
   const [selectedAdvice, setSelectedAdvice] = useState<NutritionAdvice | null>(null);
+  const [analyzingWithAI, setAnalyzingWithAI] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<{
+    positives: string[];
+    improvements: string[];
+    summary: string;
+  } | null>(null);
 
   useEffect(() => {
     const preferences = loadPreferences();
@@ -690,28 +695,71 @@ export default function EquilibrePage() {
           <div className="mt-4 pt-4 border-t border-[var(--beige-border)]">
             <button
               onClick={async () => {
-                const conseil = generateConseilPersonnalise();
-                const objectifs = generateObjectifsConcrets();
-                setConseilPersonnalise(conseil);
-                setObjectifsConcrets(objectifs);
+                setAnalyzingWithAI(true);
+                setAiAnalysis(null);
                 
-                // Trouver les conseils experts pertinents
-                if (expertAdvices.length > 0) {
+                try {
+                  // Appeler l'API d'analyse IA
                   const userObjective = objectifsUsage.length > 0 ? objectifsUsage[0] : "";
-                  const context = analyzeMealContext(todayEntries);
-                  const relevant = findRelevantAdvices(expertAdvices, userObjective, context);
-                  const best = selectBestAdvices(relevant, 1);
-                  if (best.length > 0) {
-                    setSelectedAdvice(best[0]);
+                  const response = await fetch("/api/analyze-daily-meals", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      meals: todayEntries,
+                      userObjective,
+                    }),
+                  });
+
+                  if (!response.ok) {
+                    throw new Error("Erreur lors de l'analyse");
                   }
+
+                  const analysis = await response.json();
+                  setAiAnalysis(analysis);
+                  
+                  // Garder aussi l'ancien système pour compatibilité
+                  const conseil = generateConseilPersonnalise();
+                  const objectifs = generateObjectifsConcrets();
+                  setConseilPersonnalise(conseil);
+                  setObjectifsConcrets(objectifs);
+                  
+                  // Trouver les conseils experts pertinents
+                  if (expertAdvices.length > 0) {
+                    const context = analyzeMealContext(todayEntries);
+                    const relevant = findRelevantAdvices(expertAdvices, userObjective, context);
+                    const best = selectBestAdvices(relevant, 1);
+                    if (best.length > 0) {
+                      setSelectedAdvice(best[0]);
+                    }
+                  }
+                } catch (error) {
+                  console.error("Erreur lors de l'analyse IA:", error);
+                  // Fallback sur l'ancien système en cas d'erreur
+                  const conseil = generateConseilPersonnalise();
+                  const objectifs = generateObjectifsConcrets();
+                  setConseilPersonnalise(conseil);
+                  setObjectifsConcrets(objectifs);
+                } finally {
+                  setAnalyzingWithAI(false);
+                  setShowConseilModal(true);
                 }
-                
-                setShowConseilModal(true);
               }}
-              className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+              disabled={analyzingWithAI}
+              className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>💬</span>
-              <span>Demander conseil à mon diététicien</span>
+              {analyzingWithAI ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Analyse en cours...</span>
+                </>
+              ) : (
+                <>
+                  <span>💬</span>
+                  <span>Demander conseil à mon diététicien</span>
+                </>
+              )}
             </button>
             <p className="text-xs text-[var(--beige-text-light)] text-center mt-2">
               Reçois un conseil personnalisé basé sur tes repas d&apos;aujourd&apos;hui
@@ -739,6 +787,7 @@ export default function EquilibrePage() {
                   setShowConseilModal(false);
                   setConseilPersonnalise("");
                   setSelectedAdvice(null);
+                  setAiAnalysis(null);
                 }}
                 className="text-[#9A6A6A] hover:text-[#6B2E2E] text-xl"
               >
@@ -772,29 +821,74 @@ export default function EquilibrePage() {
                 </div>
               )}
 
-              <div className="bg-[#FFD9D9] rounded-xl p-4 border border-[#D44A4A] mb-4">
-                <h4 className="font-semibold text-sm mb-2 text-[#6B2E2E] flex items-center gap-2">
-                  <span>💡</span>
-                  <span>Mon conseil personnalisé</span>
-                </h4>
-                <p className="text-sm text-[#726566] leading-relaxed whitespace-pre-line mb-3">
-                  {conseilPersonnalise || "Analyse en cours..."}
-                </p>
-                
-                {/* Conseil expert de la base de données */}
-                {selectedAdvice && (
-                  <div className="mt-3 pt-3 border-t border-[#D44A4A]/30">
-                    <p className="text-sm font-semibold text-[#6B2E2E] mb-2">
-                      {selectedAdvice.text}
-                    </p>
-                    {selectedAdvice.cta && (
-                      <p className="text-xs text-[#726566] italic">
-                        💡 {selectedAdvice.cta}
-                      </p>
-                    )}
+              {/* Analyse IA avec points positifs et améliorations */}
+              {aiAnalysis ? (
+                <div className="space-y-4 mb-4">
+                  {/* Points positifs */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                    <h4 className="font-semibold text-sm mb-3 text-[#6B2E2E] flex items-center gap-2">
+                      <span>✨</span>
+                      <span>Ce qui va bien</span>
+                    </h4>
+                    <ul className="space-y-2">
+                      {aiAnalysis.positives.map((positive, index) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <span className="text-green-600 font-bold mt-0.5">✓</span>
+                          <span className="text-sm text-[#726566] flex-1">{positive}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                )}
-              </div>
+
+                  {/* Axes d'amélioration */}
+                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200">
+                    <h4 className="font-semibold text-sm mb-3 text-[#6B2E2E] flex items-center gap-2">
+                      <span>💡</span>
+                      <span>Pour aller plus loin</span>
+                    </h4>
+                    <ul className="space-y-2">
+                      {aiAnalysis.improvements.map((improvement, index) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <span className="text-amber-600 font-bold mt-0.5">→</span>
+                          <span className="text-sm text-[#726566] flex-1">{improvement}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Résumé */}
+                  <div className="bg-[#FFD9D9] rounded-xl p-4 border border-[#D44A4A]">
+                    <p className="text-sm text-[#726566] leading-relaxed italic">
+                      {aiAnalysis.summary}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                /* Fallback sur l'ancien système si pas d'analyse IA */
+                <div className="bg-[#FFD9D9] rounded-xl p-4 border border-[#D44A4A] mb-4">
+                  <h4 className="font-semibold text-sm mb-2 text-[#6B2E2E] flex items-center gap-2">
+                    <span>💡</span>
+                    <span>Mon conseil personnalisé</span>
+                  </h4>
+                  <p className="text-sm text-[#726566] leading-relaxed whitespace-pre-line mb-3">
+                    {conseilPersonnalise || "Analyse en cours..."}
+                  </p>
+                  
+                  {/* Conseil expert de la base de données */}
+                  {selectedAdvice && (
+                    <div className="mt-3 pt-3 border-t border-[#D44A4A]/30">
+                      <p className="text-sm font-semibold text-[#6B2E2E] mb-2">
+                        {selectedAdvice.text}
+                      </p>
+                      {selectedAdvice.cta && (
+                        <p className="text-xs text-[#726566] italic">
+                          💡 {selectedAdvice.cta}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Section Objectifs */}
               {objectifsConcrets.length > 0 && (
@@ -846,6 +940,8 @@ export default function EquilibrePage() {
               onClick={() => {
                 setShowConseilModal(false);
                 setConseilPersonnalise("");
+                setAiAnalysis(null);
+                setSelectedAdvice(null);
               }}
               className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
             >
@@ -855,8 +951,6 @@ export default function EquilibrePage() {
         </div>
       )}
 
-      {/* Section Retour utilisateur */}
-      <UserFeedback />
     </main>
   );
 }

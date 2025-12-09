@@ -10,7 +10,6 @@ import {
   type EquivalenceCategory,
 } from "../src/lib/nutritionGoals";
 import { useSwipeBack } from "../hooks/useSwipeBack";
-import UserFeedback from "../components/UserFeedback";
 
 type TabType = "recipe" | "nutrition";
 
@@ -219,8 +218,6 @@ export default function EquivalencesPage() {
         </section>
       )}
 
-      {/* Section Retour utilisateur */}
-      <UserFeedback />
     </main>
   );
 }

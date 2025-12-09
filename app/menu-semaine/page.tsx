@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "../src/lib/supabaseClient";
+import { useSupabaseSession } from "../hooks/useSupabaseSession";
+import LoadingSpinner from "../components/LoadingSpinner";
 import type { Recipe } from "../src/lib/recipes";
 import {
   type WeeklyMenu,
@@ -23,7 +26,6 @@ import {
 } from "../src/lib/shoppingList";
 import { loadPreferences } from "../src/lib/userPreferences";
 import RecipeImage from "../components/RecipeImage";
-import UserFeedback from "../components/UserFeedback";
 import {
   detectDietaryBadges,
   DIETARY_BADGE_ICONS,
@@ -78,8 +80,18 @@ export default function WeeklyMenuPage() {
   const [adviceMealAnalysis, setAdviceMealAnalysis] = useState<any>(null);
   const [analyzingAdviceMeal, setAnalyzingAdviceMeal] = useState(false);
   const [capturedAdviceImage, setCapturedAdviceImage] = useState<string | null>(null);
+  // Vérifier la session avec le hook réutilisable
+  const { user, loading: sessionLoading } = useSupabaseSession();
 
   useEffect(() => {
+    if (!sessionLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, sessionLoading, router]);
+
+  useEffect(() => {
+    if (sessionLoading || !user) return; // Attendre la vérification d'authentification
+    
     const preferences = loadPreferences();
     setIsPremium(preferences.abonnementType === "premium");
     setShowCalories(preferences.afficherCalories);
@@ -476,6 +488,15 @@ export default function WeeklyMenuPage() {
       setShowExportModal(false);
     });
   };
+
+  // Afficher un écran de chargement pendant la vérification d'authentification
+  if (sessionLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+        <LoadingSpinner message="Vérification de la connexion..." />
+      </div>
+    );
+  }
 
   if (!menu) {
     return (
@@ -1489,8 +1510,6 @@ export default function WeeklyMenuPage() {
         </div>
       )}
 
-      {/* Section Retour utilisateur */}
-      <UserFeedback />
     </main>
   );
 }

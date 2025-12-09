@@ -1,138 +1,131 @@
-# 📋 Commandes à exécuter pour déployer Foodlane
+# 📝 Commandes Exactes pour le Déploiement
 
-## ✅ Étape 1 : Test du build local
-
-Testez que votre application peut être construite :
-
-```powershell
-npm run build
-```
-
-**Résultat attendu** : Le build devrait réussir (même si vous obtenez un avertissement concernant `SHEET_RECIPES_CSV_URL`, c'est normal - cette variable sera configurée sur Vercel).
+Ce fichier contient **exactement** les commandes à copier-coller dans ton terminal.
 
 ---
 
-## ✅ Étape 2 : Configuration Git et GitHub
+## 🔵 ÉTAPE 1 : Vérifier Git
 
-### 2.1. Vérifier l'état Git
-
-```powershell
+```bash
 git status
 ```
 
-### 2.2. Si Git n'est pas initialisé, exécutez :
+**Si tu vois "fatal: not a git repository"** → Continue avec l'étape 2.
 
-```powershell
-# Initialiser Git
+**Si tu vois des fichiers** → Passe directement à l'étape 3.
+
+---
+
+## 🔵 ÉTAPE 2 : Initialiser Git (si nécessaire)
+
+```bash
 git init
+git branch -M main
+```
 
+---
+
+## 🔵 ÉTAPE 3 : Ajouter les fichiers et faire le premier commit
+
+```bash
 # Ajouter tous les fichiers
 git add .
 
+# Vérifier ce qui va être commité
+git status
+
 # Faire le premier commit
-git commit -m "Initial commit - Foodlane app ready for deployment"
+git commit -m "chore: initial commit - Foodlane app"
 ```
 
-### 2.3. Créer le dépôt sur GitHub
+---
 
-1. Allez sur [GitHub.com](https://github.com) et connectez-vous
-2. Cliquez sur **"+"** → **"New repository"**
-3. Nommez-le : `foodlane-app` (ou un autre nom de votre choix)
-4. **Ne cochez PAS** "Add a README file" ni "Add .gitignore"
-5. Cliquez sur **"Create repository"**
+## 🔵 ÉTAPE 4 : Créer le dépôt sur GitHub
 
-### 2.4. Lier votre projet local à GitHub
+1. Va sur [github.com](https://github.com)
+2. Clique sur **"+"** → **"New repository"**
+3. Nom : `foodlane-app`
+4. **NE COCHE RIEN** (pas de README, pas de .gitignore, pas de license)
+5. Clique sur **"Create repository"**
+6. **COPIE L'URL HTTPS** (exemple : `https://github.com/TON-USERNAME/foodlane-app.git`)
 
-Remplacez `VOTRE_USERNAME` par votre nom d'utilisateur GitHub dans ces commandes :
+---
 
-```powershell
-# Ajouter le dépôt distant
-git remote add origin https://github.com/VOTRE_USERNAME/foodlane-app.git
+## 🔵 ÉTAPE 5 : Connecter le projet à GitHub
 
-# Renommer la branche en 'main' (si nécessaire)
-git branch -M main
+**Remplace `TON-USERNAME` par ton vrai nom d'utilisateur GitHub !**
 
-# Pousser votre code sur GitHub
+```bash
+# Ajouter le remote GitHub
+git remote add origin https://github.com/TON-USERNAME/foodlane-app.git
+
+# Vérifier que c'est bien ajouté
+git remote -v
+
+# Pousser le code sur GitHub
 git push -u origin main
 ```
 
-**⚠️ Important** : Si GitHub vous demande de vous authentifier, utilisez un **Personal Access Token** (PAT) au lieu de votre mot de passe. Pour créer un PAT :
-- GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token
-- Donnez-lui la permission `repo`
+**Si GitHub te demande de t'authentifier**, utilise :
+- Ton **username GitHub** + un **Personal Access Token** (pas ton mot de passe)
+- Ou connecte-toi via **GitHub Desktop**
 
 ---
 
-## ✅ Étape 3 : Déploiement sur Vercel
+## 🔵 ÉTAPE 6 : Variables d'environnement pour Vercel
 
-### 3.1. Importer le projet sur Vercel
+Voici **exactement** les variables à ajouter dans Vercel (Settings → Environment Variables) :
 
-1. Allez sur [vercel.com](https://vercel.com) et connectez-vous avec GitHub
-2. Cliquez sur **"Add New..."** → **"Project"**
-3. Importez votre dépôt `foodlane-app`
+### Variables à copier depuis ton `.env.local`
 
-### 3.2. Configurer les variables d'environnement
+| Variable | Type | Environnements à cocher |
+|----------|------|------------------------|
+| `STRIPE_SECRET_KEY` | Secret | ✅ Production, ✅ Preview, ✅ Development |
+| `STRIPE_PRICE_ID_MENSUEL` | Secret | ✅ Production, ✅ Preview, ✅ Development |
+| `STRIPE_PRICE_ID_ANNUEL` | Secret | ✅ Production, ✅ Preview, ✅ Development |
+| `STRIPE_WEBHOOK_SECRET` | Secret | ✅ Production, ✅ Preview, ✅ Development |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret | ✅ Production, ✅ Preview, ✅ Development |
+| `NEXT_PUBLIC_SUPABASE_URL` | Public | ✅ Production, ✅ Preview, ✅ Development |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public | ✅ Production, ✅ Preview, ✅ Development |
+| `NEXT_PUBLIC_APP_URL` | Public | ✅ Production, ✅ Preview, ✅ Development |
 
-Dans la section **"Environment Variables"**, ajoutez :
-
-#### Variable 1 (OBLIGATOIRE)
-- **Name** : `SHEET_RECIPES_CSV_URL`
-- **Value** : Votre URL d'export CSV du Google Sheet
-- **Environments** : ✅ Production, ✅ Preview, ✅ Development
-
-#### Variable 2 (OPTIONNEL)
-- **Name** : `OPENAI_API_KEY`
-- **Value** : Votre clé API OpenAI (commence par `sk-`)
-- **Environments** : ✅ Production, ✅ Preview, ✅ Development
-
-### 3.3. Déployer
-
-Cliquez sur **"Deploy"** et attendez 2-5 minutes.
+**Pour `NEXT_PUBLIC_APP_URL`** : 
+- Après le premier déploiement Vercel, tu auras une URL comme `https://foodlane-app.vercel.app`
+- Utilise cette URL comme valeur
 
 ---
 
-## ✅ Étape 4 : Déploiements futurs
+## 🔵 ÉTAPE 7 : Commandes pour les mises à jour futures
 
-Pour chaque modification future, exécutez simplement :
+Une fois le projet déployé, pour chaque modification :
 
-```powershell
-# Ajouter vos modifications
+```bash
+# Ajouter les fichiers modifiés
 git add .
 
-# Commiter
-git commit -m "Description de vos modifications"
+# Faire un commit
+git commit -m "feat: description de la modification"
 
-# Pousser sur GitHub (déclenchera automatiquement un nouveau déploiement sur Vercel)
+# Pousser sur GitHub (cela déclenchera automatiquement un nouveau déploiement Vercel)
 git push
 ```
 
-**🎉 C'est tout !** Vercel déploiera automatiquement chaque push sur GitHub.
+---
+
+## ✅ Checklist Rapide
+
+- [ ] `git status` → Vérifier l'état Git
+- [ ] `git init` + `git branch -M main` (si nécessaire)
+- [ ] `git add .` → Ajouter les fichiers
+- [ ] `git commit -m "chore: initial commit - Foodlane app"` → Premier commit
+- [ ] Créer le dépôt sur GitHub (vide, sans README)
+- [ ] `git remote add origin https://github.com/TON-USERNAME/foodlane-app.git` → Connecter
+- [ ] `git push -u origin main` → Pousser le code
+- [ ] Importer le projet dans Vercel
+- [ ] Ajouter toutes les variables d'environnement dans Vercel
+- [ ] Configurer le webhook Stripe avec l'URL Vercel
+- [ ] Tester le déploiement
 
 ---
 
-## 📝 Résumé des fichiers modifiés
-
-Les fichiers suivants ont été préparés pour le déploiement :
-
-- ✅ `.gitignore` : Modifié pour permettre `.env.example`
-- ✅ `DEPLOYMENT.md` : Guide complet et détaillé
-- ✅ `COMMANDES_DEPLOIEMENT.md` : Ce fichier - résumé des commandes
-- ✅ Configuration Next.js : Déjà optimisée pour Vercel
-
----
-
-## 🔍 Vérifications finales
-
-Avant de partager votre application, vérifiez :
-
-- [ ] `npm run build` fonctionne
-- [ ] Le code est poussé sur GitHub
-- [ ] Le projet est déployé sur Vercel
-- [ ] Les variables d'environnement sont configurées
-- [ ] L'application fonctionne sur l'URL Vercel
-- [ ] Les recettes se chargent correctement
-
----
-
-**Bon déploiement ! 🚀**
-
-
+**Pour plus de détails, consulte `GUIDE_DEPLOIEMENT_VERCEL.md` !**

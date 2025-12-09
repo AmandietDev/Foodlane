@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useTheme } from "../contexts/ThemeContext";
+import { supabase } from "../src/lib/supabaseClient";
+import { useSupabaseSession } from "../hooks/useSupabaseSession";
+import LoadingSpinner from "../components/LoadingSpinner";
 import {
   loadPreferences,
   savePreferences,
@@ -24,8 +27,26 @@ import {
   DIETARY_PROFILE_ICONS,
   type DietaryProfile,
 } from "../src/lib/dietaryProfiles";
+import { type NutritionGoal, NUTRITION_GOALS } from "../src/lib/nutritionGoals";
 import { useSwipeBack } from "../hooks/useSwipeBack";
-import UserFeedback from "../components/UserFeedback";
+
+// Liste des équipements disponibles
+const AVAILABLE_EQUIPMENTS = [
+  "Four",
+  "Micro-ondes",
+  "Plaques de cuisson",
+  "Casserole",
+  "Poêle",
+  "Mixeur",
+  "Robot mixeur",
+  "Mixeur plongeant",
+  "Robot cuiseur",
+  "Friteuse",
+  "Airfryer",
+  "Autocuiseur",
+  "Blender",
+  "Grille-pain",
+];
 
 type MenuSection =
   | "profil"
@@ -103,6 +124,7 @@ export default function MenuPage() {
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
   const { setLocale: setLocaleFromContext } = useTranslation();
+  const { user, profile, loading: sessionLoading } = useSupabaseSession();
   const [preferences, setPreferences] = useState<UserPreferences>(loadPreferences());
   const [loggedIn, setLoggedIn] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
@@ -126,9 +148,10 @@ export default function MenuPage() {
   });
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactSubmitted, setContactSubmitted] = useState(false);
-  const [activeTab, setActiveTab] = useState<"compte" | "parametres" | "foyer" | "contact">("compte");
+  const [activeTab, setActiveTab] = useState<"compte" | "parametres" | "notifications" | "foyer" | "contact" | "abonnement" | null>(null);
   const [activeSection, setActiveSection] = useState<MenuSection>(null);
   const [showLegalDoc, setShowLegalDoc] = useState<LegalDocType>(null);
+  const [allergiesInput, setAllergiesInput] = useState("");
 
   // Geste de balayage pour revenir en arrière dans les sections
   useSwipeBack(() => {
@@ -148,21 +171,41 @@ export default function MenuPage() {
     "Autre",
   ];
 
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Vérifier la session Supabase et protéger la page
   useEffect(() => {
-    setLoggedIn(isLoggedIn());
-    if (isLoggedIn()) {
-      const account = getCurrentAccount();
-      if (account) {
-        setPreferences((prev) => ({
-          ...prev,
-          email: account.email,
-          nom: account.nom,
-          prenom: account.prenom,
-          telephone: account.telephone,
-        }));
+    async function checkAuth() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          router.push("/login");
+          return;
+        }
+        setIsCheckingAuth(false);
+        
+        // Vérifier aussi avec l'ancien système pour compatibilité
+        const loggedIn = await isLoggedIn();
+        setLoggedIn(loggedIn);
+        if (loggedIn) {
+          const account = getCurrentAccount();
+          if (account) {
+            setPreferences((prev) => ({
+              ...prev,
+              email: account.email,
+              nom: account.nom,
+              prenom: account.prenom,
+              telephone: account.telephone,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error("Erreur lors de la vérification de la session:", error);
+        router.push("/login");
       }
     }
-  }, []);
+    checkAuth();
+  }, [router]);
 
   useEffect(() => {
     // Initialiser la langue
@@ -251,16 +294,25 @@ export default function MenuPage() {
     setShowSignUp(false);
   }
 
-  function handleLogout() {
-    logout();
-    setLoggedIn(false);
-    setPreferences((prev) => ({
-      ...prev,
-      email: "",
-      nom: "",
-      prenom: "",
-      telephone: "",
-    }));
+  async function handleLogout() {
+    try {
+      // Déconnexion Supabase
+      await supabase.auth.signOut();
+      setLoggedIn(false);
+      setPreferences((prev) => ({
+        ...prev,
+        email: "",
+        nom: "",
+        prenom: "",
+        telephone: "",
+      }));
+      // Rediriger vers la page de connexion
+      router.push("/login");
+    } catch (error) {
+      console.error("Erreur lors de la déconnexion:", error);
+      // Rediriger quand même vers la page de connexion
+      router.push("/login");
+    }
   }
 
   function handleUpdateProfile(e: React.FormEvent) {
@@ -318,57 +370,337 @@ export default function MenuPage() {
     }
   }
 
+  // Composant MenuItem réutilisable
+  const MenuItem = ({ 
+    icon, 
+    label, 
+    onClick, 
+    href,
+    danger = false 
+  }: { 
+    icon: React.ReactNode; 
+    label: string; 
+    onClick?: () => void;
+    href?: string;
+    danger?: boolean;
+  }) => {
+    const content = (
+      <div className={`flex items-center gap-3 px-4 py-3 ${danger ? 'text-red-600' : 'text-[var(--foreground)]'} hover:bg-[var(--beige-card)] transition-colors`}>
+        <div className="w-6 h-6 flex items-center justify-center">
+          {icon}
+        </div>
+        <span className="flex-1 text-sm font-medium">{label}</span>
+        <svg 
+          width="20" 
+          height="20" 
+          viewBox="0 0 20 20" 
+          fill="none" 
+          className={danger ? 'text-red-600' : 'text-gray-400'}
+        >
+          <path 
+            d="M7.5 15L12.5 10L7.5 5" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+    );
+
+    if (href) {
+      return (
+        <Link href={href} className="block">
+          {content}
+        </Link>
+      );
+    }
+
+    return (
+      <button onClick={onClick} className="w-full text-left block">
+        {content}
+      </button>
+    );
+  };
+
+  // Afficher un écran de chargement pendant la vérification d'authentification
+  if (sessionLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+        <LoadingSpinner message="Vérification de la connexion..." />
+      </div>
+    );
+  }
+
   return (
-    <main className="max-w-md mx-auto px-4 pt-6 pb-24">
-      <header className="mb-5">
-        <h1 className="text-2xl font-bold text-center">Menu</h1>
+    <main className="max-w-md mx-auto bg-[var(--background)] min-h-screen pb-32">
+      {/* Header */}
+      <header className="sticky top-0 bg-[var(--background)] border-b border-gray-200 px-4 py-3 z-10">
+        <div className="flex items-center gap-3">
+          {(activeTab || activeSection) && (
+            <button
+              onClick={() => {
+                if (activeSection) {
+                  setActiveSection(null);
+                } else {
+                  setActiveTab(null);
+                }
+              }}
+              className="p-2 -ml-2"
+            >
+              <svg 
+                width="24" 
+                height="24" 
+                viewBox="0 0 24 24" 
+                fill="none"
+                className="text-[var(--foreground)]"
+              >
+                <path 
+                  d="M15 18L9 12L15 6" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
+          <h1 className="text-xl font-bold text-[var(--foreground)]">
+            {activeTab === "notifications" ? "Notifications" :
+             activeTab === "parametres" ? "Paramètres" :
+             activeTab === "foyer" ? "Foyer" :
+             activeTab === "contact" ? "Contact" :
+             activeTab === "abonnement" ? "Abonnement" :
+             ""}
+          </h1>
+        </div>
       </header>
 
-      {/* Onglets */}
-      <div className="flex gap-1 mb-5 border-b border-[var(--beige-border)] overflow-x-auto">
-        <button
-          onClick={() => setActiveTab("compte")}
-          className={`flex-shrink-0 px-3 pb-2 text-xs font-semibold transition-colors ${
-            activeTab === "compte"
-              ? "text-[var(--foreground)] border-b-2 border-[#D44A4A]"
-              : "text-[var(--beige-text-muted)] hover:text-[var(--beige-text-light)]"
-          }`}
-        >
-          Compte
-        </button>
-        <button
-          onClick={() => setActiveTab("parametres")}
-          className={`flex-shrink-0 px-3 pb-2 text-xs font-semibold transition-colors ${
-            activeTab === "parametres"
-              ? "text-[var(--foreground)] border-b-2 border-[#D44A4A]"
-              : "text-[var(--beige-text-muted)] hover:text-[var(--beige-text-light)]"
-          }`}
-        >
-          Paramètres
-        </button>
-        <button
-          onClick={() => setActiveTab("foyer")}
-          className={`flex-shrink-0 px-3 pb-2 text-xs font-semibold transition-colors ${
-            activeTab === "foyer"
-              ? "text-[var(--foreground)] border-b-2 border-[#D44A4A]"
-              : "text-[var(--beige-text-muted)] hover:text-[var(--beige-text-light)]"
-          }`}
-        >
-          Foyer
-        </button>
-        <button
-          onClick={() => setActiveTab("contact")}
-          className={`flex-shrink-0 px-3 pb-2 text-xs font-semibold transition-colors ${
-            activeTab === "contact"
-              ? "text-[var(--foreground)] border-b-2 border-[#D44A4A]"
-              : "text-[var(--beige-text-muted)] hover:text-[var(--beige-text-light)]"
-          }`}
-        >
-          Contact
-        </button>
-      </div>
+      {/* Menu principal - affiché seulement si aucune section détaillée n'est active */}
+      {!activeTab && !activeSection && (
+        <div className="px-4 py-6 space-y-6">
+          {/* Section GENERAL */}
+          <section>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 px-4">
+              GÉNÉRAL
+            </h2>
+            <div className="bg-[var(--background)] rounded-lg border border-gray-200 overflow-hidden">
+              <MenuItem
+                icon={
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path 
+                      d="M10 10C12.7614 10 15 7.76142 15 5C15 2.23858 12.7614 0 10 0C7.23858 0 5 2.23858 5 5C5 7.76142 7.23858 10 10 10Z" 
+                      stroke="currentColor" 
+                      strokeWidth="1.5" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                    />
+                    <path 
+                      d="M17.59 20C17.59 16.13 13.74 13 10 13C6.26 13 2.41 16.13 2.41 20" 
+                      stroke="currentColor" 
+                      strokeWidth="1.5" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                }
+                label="Compte"
+                href="/compte"
+              />
+              <div className="border-t border-gray-200">
+                <MenuItem
+                  icon={
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path 
+                        d="M10 2C5.58172 2 2 5.58172 2 10C2 14.4183 5.58172 18 10 18C14.4183 18 18 14.4183 18 10C18 5.58172 14.4183 2 10 2Z" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5"
+                      />
+                      <path 
+                        d="M10 6V10L13 13" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  }
+                  label="Notifications"
+                  onClick={() => setActiveTab("notifications")}
+                />
+              </div>
+              <div className="border-t border-gray-200">
+                <MenuItem
+                  icon={
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path 
+                        d="M2 6L10 1L18 6V16C18 16.5304 17.7893 17.0391 17.4142 17.4142C17.0391 17.7893 16.5304 18 16 18H4C3.46957 18 2.96086 17.7893 2.58579 17.4142C2.21071 17.0391 2 16.5304 2 16V6Z" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      />
+                      <path 
+                        d="M7 18V10H13V18" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  }
+                  label="Foyer"
+                  onClick={() => setActiveTab("foyer")}
+                />
+              </div>
+              <div className="border-t border-gray-200">
+                <MenuItem
+                  icon={
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <circle 
+                        cx="10" 
+                        cy="10" 
+                        r="3" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5"
+                      />
+                      <path 
+                        d="M10 2V4M10 16V18M18 10H16M4 10H2M15.6569 4.34315L14.2426 5.75737M5.75737 14.2426L4.34315 15.6569M15.6569 15.6569L14.2426 14.2426M5.75737 5.75737L4.34315 4.34315" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  }
+                  label="Paramètres"
+                  onClick={() => setActiveTab("parametres")}
+                />
+              </div>
+              <div className="border-t border-gray-200">
+                <MenuItem
+                  icon={
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path 
+                        d="M10 2L12.5 7.5L18.5 8.5L14.5 12.5L15.5 18.5L10 15.5L4.5 18.5L5.5 12.5L1.5 8.5L7.5 7.5L10 2Z" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  }
+                  label="Abonnement"
+                  onClick={() => {
+                    setActiveTab("abonnement");
+                  }}
+                />
+              </div>
+              <div className="border-t border-gray-200">
+                <MenuItem
+                  icon={
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path 
+                        d="M10 2C5.58172 2 2 5.58172 2 10C2 10.5523 2.44772 11 3 11C3.55228 11 4 10.5523 4 10C4 6.68629 6.68629 4 10 4C13.3137 4 16 6.68629 16 10C16 13.3137 13.3137 16 10 16C9.44772 16 9 16.4477 9 17C9 17.5523 9.44772 18 10 18C14.4183 18 18 14.4183 18 10C18 5.58172 14.4183 2 10 2Z" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <circle 
+                        cx="7" 
+                        cy="10" 
+                        r="1" 
+                        fill="currentColor"
+                      />
+                      <circle 
+                        cx="10" 
+                        cy="10" 
+                        r="1" 
+                        fill="currentColor"
+                      />
+                      <circle 
+                        cx="13" 
+                        cy="10" 
+                        r="1" 
+                        fill="currentColor"
+                      />
+                    </svg>
+                  }
+                  label="Contact"
+                  onClick={() => setActiveTab("contact")}
+                />
+              </div>
+              <div className="border-t border-gray-200">
+                <MenuItem
+                  icon={
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path 
+                        d="M4 4H16V16H4V4Z" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      />
+                      <path 
+                        d="M4 4L10 10L16 4" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  }
+                  label="Déconnexion"
+                  onClick={async () => {
+                    if (confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {
+                      await handleLogout();
+                    }
+                  }}
+                  danger
+                />
+              </div>
+              <div className="border-t border-gray-200">
+                <MenuItem
+                  icon={
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path 
+                        d="M4 5H16V15H4V5Z" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      />
+                      <path 
+                        d="M8 5V3C8 2.46957 8.21071 1.96086 8.58579 1.58579C8.96086 1.21071 9.46957 1 10 1C10.5304 1 11.0391 1.21071 11.4142 1.58579C11.7893 1.96086 12 2.46957 12 3V5" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                      />
+                      <path 
+                        d="M8 9V11M12 9V11" 
+                        stroke="currentColor" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  }
+                  label="Supprimer le compte"
+                  onClick={() => {
+                    if (confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) {
+                      // TODO: Implémenter la suppression du compte
+                      alert("Fonctionnalité à venir");
+                    }
+                  }}
+                  danger
+                />
+              </div>
+            </div>
+          </section>
 
-      {/* Contenu des onglets */}
+        </div>
+      )}
+
+      {/* Contenu des sections détaillées */}
       {activeTab === "compte" && (
         <>
           {/* Vue par défaut de l'onglet compte */}
@@ -390,13 +722,6 @@ export default function MenuPage() {
                   className="w-full text-left px-4 py-3 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
                 >
                   <span className="font-medium">Mon profil</span>
-                  <span>→</span>
-                </button>
-                <button
-                  onClick={() => setActiveSection("abonnement")}
-                  className="w-full text-left px-4 py-3 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
-                >
-                  <span className="font-medium">Abonnement / Premium</span>
                   <span>→</span>
                 </button>
               </div>
@@ -610,15 +935,39 @@ export default function MenuPage() {
             </>
           ) : (
             <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+              {/* Informations de connexion */}
+              <div className="mb-4 pb-4 border-b border-[var(--beige-border)]">
+                <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">
+                  Données de connexion
+                </h3>
+                <div className="space-y-1 text-xs text-[var(--beige-text-muted)]">
+                  {profile?.prenom && (
+                    <div>
+                      <span className="font-medium">Prénom :</span> {profile.prenom}
+                    </div>
+                  )}
+                  {user?.email && (
+                    <div>
+                      <span className="font-medium">Email :</span> {user.email}
+                    </div>
+                  )}
+                  {profile?.full_name && (
+                    <div>
+                      <span className="font-medium">Nom complet :</span> {profile.full_name}
+                    </div>
+                  )}
+                </div>
+              </div>
+              
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-base font-semibold text-[var(--foreground)]">
                   Modifier mes informations
                 </h2>
                 <button
                   onClick={handleLogout}
-                  className="text-xs text-[var(--beige-text-muted)] hover:text-[var(--foreground)] underline"
+                  className="px-3 py-1.5 text-xs font-semibold text-white bg-[#D44A4A] hover:bg-[#C03A3A] rounded-lg transition-colors"
                 >
-                  Déconnexion
+                  Se déconnecter
                 </button>
               </div>
               <form onSubmit={handleUpdateProfile} className="space-y-3 text-sm">
@@ -745,97 +1094,6 @@ export default function MenuPage() {
         </section>
           )}
 
-          {activeTab === "compte" && activeSection === "abonnement" && (
-            <section className="space-y-4">
-              <div className="flex items-center gap-3 mb-4">
-                <button
-                  onClick={() => setActiveSection(null)}
-                  className="text-[var(--beige-text-muted)] hover:text-[var(--foreground)]"
-                >
-                  ← Retour
-                </button>
-                <h2 className="text-xl font-bold text-[var(--foreground)]">
-                  Abonnement / Premium
-                </h2>
-              </div>
-
-              <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-                <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
-                  Type d&apos;abonnement actuel
-                </h2>
-                <div className="space-y-3 text-sm">
-                  <div className="rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 flex items-center justify-between">
-                    <span className="font-semibold text-[var(--foreground)]">
-                      {preferences.abonnementType === "premium" ? "Premium" : "Gratuit"}
-                    </span>
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        preferences.abonnementType === "premium"
-                          ? "bg-[#D44A4A] text-white"
-                          : "bg-[var(--beige-card-alt)] text-[var(--beige-text-muted)]"
-                      }`}
-                    >
-                      {preferences.abonnementType === "premium" ? "Premium" : "Gratuit"}
-                    </span>
-                  </div>
-
-                  {preferences.abonnementType === "free" && (
-                    <>
-                      <div className="pt-2 border-t border-[var(--beige-border)]">
-                        <p className="text-xs text-[var(--beige-text-muted)] mb-2">
-                          Ce que débloque le Premium
-                        </p>
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
-                            <span>✓</span>
-                            <span>Scan photo de frigo</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
-                            <span>✓</span>
-                            <span>Liste de courses automatique</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
-                            <span>✓</span>
-                            <span>Recettes supplémentaires</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
-                            <span>✓</span>
-                            <span>Régimes alimentaires avancés</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
-                            <span>✓</span>
-                            <span>Sans publicités</span>
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => router.push("/premium")}
-                        className="w-full mt-3 px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-sm font-semibold transition-colors"
-                      >
-                        Passer à Premium
-                      </button>
-                    </>
-                  )}
-
-                  {preferences.abonnementType === "premium" && (
-                    <div className="pt-2 border-t border-[var(--beige-border)]">
-                      <p className="text-xs text-[var(--beige-text-muted)] mb-2">
-                        Gestion de l&apos;abonnement
-                      </p>
-                      <button
-                        onClick={() => {
-                          alert("Historique de facturation / lien vers le store (à venir)");
-                        }}
-                        className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
-                      >
-                        Historique de facturation / Voir sur le store
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-          )}
 
           {activeTab === "compte" && activeSection === "confidentialite" && (
         <section className="space-y-4">
@@ -1673,81 +1931,9 @@ export default function MenuPage() {
         </>
       )}
 
-      {activeTab === "parametres" && (
+      {activeTab === "notifications" && (
         <>
-          <section className="space-y-4">
-            <h2 className="text-xl font-bold text-[var(--foreground)] mb-4">
-              Paramètres
-            </h2>
-            <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-              <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">Apparence</h2>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-[var(--foreground)]">Mode sombre</p>
-                    <p className="text-xs text-[var(--beige-text-muted)]">
-                      Active le thème sombre pour un confort visuel optimal
-                    </p>
-                  </div>
-                  <button
-                    onClick={toggleTheme}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${
-                      theme === "dark" ? "bg-[#D44A4A]" : "bg-[#D4C4B8]"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                        theme === "dark" ? "translate-x-6" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-                <div className="flex items-center justify-between pt-2 border-t border-[var(--beige-border)]">
-                  <div>
-                    <p className="text-sm font-medium text-[var(--foreground)]">Langue</p>
-                    <p className="text-xs text-[var(--beige-text-muted)]">
-                      Choisis la langue de l&apos;application
-                    </p>
-                  </div>
-                  <select
-                    value={preferences.langue}
-                    onChange={(e) => {
-                      const newLang = e.target.value as Locale;
-                      updatePreference("langue", newLang);
-                      setLocale(newLang); // Mettre à jour localStorage
-                      setLocaleFromContext(newLang); // Déclencher le rechargement de la page
-                    }}
-                    className="rounded-lg bg-[var(--background)] border border-[var(--beige-border)] px-3 py-1 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
-                  >
-                    <option value="fr">Français</option>
-                    <option value="en">English</option>
-                    <option value="es">Español</option>
-                    <option value="de">Deutsch</option>
-                  </select>
-                </div>
-                <div className="flex items-center justify-between pt-2 border-t border-[var(--beige-border)]">
-                  <div>
-                    <p className="text-sm font-medium text-[var(--foreground)]">Afficher les calories</p>
-                    <p className="text-xs text-[var(--beige-text-muted)]">
-                      Affiche les informations nutritionnelles
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => updatePreference("afficherCalories", !preferences.afficherCalories)}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${
-                      preferences.afficherCalories ? "bg-[#D44A4A]" : "bg-[#D4C4B8]"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                        preferences.afficherCalories ? "translate-x-6" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            </div>
-
+          <section className="px-4 py-6 space-y-4">
             <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
               <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">Notifications</h2>
               <div className="space-y-4 text-sm">
@@ -1892,83 +2078,59 @@ export default function MenuPage() {
                 </div>
               </div>
             </div>
+          </section>
+        </>
+      )}
 
+      {activeTab === "parametres" && (
+        <>
+          <section className="px-4 py-6 space-y-4">
             <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-              <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
-                Abonnement
-              </h2>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <p className="text-xs text-[var(--beige-text-muted)] mb-2">
-                    Type d&apos;abonnement actuel
-                  </p>
-                  <div className="rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 flex items-center justify-between">
-                    <span className="font-semibold text-[var(--foreground)]">
-                      {preferences.abonnementType === "premium" ? "Premium" : "Gratuit"}
-                    </span>
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        preferences.abonnementType === "premium"
-                          ? "bg-[#D44A4A] text-white"
-                          : "bg-[var(--beige-card-alt)] text-[var(--beige-text-muted)]"
-                      }`}
-                    >
-                      {preferences.abonnementType === "premium" ? "Premium" : "Gratuit"}
-                    </span>
-                  </div>
-                </div>
-
-                {preferences.abonnementType === "free" && (
-                  <>
-                    <div className="pt-2 border-t border-[var(--beige-border)]">
-                      <p className="text-xs text-[var(--beige-text-muted)] mb-2">
-                        Ce que débloque le Premium
-                      </p>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
-                          <span>✓</span>
-                          <span>Scan photo de frigo</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
-                          <span>✓</span>
-                          <span>Liste de courses automatique</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
-                          <span>✓</span>
-                          <span>Recettes supplémentaires</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
-                          <span>✓</span>
-                          <span>Sans publicités</span>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => router.push("/premium")}
-                      className="w-full mt-3 px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
-                    >
-                      Passer à Premium
-                    </button>
-                  </>
-                )}
-
-                {preferences.abonnementType === "premium" && (
-                  <div className="pt-2 border-t border-[var(--beige-border)]">
-                    <p className="text-xs text-[var(--beige-text-muted)] mb-2">
-                      Gestion de l&apos;abonnement
+              <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">Apparence</h2>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[var(--foreground)]">Mode sombre</p>
+                    <p className="text-xs text-[var(--beige-text-muted)]">
+                      Active le thème sombre pour un confort visuel optimal
                     </p>
-                    <button
-                      onClick={() => {
-                        alert(
-                          "Historique de facturation / lien vers le store (à venir)"
-                        );
-                      }}
-                      className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
-                    >
-                      Historique de facturation / Voir sur le store
-                    </button>
                   </div>
-                )}
+                  <button
+                    onClick={toggleTheme}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      theme === "dark" ? "bg-[#D44A4A]" : "bg-[#D4C4B8]"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                        theme === "dark" ? "translate-x-6" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-[var(--beige-border)]">
+                  <div>
+                    <p className="text-sm font-medium text-[var(--foreground)]">Langue</p>
+                    <p className="text-xs text-[var(--beige-text-muted)]">
+                      Choisis la langue de l&apos;application
+                    </p>
+                  </div>
+                  <select
+                    value={preferences.langue}
+                    onChange={(e) => {
+                      const newLang = e.target.value as Locale;
+                      updatePreference("langue", newLang);
+                      setLocale(newLang);
+                      setLocaleFromContext(newLang);
+                    }}
+                    className="rounded-lg bg-[var(--background)] border border-[var(--beige-border)] px-3 py-1 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                  >
+                    <option value="fr">Français</option>
+                    <option value="en">English</option>
+                    <option value="es">Español</option>
+                    <option value="de">Deutsch</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -2671,249 +2833,300 @@ export default function MenuPage() {
       )}
 
       {activeTab === "foyer" && (
-        <section className="space-y-4">
-          <h2 className="text-xl font-bold text-[var(--foreground)] mb-4">
-            Profil alimentaire du foyer
-          </h2>
-
-          {/* Informations du foyer */}
+        <section className="px-4 py-6 space-y-4">
+          {/* Foyer */}
           <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h3 className="text-base font-semibold mb-3 text-[var(--foreground)]">
-              Informations du foyer
-            </h3>
-            <div className="space-y-2 text-sm">
-              {preferences.nom && preferences.prenom && (
-                <div className="flex justify-between">
-                  <span className="text-[var(--beige-text-muted)]">Nom complet :</span>
-                  <span className="text-[var(--foreground)] font-medium">
-                    {preferences.prenom} {preferences.nom}
-                  </span>
-                </div>
-              )}
-              {preferences.email && (
-                <div className="flex justify-between">
-                  <span className="text-[var(--beige-text-muted)]">Email :</span>
-                  <span className="text-[var(--foreground)] font-medium">
-                    {preferences.email}
-                  </span>
-                </div>
-              )}
-              {preferences.telephone && (
-                <div className="flex justify-between">
-                  <span className="text-[var(--beige-text-muted)]">Téléphone :</span>
-                  <span className="text-[var(--foreground)] font-medium">
-                    {preferences.telephone}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-[var(--beige-text-muted)]">Nombre de personnes :</span>
-                <span className="text-[var(--foreground)] font-medium">
-                  {preferences.nombrePersonnes}
-                </span>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-[var(--beige-border)]">
-              <Link
-                href="/compte"
-                className="text-xs text-[#D44A4A] hover:text-[#7A5F3F] font-medium"
-              >
-                Modifier les informations →
-              </Link>
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
+              Foyer
+            </h2>
+            <div>
+              <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
+                Nombre de personnes dans le foyer *
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={preferences.nombrePersonnes}
+                onChange={(e) =>
+                  updatePreference("nombrePersonnes", parseInt(e.target.value) || 1)
+                }
+                className="w-full px-3 py-2 rounded-lg border border-[var(--beige-border)] bg-white text-[var(--foreground)]"
+              />
             </div>
           </div>
 
-          {/* Régimes particuliers */}
+          {/* Alimentation particulière */}
           <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h3 className="text-base font-semibold mb-3 text-[var(--foreground)]">
-              Régimes particuliers
-            </h3>
-            <p className="text-xs text-[var(--beige-text-muted)] mb-3">
-              Sélectionne les régimes alimentaires qui s'appliquent à ton foyer. Les recettes seront automatiquement filtrées selon ces critères.
-            </p>
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
+              Alimentation particulière
+            </h2>
             <div className="space-y-2">
-              {ALL_DIETARY_PROFILES.map((regime) => {
-                const isSelected = preferences.regimesParticuliers.includes(regime);
-                const isAvailable = isDietaryProfileAvailable(regime, preferences.abonnementType);
-                const isPremium = !isAvailable && preferences.abonnementType === "free";
+              {ALL_DIETARY_PROFILES.map((profile) => {
+                const isAvailable = isDietaryProfileAvailable(
+                  profile,
+                  preferences.abonnementType
+                );
+                const isSelected = (
+                  preferences.regimesParticuliers as DietaryProfile[]
+                ).includes(profile);
 
                 return (
-                  <div
-                    key={regime}
-                    className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${
+                  <label
+                    key={profile}
+                    className={`flex items-center gap-2 p-3 rounded-lg border ${
                       isSelected
-                        ? "bg-[#D44A4A] border-[#7A5F3F] text-white"
-                        : isPremium
-                        ? "bg-[var(--beige-card-alt)] border-[var(--beige-border)] opacity-60"
-                        : "bg-[var(--background)] border-[var(--beige-border)] hover:border-[#D44A4A]"
+                        ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
+                        : "border-[var(--beige-border)] bg-white"
+                    } ${
+                      !isAvailable
+                        ? "opacity-60 cursor-not-allowed"
+                        : "cursor-pointer"
                     }`}
                   >
-                    <div className="flex items-center gap-3 flex-1">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => {
-                          if (isPremium) {
-                            router.push("/premium");
-                            return;
-                          }
-                          toggleArrayPreference("regimesParticuliers", regime);
-                        }}
-                        disabled={isPremium}
-                        className="w-4 h-4 rounded border-[var(--beige-border)] text-[#D44A4A] focus:ring-[#D44A4A]"
-                      />
-                      <span className={`text-lg mr-2`}>
-                        {DIETARY_PROFILE_ICONS[regime] || "🍽️"}
-                      </span>
-                      <span className={`text-sm font-medium ${isPremium ? "text-[var(--beige-text-muted)]" : ""}`}>
-                        {regime}
-                      </span>
-                    </div>
-                    {isPremium && (
-                      <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#D44A4A] text-white font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        if (!isAvailable) {
+                          alert(
+                            "👑 Ce régime est réservé aux utilisateurs premium. Passe à premium pour y accéder."
+                          );
+                          router.push("/premium");
+                          return;
+                        }
+                        toggleArrayPreference("regimesParticuliers", profile);
+                      }}
+                      disabled={!isAvailable}
+                      className="w-4 h-4 text-[var(--beige-accent)] rounded disabled:opacity-50"
+                    />
+                    <span className="text-lg">
+                      {DIETARY_PROFILE_ICONS[profile]}
+                    </span>
+                    <span className={`flex-1 font-medium ${
+                      !isAvailable ? "text-[#726566]" : "text-[#2A2523]"
+                    }`}>
+                      {profile}
+                    </span>
+                    {!isAvailable && (
+                      <span className="flex items-center gap-1 text-xs text-[#D44A4A] font-semibold">
                         <span>👑</span>
                         <span>Réservé aux premium</span>
                       </span>
                     )}
-                  </div>
+                  </label>
                 );
               })}
             </div>
-            {preferences.abonnementType === "free" && (
-              <div className="mt-4 pt-4 border-t border-[var(--beige-border)]">
-                <p className="text-xs text-[var(--beige-text-muted)] mb-2">
-                  Les régimes <strong>Normal</strong> et <strong>Végétarien</strong> sont disponibles gratuitement. Pour accéder aux autres régimes, passe à Premium.
-                </p>
-                <button
-                  onClick={() => router.push("/premium")}
-                  className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
-                >
-                  Passer à Premium
-                </button>
-              </div>
-            )}
           </div>
 
-          {/* Aversions et allergies */}
+          {/* Allergies/Aversions */}
           <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h3 className="text-base font-semibold mb-3 text-[var(--foreground)]">
-              Aversions et allergies alimentaires
-            </h3>
-            <p className="text-xs text-[var(--beige-text-muted)] mb-3">
-              Indique les aliments ou ingrédients que tu souhaites exclure des recettes proposées (ex: arachides, crustacés, etc.).
-            </p>
-            
-            {/* Liste des allergies actuelles */}
-            {preferences.aversionsAlimentaires.length > 0 && (
-              <div className="mb-3">
-                <div className="flex flex-wrap gap-2">
-                  {preferences.aversionsAlimentaires.map((allergy) => (
-                    <button
-                      key={allergy}
-                      type="button"
-                      onClick={() => toggleArrayPreference("aversionsAlimentaires", allergy)}
-                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-[#D44A4A] border border-[#7A5F3F] text-xs text-white"
-                    >
-                      <span>{allergy}</span>
-                      <span className="text-[#9A6A6A]">✕</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Champ de saisie pour ajouter une aversion/allergie */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const input = e.currentTarget.querySelector("input") as HTMLInputElement;
-                const value = input.value.trim();
-                if (value && !preferences.aversionsAlimentaires.includes(value)) {
-                  toggleArrayPreference("aversionsAlimentaires", value);
-                  input.value = "";
-                }
-              }}
-              className="space-y-2"
-            >
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
+              Allergies / Aversions alimentaires
+            </h2>
+            <div className="flex gap-2 mb-3">
               <input
                 type="text"
-                placeholder="Ex: arachides, crustacés, œufs..."
-                className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                value={allergiesInput}
+                onChange={(e) => setAllergiesInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const trimmed = allergiesInput.trim();
+                    if (trimmed && !preferences.aversionsAlimentaires.includes(trimmed)) {
+                      toggleArrayPreference("aversionsAlimentaires", trimmed);
+                      setAllergiesInput("");
+                    }
+                  }
+                }}
+                placeholder="Ex: arachides, fruits de mer..."
+                className="flex-1 px-3 py-2 rounded-lg border border-[var(--beige-border)] bg-white text-[var(--foreground)]"
               />
               <button
-                type="submit"
-                className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                onClick={() => {
+                  const trimmed = allergiesInput.trim();
+                  if (trimmed && !preferences.aversionsAlimentaires.includes(trimmed)) {
+                    toggleArrayPreference("aversionsAlimentaires", trimmed);
+                    setAllergiesInput("");
+                  }
+                }}
+                className="px-4 py-2 bg-[var(--beige-accent)] text-white rounded-lg hover:bg-[var(--beige-accent-hover)] transition-colors"
               >
                 Ajouter
               </button>
-            </form>
-
-            <p className="text-[11px] text-[var(--beige-text-muted)] mt-3">
-              💡 Les recettes contenant ces ingrédients seront automatiquement exclues des résultats de recherche.
-            </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {preferences.aversionsAlimentaires.map((allergy) => (
+                <span
+                  key={allergy}
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-[var(--beige-rose-light)] text-[var(--foreground)] rounded-full text-sm"
+                >
+                  {allergy}
+                  <button
+                    onClick={() => toggleArrayPreference("aversionsAlimentaires", allergy)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
           </div>
 
           {/* Équipements disponibles */}
           <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h3 className="text-base font-semibold mb-3 text-[var(--foreground)]">
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
               Équipements disponibles
-            </h3>
-            <p className="text-xs text-[var(--beige-text-muted)] mb-3">
-              Sélectionne les équipements de cuisine dont tu disposes. Les recettes seront adaptées en conséquence.
-            </p>
+            </h2>
             <div className="grid grid-cols-2 gap-2">
-              {["Four", "Microondes", "Friteuse", "Airfryer", "Mixeur", "Robot cuiseur"].map((equipement) => {
-                const isSelected = preferences.equipements.includes(equipement);
+              {AVAILABLE_EQUIPMENTS.map((equipment) => {
+                const isSelected = preferences.equipements.includes(equipment);
                 return (
-                  <button
-                    key={equipement}
-                    type="button"
-                    onClick={() => toggleArrayPreference("equipements", equipement)}
-                    className={`px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                  <label
+                    key={equipment}
+                    className={`flex items-center gap-2 p-2 rounded-lg border ${
                       isSelected
-                        ? "bg-[#D44A4A] border-[#7A5F3F] text-white"
-                        : "bg-[var(--background)] border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A]"
-                    }`}
+                        ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
+                        : "border-[var(--beige-border)] bg-white"
+                    } cursor-pointer`}
                   >
-                    {equipement}
-                  </button>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        toggleArrayPreference("equipements", equipment);
+                      }}
+                      className="w-4 h-4 text-[var(--beige-accent)] rounded"
+                    />
+                    <span className="text-sm text-[#2A2523] font-medium">
+                      {equipment}
+                    </span>
+                  </label>
                 );
               })}
             </div>
           </div>
 
-          {/* Nombre de personnes */}
+          {/* Objectifs d'utilisation */}
           <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h3 className="text-base font-semibold mb-3 text-[var(--foreground)]">
-              Nombre de personnes
-            </h3>
-            <p className="text-xs text-[var(--beige-text-muted)] mb-3">
-              Nombre de personnes pour lesquelles tu cuisines habituellement.
-            </p>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  if (preferences.nombrePersonnes > 1) {
-                    updatePreference("nombrePersonnes", preferences.nombrePersonnes - 1);
-                  }
-                }}
-                className="w-10 h-10 rounded-full bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] font-semibold hover:border-[#D44A4A] transition-colors"
-              >
-                −
-              </button>
-              <span className="text-xl font-semibold text-[var(--foreground)] min-w-[3rem] text-center">
-                {preferences.nombrePersonnes}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  updatePreference("nombrePersonnes", preferences.nombrePersonnes + 1);
-                }}
-                className="w-10 h-10 rounded-full bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] font-semibold hover:border-[#D44A4A] transition-colors"
-              >
-                +
-              </button>
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
+              Objectifs d'utilisation de l'app
+            </h2>
+            <div className="space-y-2">
+              {Object.values(NUTRITION_GOALS).map((goal) => {
+                const isSelected = (
+                  preferences.objectifsUsage as NutritionGoal[]
+                ).includes(goal.id);
+
+                return (
+                  <label
+                    key={goal.id}
+                    className={`flex items-center gap-2 p-3 rounded-lg border ${
+                      isSelected
+                        ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
+                        : "border-[var(--beige-border)] bg-white"
+                    } cursor-pointer`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        toggleArrayPreference("objectifsUsage", goal.id);
+                      }}
+                      className="w-4 h-4 text-[var(--beige-accent)] rounded"
+                    />
+                    <span className="text-lg">{goal.icon}</span>
+                    <span className="flex-1 text-[#2A2523] font-medium">
+                      {goal.title}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeTab === "abonnement" && (
+        <section className="px-4 py-6 space-y-4">
+          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+            <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
+              Abonnement
+            </h2>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-xs text-[var(--beige-text-muted)] mb-2">
+                  Type d&apos;abonnement actuel
+                </p>
+                <div className="rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 flex items-center justify-between">
+                  <span className="font-semibold text-[var(--foreground)]">
+                    {preferences.abonnementType === "premium" ? "Premium" : "Gratuit"}
+                  </span>
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      preferences.abonnementType === "premium"
+                        ? "bg-[#D44A4A] text-white"
+                        : "bg-[var(--beige-card-alt)] text-[var(--beige-text-muted)]"
+                    }`}
+                  >
+                    {preferences.abonnementType === "premium" ? "Premium" : "Gratuit"}
+                  </span>
+                </div>
+              </div>
+
+              {preferences.abonnementType === "free" && (
+                <>
+                  <div className="pt-2 border-t border-[var(--beige-border)]">
+                    <p className="text-xs text-[var(--beige-text-muted)] mb-2">
+                      Ce que débloque le Premium
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
+                        <span>✓</span>
+                        <span>Scan photo de frigo</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
+                        <span>✓</span>
+                        <span>Liste de courses automatique</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
+                        <span>✓</span>
+                        <span>Recettes supplémentaires</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
+                        <span>✓</span>
+                        <span>Régimes alimentaires avancés</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-[var(--beige-text-light)]">
+                        <span>✓</span>
+                        <span>Sans publicités</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => router.push("/premium")}
+                    className="w-full mt-3 px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-sm font-semibold transition-colors"
+                  >
+                    Passer à Premium
+                  </button>
+                </>
+              )}
+
+              {preferences.abonnementType === "premium" && (
+                <div className="pt-2 border-t border-[var(--beige-border)]">
+                  <p className="text-xs text-[var(--beige-text-muted)] mb-2">
+                    Gestion de l&apos;abonnement
+                  </p>
+                  <button
+                    onClick={() => {
+                      alert("Historique de facturation / lien vers le store (à venir)");
+                    }}
+                    className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+                  >
+                    Historique de facturation / Voir sur le store
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -3142,8 +3355,6 @@ export default function MenuPage() {
         </section>
       )}
 
-      {/* Section Retour utilisateur */}
-      <UserFeedback />
     </main>
   );
 }

@@ -1,4 +1,5 @@
 // Gestion des préférences utilisateur
+import { supabase } from "./supabaseClient";
 
 export interface UserPreferences {
   // Profil
@@ -44,7 +45,25 @@ export interface UserAccount {
 const ACCOUNT_STORAGE_KEY = "foodlane_user_account";
 const IS_LOGGED_IN_KEY = "foodlane_is_logged_in";
 
-export function isLoggedIn(): boolean {
+export async function isLoggedIn(): Promise<boolean> {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    // Vérifier d'abord la session Supabase
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      return true;
+    }
+    // Fallback sur l'ancien système si Supabase n'est pas utilisé
+    return localStorage.getItem(IS_LOGGED_IN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+// Fonction synchrone pour compatibilité (vérifie seulement localStorage)
+export function isLoggedInSync(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
@@ -86,19 +105,33 @@ export function createAccount(account: UserAccount): void {
   }
 }
 
-export function logout(): void {
+export async function logout(): Promise<void> {
   if (typeof window === "undefined") {
     return;
   }
   try {
+    // Déconnexion de Supabase
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Erreur lors de la déconnexion Supabase:", error);
+    }
+    
+    // Nettoyer le localStorage
     localStorage.setItem(IS_LOGGED_IN_KEY, "false");
+    
+    // Optionnel : nettoyer les données de session Supabase du localStorage
+    // Supabase stocke ses propres clés, mais on peut aussi les nettoyer explicitement
+    const supabaseKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith('sb-') || key.includes('supabase')
+    );
+    supabaseKeys.forEach(key => localStorage.removeItem(key));
   } catch (err) {
     console.error("Impossible de se déconnecter :", err);
   }
 }
 
 export function getCurrentAccount(): UserAccount | null {
-  if (typeof window === "undefined" || !isLoggedIn()) {
+  if (typeof window === "undefined" || !isLoggedInSync()) {
     return null;
   }
   try {
@@ -110,7 +143,7 @@ export function getCurrentAccount(): UserAccount | null {
 }
 
 export function updateAccount(account: Partial<UserAccount>): void {
-  if (typeof window === "undefined" || !isLoggedIn()) {
+  if (typeof window === "undefined" || !isLoggedInSync()) {
     return;
   }
   try {

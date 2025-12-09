@@ -1,43 +1,123 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { loadPreferences, savePreferences, type UserPreferences } from "../src/lib/userPreferences";
-import UserFeedback from "../components/UserFeedback";
+import { supabase } from "../src/lib/supabaseClient";
+import { useSupabaseSession } from "../hooks/useSupabaseSession";
+import LoadingSpinner from "../components/LoadingSpinner";
+import ErrorMessage from "../components/ErrorMessage";
 
 export default function PremiumPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user } = useSupabaseSession();
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setPreferences(loadPreferences());
-  }, []);
+    
+    // Vérifier si l'utilisateur revient de Stripe
+    const success = searchParams.get("success");
+    const canceled = searchParams.get("canceled");
+    
+    if (success) {
+      // L'utilisateur a payé avec succès
+      // Le webhook Stripe va mettre à jour le statut premium
+      // On peut afficher un message de succès
+      setError(null);
+      // Recharger les préférences après un court délai pour laisser le webhook se déclencher
+      setTimeout(() => {
+        const updated = loadPreferences();
+        setPreferences(updated);
+      }, 2000);
+    } else if (canceled) {
+      setError("Paiement annulé. Tu peux réessayer quand tu veux.");
+    }
+  }, [searchParams]);
 
-  const handleSubscribe = () => {
-    if (!preferences) return;
+  const handleSubscribe = async () => {
+    // Vérifications préalables
+    if (!user) {
+      setError("Tu dois être connecté pour souscrire à Premium.");
+      router.push("/login");
+      return;
+    }
 
-    // Ici, tu peux intégrer un système de paiement réel (Stripe, etc.)
-    // Pour l'instant, on simule juste la souscription
-    // IMPORTANT: Ajouter la date de début d'abonnement et la date d'expiration (1 mois)
-    const now = new Date();
-    const expirationDate = new Date(now);
-    expirationDate.setMonth(expirationDate.getMonth() + 1); // Ajouter 1 mois
-    
-    const updated = { 
-      ...preferences, 
-      abonnementType: "premium" as const,
-      premiumStartDate: now.toISOString(), // Date de début de l'abonnement
-      premiumExpirationDate: expirationDate.toISOString(), // Date d'expiration (1 mois)
-    };
-    setPreferences(updated);
-    savePreferences(updated);
-    
-    alert("Abonnement Premium activé ! Il sera valable pendant 1 mois.");
-    
-    // Redirection vers la page d'accueil après 2 secondes
-    setTimeout(() => {
-      router.push("/");
-    }, 2000);
+    if (!preferences) {
+      setError("Impossible de charger tes préférences. Recharge la page.");
+      return;
+    }
+
+    const userEmail = user.email || preferences.email;
+    if (!userEmail) {
+      setError("Email manquant. Vérifie ton profil.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log("[Premium] Création de session Stripe pour:", { userId: user.id, email: userEmail });
+
+      // Créer une session Stripe Checkout
+      const response = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          email: userEmail,
+          plan: "monthly", // Par défaut, plan mensuel
+        }),
+      });
+
+      console.log("[Premium] Réponse API:", response.status, response.statusText);
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          // Si la réponse n'est pas du JSON, lire le texte
+          const errorText = await response.text();
+          throw new Error(`Erreur serveur (${response.status}): ${errorText || "Erreur inconnue"}`);
+        }
+
+        // Afficher un message d'erreur plus clair pour l'utilisateur
+        const errorMessage = errorData.error || "Erreur lors de la création de la session de paiement";
+        const errorDetails = errorData.details ? `\n\n${errorData.details}` : "";
+        
+        console.error("[Premium] Erreur API:", errorMessage, errorDetails);
+        throw new Error(`${errorMessage}${errorDetails}`);
+      }
+
+      const data = await response.json();
+      console.log("[Premium] Données reçues:", data);
+
+      const { url } = data;
+
+      if (!url) {
+        console.error("[Premium] URL manquante dans la réponse:", data);
+        throw new Error("URL de paiement non reçue. Vérifie la configuration Stripe.");
+      }
+
+      console.log("[Premium] Redirection vers Stripe:", url);
+      
+      // Rediriger vers Stripe Checkout
+      window.location.href = url;
+    } catch (err) {
+      console.error("[Premium] Erreur lors de la souscription:", err);
+      const errorMessage = err instanceof Error 
+        ? err.message 
+        : "Erreur lors de la souscription. Veuillez réessayer.";
+      setError(errorMessage);
+      setLoading(false);
+    }
   };
 
   const premiumFeatures = [
@@ -77,12 +157,20 @@ export default function PremiumPage() {
         <p className="text-sm text-center mt-2 text-[var(--beige-text-muted)]">
           Débloque toutes les fonctionnalités avancées de Foodlane
         </p>
-        {/* Mention phase de test */}
-        <div className="mt-4 p-3 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0]">
-          <p className="text-xs text-center text-[#6B2E2E]">
-            <strong>Version de test :</strong> La version de test vous donne accès gratuitement à toutes les fonctionnalités Premium, afin d'améliorer l'application grâce à vos retours.
-          </p>
-        </div>
+        {/* Message de succès ou erreur */}
+        {error && (
+          <div className="mt-4">
+            <ErrorMessage message={error} onDismiss={() => setError(null)} />
+          </div>
+        )}
+        
+        {searchParams.get("success") && !error && (
+          <div className="mt-4 p-3 rounded-xl bg-green-50 border border-green-200">
+            <p className="text-xs text-center text-green-700">
+              ✅ <strong>Paiement réussi !</strong> Ton abonnement Premium est en cours d'activation...
+            </p>
+          </div>
+        )}
       </header>
 
       {/* Bannière Premium */}
@@ -94,10 +182,10 @@ export default function PremiumPage() {
             Accède à toutes les fonctionnalités avancées
           </p>
           <div className="flex items-baseline justify-center gap-2">
-            <span className="text-3xl font-bold">4,99€</span>
+            <span className="text-3xl font-bold">9,99€</span>
             <span className="text-sm opacity-80">/ mois</span>
           </div>
-          <p className="text-xs opacity-75 mt-2">ou 49,99€ / an (économisez 17%)</p>
+          <p className="text-xs opacity-75 mt-2">ou 79€ / an (économisez 34%)</p>
         </div>
       </div>
 
@@ -152,12 +240,34 @@ export default function PremiumPage() {
 
       {/* Bouton d'abonnement */}
       <div className="space-y-3">
-        <button
-          onClick={handleSubscribe}
-          className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors"
-        >
-          Souscrire à Premium
-        </button>
+        {!user ? (
+          <div className="p-4 rounded-xl bg-yellow-50 border border-yellow-200">
+            <p className="text-sm text-yellow-800 text-center mb-3">
+              Tu dois être connecté pour souscrire à Premium.
+            </p>
+            <button
+              onClick={() => router.push("/login")}
+              className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors"
+            >
+              Se connecter
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleSubscribe}
+            disabled={loading}
+            className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Redirection vers le paiement...</span>
+              </>
+            ) : (
+              "Souscrire à Premium"
+            )}
+          </button>
+        )}
         <p className="text-xs text-center text-[var(--beige-text-muted)]">
           Annulation possible à tout moment depuis les paramètres de ton compte
         </p>
@@ -172,13 +282,12 @@ export default function PremiumPage() {
       {/* Informations légales */}
       <div className="mt-6 pt-6 border-t border-[var(--beige-border)]">
         <p className="text-xs text-center text-[var(--beige-text-muted)]">
-          Le paiement s'effectuera via l'App Store ou Google Play selon ta plateforme.
-          L'abonnement se renouvelle automatiquement sauf résiliation.
+          Le paiement s'effectue de manière sécurisée via Stripe.
+          L'abonnement se renouvelle automatiquement chaque mois sauf résiliation.
+          Tu peux annuler ton abonnement à tout moment depuis les paramètres de ton compte.
         </p>
       </div>
 
-      {/* Section Retour utilisateur */}
-      <UserFeedback />
     </main>
   );
 }

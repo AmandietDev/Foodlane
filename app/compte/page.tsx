@@ -11,34 +11,8 @@ import {
   isLoggedIn,
   login,
   getCurrentAccount,
+  logout,
 } from "../src/lib/userPreferences";
-import UserFeedback from "../components/UserFeedback";
-import {
-  type DietaryProfile,
-  FREE_DIETARY_PROFILES,
-  PREMIUM_DIETARY_PROFILES,
-  isDietaryProfileAvailable,
-  DIETARY_PROFILE_ICONS,
-} from "../src/lib/dietaryProfiles";
-import { type NutritionGoal, NUTRITION_GOALS } from "../src/lib/nutritionGoals";
-
-// Liste des équipements disponibles
-const AVAILABLE_EQUIPMENTS = [
-  "Four",
-  "Micro-ondes",
-  "Plaques de cuisson",
-  "Casserole",
-  "Poêle",
-  "Mixeur",
-  "Robot mixeur",
-  "Mixeur plongeant",
-  "Robot cuiseur",
-  "Friteuse",
-  "Airfryer",
-  "Autocuiseur",
-  "Blender",
-  "Grille-pain",
-];
 
 export default function AccountPage() {
   const router = useRouter();
@@ -71,8 +45,6 @@ export default function AccountPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [allergiesInput, setAllergiesInput] = useState("");
-  const [equipmentInput, setEquipmentInput] = useState("");
   const [cguAccepted, setCguAccepted] = useState(false);
   const [showCguModal, setShowCguModal] = useState(false);
   const [showLoginForm, setShowLoginForm] = useState(false);
@@ -81,7 +53,8 @@ export default function AccountPage() {
   const [loginError, setLoginError] = useState("");
 
   useEffect(() => {
-    const loggedIn = isLoggedIn();
+    async function checkAuth() {
+      const loggedIn = await isLoggedIn();
     if (!loggedIn) {
       setIsNewAccount(true);
       setIsEditing(true);
@@ -92,6 +65,8 @@ export default function AccountPage() {
       setCguAccepted(preferences.cguAccepted || false);
       setIsEditing(false);
     }
+    }
+    checkAuth();
   }, []);
 
   const handleInputChange = (
@@ -109,89 +84,6 @@ export default function AccountPage() {
     }
   };
 
-  const handleDietaryProfileToggle = (profile: DietaryProfile) => {
-    const preferences = loadPreferences();
-    const isAvailable = isDietaryProfileAvailable(
-      profile,
-      preferences.abonnementType
-    );
-
-    if (!isAvailable) {
-      alert(
-        "👑 Ce régime est réservé aux utilisateurs premium. Passe à premium pour y accéder."
-      );
-      router.push("/premium");
-      return;
-    }
-
-    setFormData((prev) => {
-      const current = prev.regimesParticuliers as DietaryProfile[];
-      if (current.includes(profile)) {
-        return {
-          ...prev,
-          regimesParticuliers: current.filter((p) => p !== profile),
-        };
-      } else {
-        return {
-          ...prev,
-          regimesParticuliers: [...current, profile],
-        };
-      }
-    });
-  };
-
-  const handleAddAllergy = () => {
-    const trimmed = allergiesInput.trim();
-    if (trimmed && !formData.aversionsAlimentaires.includes(trimmed)) {
-      setFormData((prev) => ({
-        ...prev,
-        aversionsAlimentaires: [...prev.aversionsAlimentaires, trimmed],
-      }));
-      setAllergiesInput("");
-    }
-  };
-
-  const handleRemoveAllergy = (allergy: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      aversionsAlimentaires: prev.aversionsAlimentaires.filter(
-        (a) => a !== allergy
-      ),
-    }));
-  };
-
-  const handleAddEquipment = (equipment: string) => {
-    if (!formData.equipements.includes(equipment)) {
-      setFormData((prev) => ({
-        ...prev,
-        equipements: [...prev.equipements, equipment],
-      }));
-    }
-  };
-
-  const handleRemoveEquipment = (equipment: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      equipements: prev.equipements.filter((e) => e !== equipment),
-    }));
-  };
-
-  const handleGoalToggle = (goal: NutritionGoal) => {
-    setFormData((prev) => {
-      const current = prev.objectifsUsage as NutritionGoal[];
-      if (current.includes(goal)) {
-        return {
-          ...prev,
-          objectifsUsage: current.filter((g) => g !== goal),
-        };
-      } else {
-        return {
-          ...prev,
-          objectifsUsage: [...current, goal],
-        };
-      }
-    });
-  };
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -206,9 +98,6 @@ export default function AccountPage() {
       newErrors.email = "L'email est requis";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "L'email n'est pas valide";
-    }
-    if (formData.nombrePersonnes < 1) {
-      newErrors.nombrePersonnes = "Le nombre de personnes doit être au moins 1";
     }
 
     if (isNewAccount) {
@@ -275,16 +164,11 @@ export default function AccountPage() {
       createAccount(account);
       
       // Sauvegarder l'acceptation des CGU
-      // PHASE DE TEST: Tous les nouveaux comptes sont automatiquement premium (gratuit pendant la phase de test)
       const now = new Date();
-      const expirationDate = new Date(now);
-      expirationDate.setFullYear(expirationDate.getFullYear() + 10); // Expiration dans 10 ans pour la phase de test
       
       const preferencesWithCgu = {
         ...formData,
-        abonnementType: "premium" as const, // Premium gratuit pendant la phase de test
-        premiumStartDate: now.toISOString(),
-        premiumExpirationDate: expirationDate.toISOString(), // Expiration très lointaine pour la phase de test
+        abonnementType: "free" as const, // Nouveau compte = free par défaut
         cguAccepted: true,
         cguAcceptedDate: new Date().toISOString(),
       };
@@ -303,11 +187,6 @@ export default function AccountPage() {
     setIsNewAccount(false);
     router.push("/");
   };
-
-  const allDietaryProfiles: DietaryProfile[] = [
-    ...FREE_DIETARY_PROFILES,
-    ...PREMIUM_DIETARY_PROFILES,
-  ];
 
   const preferences = loadPreferences();
   const isPremium = preferences.abonnementType === "premium";
@@ -406,12 +285,31 @@ export default function AccountPage() {
         )}
 
         {!isEditing && !isNewAccount && (
-          <button
-            onClick={() => setIsEditing(true)}
-            className="mb-4 w-full py-2 px-4 bg-[var(--beige-accent)] text-white rounded-lg hover:bg-[var(--beige-accent-hover)] transition-colors"
-          >
-            Modifier mon profil
-          </button>
+          <div className="mb-4 space-y-3">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="w-full py-2 px-4 bg-[var(--beige-accent)] text-white rounded-lg hover:bg-[var(--beige-accent-hover)] transition-colors"
+            >
+              Modifier mon profil
+            </button>
+            <button
+              onClick={async () => {
+                if (confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {
+                  try {
+                    await logout();
+                    router.push("/login");
+                  } catch (error) {
+                    console.error("Erreur lors de la déconnexion:", error);
+                    // Rediriger quand même vers la page de connexion
+                  router.push("/login");
+                  }
+                }
+              }}
+              className="w-full py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+            >
+              Se déconnecter
+            </button>
+          </div>
         )}
 
         {/* Formulaire de création de compte ou modification de profil */}
@@ -543,223 +441,6 @@ export default function AccountPage() {
                   </div>
                 </>
               )}
-            </div>
-          </div>
-
-          {/* Foyer */}
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Foyer
-            </h2>
-            <div>
-              <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
-                Nombre de personnes dans le foyer *
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={formData.nombrePersonnes}
-                onChange={(e) =>
-                  handleInputChange("nombrePersonnes", parseInt(e.target.value) || 1)
-                }
-                disabled={!isEditing}
-                className={`w-full px-3 py-2 rounded-lg border ${
-                  errors.nombrePersonnes
-                    ? "border-red-500"
-                    : "border-[var(--beige-border)]"
-                } bg-white text-[var(--foreground)] disabled:bg-[var(--beige-light)] disabled:cursor-not-allowed`}
-              />
-              {errors.nombrePersonnes && (
-                <p className="text-red-500 text-xs mt-1">
-                  {errors.nombrePersonnes}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Alimentation particulière */}
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Alimentation particulière
-            </h2>
-            <div className="space-y-2">
-              {allDietaryProfiles.map((profile) => {
-                const isAvailable = isDietaryProfileAvailable(
-                  profile,
-                  preferences.abonnementType
-                );
-                const isSelected = (
-                  formData.regimesParticuliers as DietaryProfile[]
-                ).includes(profile);
-
-                return (
-                  <label
-                    key={profile}
-                    className={`flex items-center gap-2 p-3 rounded-lg border ${
-                      isSelected
-                        ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
-                        : "border-[var(--beige-border)] bg-white"
-                    } ${
-                      !isAvailable
-                        ? "opacity-60 cursor-not-allowed"
-                        : isEditing
-                        ? "cursor-pointer"
-                        : "cursor-not-allowed"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => handleDietaryProfileToggle(profile)}
-                      disabled={!isEditing || !isAvailable}
-                      className="w-4 h-4 text-[var(--beige-accent)] rounded disabled:opacity-50"
-                    />
-                    <span className="text-lg">
-                      {DIETARY_PROFILE_ICONS[profile]}
-                    </span>
-                    <span className={`flex-1 font-medium ${
-                      !isAvailable ? "text-[#726566]" : "text-[#2A2523]"
-                    }`}>
-                      {profile}
-                    </span>
-                    {!isAvailable && (
-                      <span className="flex items-center gap-1 text-xs text-[#D44A4A] font-semibold">
-                        <span>👑</span>
-                        <span>Réservé aux premium</span>
-                      </span>
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Allergies/Aversions */}
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Allergies / Aversions alimentaires
-            </h2>
-            <div className="flex gap-2 mb-3">
-              <input
-                type="text"
-                value={allergiesInput}
-                onChange={(e) => setAllergiesInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddAllergy();
-                  }
-                }}
-                disabled={!isEditing}
-                placeholder="Ex: arachides, fruits de mer..."
-                className="flex-1 px-3 py-2 rounded-lg border border-[var(--beige-border)] bg-white text-[var(--foreground)] disabled:bg-[var(--beige-light)] disabled:cursor-not-allowed"
-              />
-              {isEditing && (
-                <button
-                  onClick={handleAddAllergy}
-                  className="px-4 py-2 bg-[var(--beige-accent)] text-white rounded-lg hover:bg-[var(--beige-accent-hover)] transition-colors"
-                >
-                  Ajouter
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {formData.aversionsAlimentaires.map((allergy) => (
-                <span
-                  key={allergy}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-[var(--beige-rose-light)] text-[var(--foreground)] rounded-full text-sm"
-                >
-                  {allergy}
-                  {isEditing && (
-                    <button
-                      onClick={() => handleRemoveAllergy(allergy)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      ×
-                    </button>
-                  )}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Équipements disponibles */}
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Équipements disponibles
-            </h2>
-            <div className="grid grid-cols-2 gap-2">
-              {AVAILABLE_EQUIPMENTS.map((equipment) => {
-                const isSelected = formData.equipements.includes(equipment);
-                return (
-                  <label
-                    key={equipment}
-                    className={`flex items-center gap-2 p-2 rounded-lg border ${
-                      isSelected
-                        ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
-                        : "border-[var(--beige-border)] bg-white"
-                    } ${
-                      isEditing ? "cursor-pointer" : "cursor-not-allowed"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        if (isSelected) {
-                          handleRemoveEquipment(equipment);
-                        } else {
-                          handleAddEquipment(equipment);
-                        }
-                      }}
-                      disabled={!isEditing}
-                      className="w-4 h-4 text-[var(--beige-accent)] rounded"
-                    />
-                    <span className="text-sm text-[#2A2523] font-medium">
-                      {equipment}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Objectifs d'utilisation */}
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Objectifs d'utilisation de l'app
-            </h2>
-            <div className="space-y-2">
-              {Object.values(NUTRITION_GOALS).map((goal) => {
-                const isSelected = (
-                  formData.objectifsUsage as NutritionGoal[]
-                ).includes(goal.id);
-
-                return (
-                  <label
-                    key={goal.id}
-                    className={`flex items-center gap-2 p-3 rounded-lg border ${
-                      isSelected
-                        ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
-                        : "border-[var(--beige-border)] bg-white"
-                    } ${
-                      isEditing ? "cursor-pointer" : "cursor-not-allowed"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => handleGoalToggle(goal.id)}
-                      disabled={!isEditing}
-                      className="w-4 h-4 text-[var(--beige-accent)] rounded"
-                    />
-                    <span className="text-lg">{goal.icon}</span>
-                    <span className="flex-1 text-[#2A2523] font-medium">
-                      {goal.title}
-                    </span>
-                  </label>
-                );
-              })}
             </div>
           </div>
 
@@ -997,8 +678,6 @@ export default function AccountPage() {
         </div>
       )}
 
-      {/* Section Retour utilisateur */}
-      <UserFeedback />
     </main>
   );
 }

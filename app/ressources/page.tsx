@@ -6,7 +6,6 @@ import type { Recipe } from "../src/lib/recipes";
 import { loadFavorites, saveFavorites } from "../src/lib/favorites";
 import RecipeImage from "../components/RecipeImage";
 import { detectDietaryBadges, DIETARY_BADGE_ICONS } from "../src/lib/dietaryProfiles";
-import UserFeedback from "../components/UserFeedback";
 
 const RESOURCE_ITEMS = [
   {
@@ -434,8 +433,6 @@ export default function RessourcesPage() {
         </div>
       )}
 
-      {/* Section Retour utilisateur */}
-      <UserFeedback />
     </main>
   );
 }

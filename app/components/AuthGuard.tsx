@@ -2,60 +2,69 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { isLoggedIn } from "../src/lib/userPreferences";
+import { useSupabaseSession } from "../hooks/useSupabaseSession";
+import LoadingSpinner from "./LoadingSpinner";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [isChecking, setIsChecking] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, loading } = useSupabaseSession();
+  const [hasRedirected, setHasRedirected] = useState(false);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Pages qui ne nécessitent pas de connexion
+  const publicPages = ["/compte", "/login"];
+
+  // IMPORTANT: Tous les hooks doivent être appelés avant tout return conditionnel
+  
+  // Timeout de sécurité : si le chargement prend plus de 3 secondes, considérer comme non connecté
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => {
+        setLoadingTimeout(true);
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setLoadingTimeout(false);
+    }
+  }, [loading]);
 
   useEffect(() => {
-    // Vérifier si l'utilisateur est connecté
-    const loggedIn = isLoggedIn();
-    setIsAuthenticated(loggedIn);
-    
-    // Pages qui ne nécessitent pas de connexion
-    const publicPages = ["/compte"];
-    
-    // Si l'utilisateur n'est pas connecté et n'est pas sur une page publique, rediriger vers /compte
-    if (!loggedIn && !publicPages.includes(pathname)) {
-      router.replace("/compte");
+    // Si le chargement est terminé et qu'il n'y a pas d'utilisateur, rediriger
+    if (!loading && !user && !hasRedirected && !publicPages.includes(pathname)) {
+      setHasRedirected(true);
+      router.replace("/login");
     }
-    
-    setIsChecking(false);
-  }, [router, pathname]);
+  }, [user, loading, router, hasRedirected, pathname]);
 
-  // Afficher un écran de chargement pendant la vérification
-  if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D44A4A] mx-auto mb-4"></div>
-          <p className="text-[var(--text-secondary)]">Chargement...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Pages publiques : toujours afficher
-  const publicPages = ["/compte"];
+  // Si on est sur une page publique, toujours afficher immédiatement (même pendant le chargement)
   if (publicPages.includes(pathname)) {
     return <>{children}</>;
   }
 
-  // Pages protégées : n'afficher que si connecté
-  if (!isAuthenticated) {
+  // Afficher un écran de chargement pendant la vérification (max 3 secondes)
+  if (loading && !loadingTimeout) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D44A4A] mx-auto mb-4"></div>
-          <p className="text-[var(--text-secondary)]">Redirection...</p>
-        </div>
+        <LoadingSpinner message="Vérification de la session..." />
       </div>
     );
   }
 
+  // Si timeout ou pas d'utilisateur, rediriger vers login
+  if (loadingTimeout || !user) {
+    if (!hasRedirected) {
+      // La redirection sera gérée par le useEffect
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+          <LoadingSpinner message="Redirection vers la connexion..." />
+        </div>
+      );
+    }
+    return null;
+  }
+
+  // Utilisateur connecté : afficher le contenu
   return <>{children}</>;
 }
 

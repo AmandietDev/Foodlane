@@ -20,6 +20,8 @@ const nextConfig: NextConfig = {
     unoptimized: false,
     // Formats modernes pour de meilleures performances
     formats: ['image/avif', 'image/webp'],
+    // Ajout pour supprimer le warning Next.js
+    qualities: [75, 85],
   },
 };
 

@@ -16,6 +16,32 @@ export type Recipe = {
   image_url?: string;
 };
 
+/**
+ * Fonction principale pour récupérer les recettes
+ * Utilise Supabase si configuré, sinon Google Sheets (fallback)
+ */
+export async function fetchRecipes(): Promise<Recipe[]> {
+  // Vérifier si Supabase est configuré
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      // Utiliser Supabase
+      const { fetchRecipesFromSupabase } = await import('./recipes-supabase');
+      return await fetchRecipesFromSupabase();
+    } catch (error) {
+      console.error('[Recipes] Erreur avec Supabase, fallback vers Google Sheets:', error);
+      // Fallback vers Google Sheets en cas d'erreur
+      return await fetchRecipesFromSheet();
+    }
+  } else {
+    // Fallback vers Google Sheets si Supabase n'est pas configuré
+    console.log('[Recipes] Supabase non configuré, utilisation de Google Sheets');
+    return await fetchRecipesFromSheet();
+  }
+}
+
 type RawRow = {
   [key: string]: string | undefined;
 };
@@ -48,13 +74,6 @@ export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
     const res = await fetch(url, {
       cache: "no-store",
       next: { revalidate: 0 }, // Désactiver complètement le cache
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/csv,text/plain,*/*',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Referer': 'https://docs.google.com/',
-        'Origin': 'https://docs.google.com',
-      },
     });
 
     if (!res.ok) {

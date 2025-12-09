@@ -1,21 +1,13 @@
 import { NextResponse } from "next/server";
-import { fetchRecipesFromSheet } from "../../src/lib/recipes";
+import { fetchRecipes } from "../../src/lib/recipes";
 
 export const dynamic = 'force-dynamic'; // Désactiver le cache pour cette route
 export const revalidate = 0; // Ne jamais mettre en cache
 
 export async function GET() {
   try {
-    // Vérifier que l'URL de la base de données est configurée
-    if (!process.env.SHEET_RECIPES_CSV_URL) {
-      console.error("[API] SHEET_RECIPES_CSV_URL n'est pas défini dans les variables d'environnement");
-      return NextResponse.json(
-        { error: "Configuration manquante: SHEET_RECIPES_CSV_URL n'est pas défini" },
-        { status: 500 }
-      );
-    }
-    
-    const recipes = await fetchRecipesFromSheet();
+    // Utiliser la fonction fetchRecipes qui choisit automatiquement entre Supabase et Google Sheets
+    const recipes = await fetchRecipes();
     
     // Log pour déboguer
     const sweetCount = recipes.filter(r => {

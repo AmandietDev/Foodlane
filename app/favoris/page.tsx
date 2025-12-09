@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { supabase } from "../src/lib/supabaseClient";
 import type { Recipe } from "../src/lib/recipes";
 import { loadFavorites, saveFavorites } from "../src/lib/favorites";
 import RecipeImage from "../components/RecipeImage";
 import { detectDietaryBadges, DIETARY_BADGE_ICONS } from "../src/lib/dietaryProfiles";
-import UserFeedback from "../components/UserFeedback";
+import LoadingSpinner from "../components/LoadingSpinner";
+import EmptyState from "../components/EmptyState";
 import {
   type Collection,
   loadCollections,
@@ -44,17 +46,35 @@ export default function FavorisPage() {
   const [hasMenu, setHasMenu] = useState(false);
   const [showAllFavorites, setShowAllFavorites] = useState(false);
   const [showAllCollections, setShowAllCollections] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Vérifier la session et protéger la page
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          router.push("/login");
+          return;
+        }
+        setIsCheckingAuth(false);
+      } catch (error) {
+        console.error("Erreur lors de la vérification de la session:", error);
+        router.push("/login");
+      }
+    }
+    checkAuth();
+  }, [router]);
 
   useEffect(() => {
+    if (isCheckingAuth) return; // Attendre la vérification d'authentification
+    
     // Charger les favoris et collections au montage
-    const loadData = () => {
-      const loadedFavorites = loadFavorites();
-      const loadedCollections = loadCollections();
+    const loadData = async () => {
+      const loadedFavorites = await loadFavorites();
+      const loadedCollections = await loadCollections();
       
-      console.log(`[FavorisPage] Chargement des données: ${loadedFavorites.length} favoris, ${loadedCollections.length} collections`);
-      if (loadedCollections.length > 0) {
-        console.log(`[FavorisPage] Détails des collections:`, loadedCollections.map(c => ({ id: c.id, name: c.name, recipes: c.recipeIds.length })));
-      }
+      // Données chargées avec succès
       
       // Toujours mettre à jour les favoris et collections depuis localStorage
       setFavorites(loadedFavorites);
@@ -75,20 +95,20 @@ export default function FavorisPage() {
     // Écouter les changements de localStorage (depuis d'autres onglets)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "foodlane_favorites" || e.key === "foodlane_collections") {
-        console.log("[FavorisPage] Événement storage détecté, rechargement...");
+        // Événement storage détecté, rechargement...
         loadData();
       }
     };
 
     // Écouter l'événement personnalisé de mise à jour des favoris
     const handleFavoritesUpdated = () => {
-      console.log("[FavorisPage] Événement favoritesUpdated détecté, rechargement...");
+      // Événement favoritesUpdated détecté, rechargement...
       loadData();
     };
 
     // Écouter l'événement personnalisé de mise à jour des collections
     const handleCollectionsUpdated = () => {
-      console.log("[FavorisPage] Événement collectionsUpdated détecté, rechargement...");
+      // Événement collectionsUpdated détecté, rechargement...
       loadData();
     };
 
@@ -97,9 +117,9 @@ export default function FavorisPage() {
     window.addEventListener("collectionsUpdated", handleCollectionsUpdated);
     
     // Vérifier périodiquement les changements (pour la même page) - toutes les 2 secondes
-    const interval = setInterval(() => {
-      const currentFavorites = loadFavorites();
-      const currentCollections = loadCollections();
+    const interval = setInterval(async () => {
+      const currentFavorites = await loadFavorites();
+      const currentCollections = await loadCollections();
       const currentFavoriteIds = currentFavorites.map(f => f.id).sort().join(',');
       const currentCollectionIds = currentCollections.map(c => c.id).sort().join(',');
       
@@ -107,7 +127,7 @@ export default function FavorisPage() {
       setFavorites(prevFavorites => {
         const prevIds = prevFavorites.map(f => f.id).sort().join(',');
         if (currentFavoriteIds !== prevIds) {
-          console.log("[FavorisPage] Détection de changement dans localStorage (favoris), rechargement...");
+          // Détection de changement dans localStorage (favoris), rechargement...
           return currentFavorites;
         }
         return prevFavorites;
@@ -116,7 +136,7 @@ export default function FavorisPage() {
       setCollections(prevCollections => {
         const prevIds = prevCollections.map(c => c.id).sort().join(',');
         if (currentCollectionIds !== prevIds || currentCollections.length !== prevCollections.length) {
-          console.log("[FavorisPage] Détection de changement dans localStorage (collections), rechargement...");
+          // Détection de changement dans localStorage (collections), rechargement...
           return currentCollections;
         }
         return prevCollections;
@@ -134,19 +154,21 @@ export default function FavorisPage() {
   // Recharger les favoris et collections quand on revient sur cette page
   useEffect(() => {
     if (pathname === "/favoris" || pathname === "/ressources") {
-      const loadedFavorites = loadFavorites();
-      const loadedCollections = loadCollections();
-      console.log(`[FavorisPage] Rechargement depuis pathname: ${loadedFavorites.length} favoris, ${loadedCollections.length} collections chargés`);
-      setFavorites(loadedFavorites);
-      setCollections(loadedCollections);
+      const reloadData = async () => {
+        const loadedFavorites = await loadFavorites();
+        const loadedCollections = await loadCollections();
+        // Rechargement depuis pathname
+        setFavorites(loadedFavorites);
+        setCollections(loadedCollections);
       
       // Vérifier aussi dans localStorage directement
       if (typeof window !== "undefined") {
         const rawFavorites = window.localStorage.getItem("foodlane_favorites");
         const rawCollections = window.localStorage.getItem("foodlane_collections");
-        console.log("[FavorisPage] Raw localStorage favorites:", rawFavorites ? JSON.parse(rawFavorites).length + " favoris" : "vide");
-        console.log("[FavorisPage] Raw localStorage collections:", rawCollections ? JSON.parse(rawCollections).length + " collections" : "vide");
+        // Données chargées depuis localStorage
       }
+      };
+      reloadData();
     }
   }, [pathname]);
 
@@ -180,65 +202,62 @@ export default function FavorisPage() {
     return favorites.some((fav) => fav.id === recipeId);
   }
 
-  function toggleFavorite(recipe: Recipe) {
-    setFavorites((prev) => {
-      const exists = prev.some((fav) => fav.id === recipe.id);
-      if (exists) {
-        return prev.filter((fav) => fav.id !== recipe.id);
-      }
-      return [...prev, recipe];
-    });
+  async function toggleFavorite(recipe: Recipe) {
+    const updated = favorites.some((fav) => fav.id === recipe.id)
+      ? favorites.filter((fav) => fav.id !== recipe.id)
+      : [...favorites, recipe];
+    
+    setFavorites(updated);
+    await saveFavorites(updated);
   }
 
-  function handleCreateCollection() {
-    if (newCollectionName.trim()) {
-      const newCollection = createCollection(newCollectionName.trim());
-      // Charger les collections actuelles depuis localStorage pour être sûr
-      const currentCollections = loadCollections();
-      const updatedCollections = [...currentCollections, newCollection];
+  async function handleCreateCollection() {
+    if (!newCollectionName.trim()) {
+      return; // Ne rien faire si le nom est vide
+    }
+
+    try {
+      // Création de la collection
+      const newCollection = await createCollection(newCollectionName.trim());
+      // Collection créée avec succès
       
-      // Sauvegarder immédiatement dans localStorage AVANT de mettre à jour l'état
-      console.log("[FavorisPage] Création de collection:", newCollection.name, "Total:", updatedCollections.length);
-      saveCollections(updatedCollections);
+      // Recharger pour avoir les données à jour depuis Supabase
+      const saved = await loadCollections();
+      // Collections rechargées
       
-      // Vérifier que la sauvegarde a fonctionné
-      const saved = loadCollections();
-      if (saved.length !== updatedCollections.length) {
-        console.error("[FavorisPage] ❌ Erreur: la collection n'a pas été sauvegardée correctement");
-        // Réessayer
-        saveCollections(updatedCollections);
-        const retrySaved = loadCollections();
-        setCollections(retrySaved);
-      } else {
-        console.log("[FavorisPage] ✅ Collection sauvegardée avec succès");
-        // Mettre à jour l'état React avec les données sauvegardées
-        setCollections(saved);
-      }
+      // Mettre à jour l'état React avec les données sauvegardées
+      setCollections(saved);
+      const savedCollection = saved.find(c => c.id === newCollection.id) || newCollection;
+      setNewlyCreatedCollection(savedCollection);
+      // Collection créée avec succès
       
       setNewCollectionName("");
       setShowCreateCollection(false);
       
       // Ouvrir immédiatement le modal pour ajouter des recettes à cette nouvelle collection
-      const savedCollection = saved.find(c => c.id === newCollection.id) || newCollection;
-      setNewlyCreatedCollection(savedCollection);
       setShowAddRecipesToNewCollection(true);
+    } catch (error) {
+      console.error("[FavorisPage] ❌ Erreur lors de la création de la collection:", error);
+      alert(`Erreur lors de la création de la collection: ${error instanceof Error ? error.message : "Erreur inconnue"}`);
     }
   }
 
-  function handleAddToCollection(collectionId: string) {
+  async function handleAddToCollection(collectionId: string) {
     if (recipeToAdd) {
-      addRecipeToCollection(collectionId, recipeToAdd.id);
-      setCollections(loadCollections());
+      await addRecipeToCollection(collectionId, recipeToAdd.id);
+      const updated = await loadCollections();
+      setCollections(updated);
       setShowAddToCollection(false);
       setRecipeToAdd(null);
     }
   }
 
-  function handleRemoveFromCollection(collectionId: string, recipeId: string) {
-    removeRecipeFromCollection(collectionId, recipeId);
-    setCollections(loadCollections());
+  async function handleRemoveFromCollection(collectionId: string, recipeId: string) {
+    await removeRecipeFromCollection(collectionId, recipeId);
+    const updated = await loadCollections();
+    setCollections(updated);
     if (selectedCollection) {
-      setSelectedCollection(loadCollections().find((c) => c.id === selectedCollection.id) || null);
+      setSelectedCollection(updated.find((c) => c.id === selectedCollection.id) || null);
     }
   }
 
@@ -254,6 +273,15 @@ export default function FavorisPage() {
   const displayRecipes = selectedCollection
     ? getCollectionRecipes(selectedCollection)
     : favorites;
+
+  // Afficher un écran de chargement pendant la vérification d'authentification
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+        <LoadingSpinner message="Vérification de la connexion..." />
+      </div>
+    );
+  }
 
   return (
     <main className="max-w-md mx-auto px-4 pt-6 pb-24">
@@ -443,14 +471,13 @@ export default function FavorisPage() {
                       {/* Bouton de suppression en overlay */}
                       <button
                         className="absolute top-2 right-2 p-2 rounded-full bg-white/90 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
                           if (confirm(`Supprimer la collection "${collection.name}" ?`)) {
-                            deleteCollection(collection.id);
-                            // Recharger depuis localStorage
-                            const updated = loadCollections();
+                            await deleteCollection(collection.id);
+                            const updated = await loadCollections();
                             setCollections(updated);
-                            console.log("[FavorisPage] Collection supprimée, collections restantes:", updated.length);
+                            // Collection supprimée
                           }
                         }}
                         aria-label="Supprimer la collection"
@@ -539,11 +566,10 @@ export default function FavorisPage() {
                 + Ajouter des recettes
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (confirm(`Supprimer la collection "${selectedCollection.name}" ?`)) {
-                    deleteCollection(selectedCollection.id);
-                    // Recharger depuis localStorage
-                    const updated = loadCollections();
+                    await deleteCollection(selectedCollection.id);
+                    const updated = await loadCollections();
                     setCollections(updated);
                     setSelectedCollection(null);
                     console.log("[FavorisPage] Collection supprimée, collections restantes:", updated.length);
@@ -678,9 +704,9 @@ export default function FavorisPage() {
               value={newCollectionName}
               onChange={(e) => setNewCollectionName(e.target.value)}
               className="w-full rounded-xl bg-white border border-[var(--beige-border)] px-4 py-3 text-sm outline-none focus:border-[#D44A4A] text-[#6B2E2E] mb-4"
-              onKeyPress={(e) => {
+              onKeyPress={async (e) => {
                 if (e.key === "Enter") {
-                  handleCreateCollection();
+                  await handleCreateCollection();
                 }
               }}
             />
@@ -696,7 +722,9 @@ export default function FavorisPage() {
               </button>
               <button
                 className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleCreateCollection}
+                onClick={async () => {
+                  await handleCreateCollection();
+                }}
                 disabled={!newCollectionName.trim()}
               >
                 Créer
@@ -757,21 +785,21 @@ export default function FavorisPage() {
                             ? "bg-[#FFD9D9] border-[#D44A4A]"
                             : "bg-white border-[var(--beige-border)] hover:border-[#D44A4A]"
                         }`}
-                        onClick={() => {
+                        onClick={async () => {
                           if (isInCollection) {
-                            removeRecipeFromCollection(newlyCreatedCollection.id, recipe.id);
+                            await removeRecipeFromCollection(newlyCreatedCollection.id, recipe.id);
                           } else {
-                            addRecipeToCollection(newlyCreatedCollection.id, recipe.id);
+                            await addRecipeToCollection(newlyCreatedCollection.id, recipe.id);
                           }
-                          // Recharger les collections depuis localStorage
-                          const updated = loadCollections();
+                          // Recharger les collections depuis Supabase/localStorage
+                          const updated = await loadCollections();
                           setCollections(updated);
                           // Mettre à jour la collection nouvellement créée
                           const updatedCollection = updated.find(c => c.id === newlyCreatedCollection.id);
                           if (updatedCollection) {
                             setNewlyCreatedCollection(updatedCollection);
                           }
-                          console.log("[FavorisPage] Collections après modification:", updated.length, "collections");
+                          // Collections mises à jour
                         }}
                       >
                         <div className="flex items-center gap-3 p-3">
@@ -875,14 +903,14 @@ export default function FavorisPage() {
                             ? "bg-[#FFD9D9] border-[#D44A4A]"
                             : "bg-white border-[var(--beige-border)] hover:border-[#D44A4A]"
                         }`}
-                        onClick={() => {
+                        onClick={async () => {
                           if (isInCollection) {
-                            removeRecipeFromCollection(collectionToAddRecipes.id, recipe.id);
+                            await removeRecipeFromCollection(collectionToAddRecipes.id, recipe.id);
                           } else {
-                            addRecipeToCollection(collectionToAddRecipes.id, recipe.id);
+                            await addRecipeToCollection(collectionToAddRecipes.id, recipe.id);
                           }
-                          // Recharger les collections depuis localStorage
-                          const updated = loadCollections();
+                          // Recharger les collections depuis Supabase/localStorage
+                          const updated = await loadCollections();
                           setCollections(updated);
                           // Mettre à jour la collection
                           const updatedCollection = updated.find(c => c.id === collectionToAddRecipes.id);
@@ -893,7 +921,7 @@ export default function FavorisPage() {
                               setSelectedCollection(updatedCollection);
                             }
                           }
-                          console.log("[FavorisPage] Collections après modification:", updated.length, "collections");
+                          // Collections mises à jour
                         }}
                       >
                         <div className="flex items-center gap-3 p-3">
@@ -932,12 +960,12 @@ export default function FavorisPage() {
                 <div className="flex gap-3 pt-4 border-t border-[var(--beige-border)]">
                   <button
                     className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md"
-                    onClick={() => {
+                    onClick={async () => {
                       setShowAddRecipesToCollection(false);
                       setCollectionToAddRecipes(null);
                       // Recharger la collection sélectionnée
                       if (selectedCollection) {
-                        const updated = loadCollections();
+                        const updated = await loadCollections();
                         const updatedCollection = updated.find(c => c.id === selectedCollection.id);
                         if (updatedCollection) {
                           setSelectedCollection(updatedCollection);
@@ -1216,8 +1244,6 @@ export default function FavorisPage() {
         </div>
       )}
 
-      {/* Section Retour utilisateur */}
-      <UserFeedback />
     </main>
   );
 }
