@@ -23,18 +23,22 @@ export default function RessourcesPage() {
 
   useEffect(() => {
     // Charger les favoris au montage
-    const loadData = () => {
-      const loadedFavorites = loadFavorites();
-      setFavorites(prevFavorites => {
+    const loadData = async () => {
+      try {
+        const loadedFavorites = await loadFavorites();
         // Ne mettre à jour que si les données ont vraiment changé (comparaison par ID)
-        const prevIds = prevFavorites.map(f => f.id).sort().join(',');
-        const loadedIds = loadedFavorites.map(f => f.id).sort().join(',');
-        if (prevIds !== loadedIds) {
-          console.log(`[RessourcesPage] Chargement: ${loadedFavorites.length} favoris trouvés`, loadedFavorites);
-          return loadedFavorites;
-        }
-        return prevFavorites;
-      });
+        setFavorites((prevFavorites: Recipe[]): Recipe[] => {
+          const prevIds = prevFavorites.map(f => f.id).sort().join(',');
+          const loadedIds = loadedFavorites.map(f => f.id).sort().join(',');
+          if (prevIds !== loadedIds) {
+            console.log(`[RessourcesPage] Chargement: ${loadedFavorites.length} favoris trouvés`, loadedFavorites);
+            return loadedFavorites;
+          }
+          return prevFavorites;
+        });
+      } catch (error) {
+        console.error("[RessourcesPage] Erreur lors du chargement des favoris:", error);
+      }
     };
     
     // Charger immédiatement
@@ -67,13 +71,17 @@ export default function RessourcesPage() {
 
   useEffect(() => {
     // Sauvegarder seulement si les favoris ont changé (éviter les boucles)
-    const currentFavorites = loadFavorites();
-    const currentIds = currentFavorites.map(f => f.id).sort().join(',');
-    const newIds = favorites.map(f => f.id).sort().join(',');
+    const saveData = async () => {
+      const currentFavorites = await loadFavorites();
+      const currentIds = currentFavorites.map(f => f.id).sort().join(',');
+      const newIds = favorites.map(f => f.id).sort().join(',');
+      
+      if (currentIds !== newIds) {
+        await saveFavorites(favorites);
+      }
+    };
     
-    if (currentIds !== newIds) {
-      saveFavorites(favorites);
-    }
+    saveData();
   }, [favorites]);
 
   function isFavorite(recipeId: string): boolean {
@@ -92,8 +100,10 @@ export default function RessourcesPage() {
       } else {
         newFavorites = [...prev, recipe];
       }
-      // Sauvegarder immédiatement
-      saveFavorites(newFavorites);
+      // Sauvegarder de manière asynchrone (ne pas bloquer le setState)
+      saveFavorites(newFavorites).catch((error) => {
+        console.error("[RessourcesPage] Erreur lors de la sauvegarde des favoris:", error);
+      });
       return newFavorites;
     });
   }
