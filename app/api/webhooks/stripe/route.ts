@@ -4,13 +4,13 @@ import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
 
 /**
  * Webhook Stripe pour gérer les événements d'abonnement Premium
- * 
+ *
  * Événements gérés :
  * - checkout.session.completed : Paiement réussi → activer premium
  * - customer.subscription.deleted : Abonnement supprimé → désactiver premium
  * - customer.subscription.canceled : Abonnement annulé → désactiver premium
  * - customer.subscription.unpaid : Abonnement impayé → désactiver premium
- * 
+ *
  * ⚠️ IMPORTANT : Ce webhook doit être configuré dans le dashboard Stripe
  * avec l'URL : https://TON-DOMAINE/api/webhooks/stripe
  */
@@ -52,8 +52,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Initialiser Stripe (on laisse Stripe choisir la bonne version d'API)
-        const stripe = new Stripe(stripeSecretKey as string);
-
+    const stripe = new Stripe(stripeSecretKey as string);
 
     // Vérifier la signature du webhook
     let event: Stripe.Event;
@@ -67,10 +66,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[Webhook Stripe] Événement reçu: ${event.type}`);
+    // On cast le type d'événement en string pour éviter les soucis de typage TS
+    const eventType = event.type as string;
+
+    console.log(`[Webhook Stripe] Événement reçu: ${eventType}`);
 
     // Traiter les événements selon leur type
-    switch (event.type) {
+    switch (eventType) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
 
@@ -150,19 +152,19 @@ export async function POST(request: NextRequest) {
 
         if (!customerId) {
           console.error(
-            `[Webhook Stripe] ❌ Customer ID manquant dans ${event.type}`
+            `[Webhook Stripe] ❌ Customer ID manquant dans ${eventType}`
           );
           break;
         }
 
         console.log(
-          `[Webhook Stripe] 🛑 Abonnement arrêté (${event.type}) pour customer: ${customerId}, subscription: ${subscriptionId}`
+          `[Webhook Stripe] 🛑 Abonnement arrêté (${eventType}) pour customer: ${customerId}, subscription: ${subscriptionId}`
         );
 
         // Désactiver le premium dans Supabase via stripe_customer_id
         // On essaie d'abord avec customer_id, puis avec subscription_id si nécessaire
-        let updatedProfile = null;
-        let error = null;
+        let updatedProfile: any[] | null = null;
+        let error: any = null;
 
         // Essayer avec customer_id d'abord
         if (customerId) {
@@ -213,7 +215,7 @@ export async function POST(request: NextRequest) {
 
       default:
         console.log(
-          `[Webhook Stripe] Événement non géré: ${event.type}`
+          `[Webhook Stripe] Événement non géré: ${eventType}`
         );
     }
 
@@ -231,5 +233,5 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Désactiver le body parsing par défaut de Next.js pour les webhooks
+// Désactiver le body parsing par défaut de Next.js pour les webhooks (app router → runtime node)
 export const runtime = "nodejs";
