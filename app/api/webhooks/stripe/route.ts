@@ -8,8 +8,7 @@ import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
  * Événements gérés :
  * - checkout.session.completed : Paiement réussi → activer premium
  * - customer.subscription.deleted : Abonnement supprimé → désactiver premium
- * - customer.subscription.canceled : Abonnement annulé → désactiver premium
- * - customer.subscription.unpaid : Abonnement impayé → désactiver premium
+ * - customer.subscription.updated : on regarde le status (canceled, unpaid, etc.) → désactiver premium
  *
  * ⚠️ IMPORTANT : Ce webhook doit être configuré dans le dashboard Stripe
  * avec l'URL : https://TON-DOMAINE/api/webhooks/stripe
@@ -66,13 +65,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // On cast le type d'événement en string pour éviter les soucis de typage TS
-    const eventType = event.type as string;
-
-    console.log(`[Webhook Stripe] Événement reçu: ${eventType}`);
+    console.log(`[Webhook Stripe] Événement reçu: ${event.type}`);
 
     // Traiter les événements selon leur type
-    switch (eventType) {
+    switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
 
@@ -141,48 +137,65 @@ export async function POST(request: NextRequest) {
       }
 
       case "customer.subscription.deleted":
-      case "customer.subscription.canceled":
-      case "customer.subscription.unpaid": {
+      case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId =
           typeof subscription.customer === "string"
             ? subscription.customer
             : subscription.customer?.id || null;
         const subscriptionId = subscription.id;
+        const status = subscription.status; // active, canceled, unpaid, past_due, etc.
+
+        console.log(
+          `[Webhook Stripe] 🧾 Subscription update: status=${status}, customer=${customerId}, subscription=${subscriptionId}`
+        );
+
+        // On désactive le premium uniquement si l'abonnement n'est plus "actif"
+        const mustDisable =
+          event.type === "customer.subscription.deleted" ||
+          status === "canceled" ||
+          status === "unpaid" ||
+          status === "incomplete_expired" ||
+          status === "past_due";
+
+        if (!mustDisable) {
+          console.log(
+            `[Webhook Stripe] Subscription toujours active (status=${status}), pas de changement premium`
+          );
+          break;
+        }
 
         if (!customerId) {
           console.error(
-            `[Webhook Stripe] ❌ Customer ID manquant dans ${eventType}`
+            `[Webhook Stripe] ❌ Customer ID manquant dans ${event.type}`
           );
           break;
         }
 
         console.log(
-          `[Webhook Stripe] 🛑 Abonnement arrêté (${eventType}) pour customer: ${customerId}, subscription: ${subscriptionId}`
+          `[Webhook Stripe] 🛑 Abonnement inactif (${event.type}, status=${status}) pour customer: ${customerId}, subscription: ${subscriptionId}`
         );
 
         // Désactiver le premium dans Supabase via stripe_customer_id
-        // On essaie d'abord avec customer_id, puis avec subscription_id si nécessaire
-        let updatedProfile: any[] | null = null;
-        let error: any = null;
+        let updatedProfile = null;
+        let error = null;
 
         // Essayer avec customer_id d'abord
-        if (customerId) {
-          const result = await supabaseAdmin!
-            .from("profiles")
-            .update({
-              premium_active: false,
-              premium_end_date: new Date().toISOString(),
-            })
-            .eq("stripe_customer_id", customerId)
-            .select();
-          updatedProfile = result.data;
-          error = result.error;
-        }
+        const resultByCustomer = await supabaseAdmin!
+          .from("profiles")
+          .update({
+            premium_active: false,
+            premium_end_date: new Date().toISOString(),
+          })
+          .eq("stripe_customer_id", customerId)
+          .select();
 
-        // Si pas trouvé avec customer_id, essayer avec subscription_id
+        updatedProfile = resultByCustomer.data;
+        error = resultByCustomer.error;
+
+        // Si pas trouvé, essayer avec subscription_id
         if ((!updatedProfile || updatedProfile.length === 0) && subscriptionId) {
-          const result = await supabaseAdmin!
+          const resultBySub = await supabaseAdmin!
             .from("profiles")
             .update({
               premium_active: false,
@@ -190,8 +203,9 @@ export async function POST(request: NextRequest) {
             })
             .eq("stripe_subscription_id", subscriptionId)
             .select();
-          updatedProfile = result.data;
-          error = result.error;
+
+          updatedProfile = resultBySub.data;
+          error = resultBySub.error;
         }
 
         if (error) {
@@ -202,7 +216,7 @@ export async function POST(request: NextRequest) {
         } else {
           if (updatedProfile && updatedProfile.length > 0) {
             console.log(
-              `[Webhook Stripe] ❌ Premium désactivé pour ${updatedProfile.length} profil(s) (customer: ${customerId})`
+              `[Webhook Stripe] ✅ Premium désactivé pour ${updatedProfile.length} profil(s) (customer: ${customerId})`
             );
           } else {
             console.warn(
@@ -214,9 +228,7 @@ export async function POST(request: NextRequest) {
       }
 
       default:
-        console.log(
-          `[Webhook Stripe] Événement non géré: ${eventType}`
-        );
+        console.log(`[Webhook Stripe] Événement non géré: ${event.type}`);
     }
 
     // Toujours retourner 200 pour confirmer la réception à Stripe
@@ -233,5 +245,5 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Désactiver le body parsing par défaut de Next.js pour les webhooks (app router → runtime node)
+// On s'assure d'être côté Node (pas Edge) pour Stripe
 export const runtime = "nodejs";
