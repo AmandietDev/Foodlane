@@ -126,24 +126,28 @@ export default function OutilsPage() {
                     className="flex gap-3 rounded-xl border border-[var(--border-subtle)] bg-white/80 p-3 shadow-sm"
                   >
                     <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
-                      <RecipeImage recipe={recipe} />
+                      <RecipeImage 
+                        imageUrl={recipe.image_url} 
+                        alt={recipe.nom}
+                        className="h-full w-full"
+                      />
                     </div>
 
                     <div className="flex flex-1 flex-col justify-between">
                       <div>
                         <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                          {recipe.name}
+                          {recipe.nom}
                         </h3>
                         {badges && badges.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
                             {badges.map((badge) => {
-                              const Icon = DIETARY_BADGE_ICONS[badge];
+                              const icon = DIETARY_BADGE_ICONS[badge];
                               return (
                                 <span
                                   key={badge}
                                   className="inline-flex items-center gap-1 rounded-full bg-[var(--pill-bg)] px-2 py-0.5 text-[10px] font-medium text-[var(--pill-text)]"
                                 >
-                                  {Icon && <Icon className="h-3 w-3" />}
+                                  {icon && <span>{icon}</span>}
                                   {badge}
                                 </span>
                               );
