@@ -6,13 +6,11 @@ import {
   type UserPreferences,
   savePreferences,
   loadPreferences,
-  createAccount,
-  type UserAccount,
   isLoggedIn,
-  login,
-  getCurrentAccount,
   logout,
 } from "../src/lib/userPreferences";
+import { supabase } from "../src/lib/supabaseClient";
+import ErrorMessage from "../components/ErrorMessage";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -51,6 +49,8 @@ export default function AccountPage() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     async function checkAuth() {
@@ -118,74 +118,158 @@ export default function AccountPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setLoginError("");
     if (!loginEmail || !loginPassword) {
       setLoginError("Veuillez remplir tous les champs");
       return;
     }
-    
-    if (login(loginEmail, loginPassword)) {
-      const account = getCurrentAccount();
-      if (account) {
-        const preferences = loadPreferences();
-        setFormData({
-          ...preferences,
-          email: account.email,
-          nom: account.nom,
-          prenom: account.prenom,
-          telephone: account.telephone,
-          cguAccepted: preferences.cguAccepted ?? false,
-        });
+
+    const emailValue = loginEmail.trim().toLowerCase();
+    setIsSubmitting(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailValue,
+        password: loginPassword,
+      });
+
+      if (error) {
+        console.error("Supabase signIn error:", error);
+        setLoginError(error.message || "Email ou mot de passe incorrect");
+        setIsSubmitting(false);
+        return;
       }
+
+      // Récupérer le profil depuis Supabase
+      if (data.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profile) {
+          const [prenom, ...nomParts] = (profile.full_name || "").split(" ");
+          const nom = nomParts.join(" ");
+
+          const preferences = loadPreferences();
+          setFormData({
+            ...preferences,
+            email: profile.email || emailValue,
+            nom: nom || preferences.nom,
+            prenom: prenom || preferences.prenom,
+            telephone: preferences.telephone,
+            cguAccepted: preferences.cguAccepted ?? false,
+          });
+        }
+      }
+
       setShowLoginForm(false);
       setIsNewAccount(false);
       setIsEditing(false);
       router.push("/");
-    } else {
-      setLoginError("Email ou mot de passe incorrect");
+    } catch (err) {
+      console.error(err);
+      setLoginError("Une erreur est survenue pendant la connexion");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateForm()) {
       return;
     }
 
-    if (isNewAccount) {
-      // Créer le compte
-      const account: UserAccount = {
-        email: formData.email,
-        password: password,
-        nom: formData.nom,
-        prenom: formData.prenom,
-        telephone: formData.telephone,
-      };
-      createAccount(account);
-      
-      // Sauvegarder l'acceptation des CGU
-      const now = new Date();
-      
-      const preferencesWithCgu = {
-        ...formData,
-        abonnementType: "free" as const, // Nouveau compte = free par défaut
-        cguAccepted: true,
-        cguAcceptedDate: new Date().toISOString(),
-      };
-      savePreferences(preferencesWithCgu);
-    } else {
-      // Sauvegarder les préférences
-      savePreferences(formData);
-    }
+    setSubmitError("");
+    setIsSubmitting(true);
 
-    alert(
-      isNewAccount
-        ? "Compte créé avec succès !"
-        : "Profil mis à jour avec succès !"
-    );
-    setIsEditing(false);
-    setIsNewAccount(false);
-    router.push("/");
+    try {
+      if (isNewAccount) {
+        // Créer le compte avec Supabase
+        const emailValue = formData.email.trim().toLowerCase();
+
+        // Validation de l'email
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
+          setSubmitError("L'email n'est pas valide");
+          setIsSubmitting(false);
+          return;
+        }
+
+        // 1) Création de compte dans Supabase (auth.users)
+        const { data, error } = await supabase.auth.signUp({
+          email: emailValue,
+          password: password,
+          options: {
+            data: {
+              nom: formData.nom,
+              prenom: formData.prenom,
+              telephone: formData.telephone,
+            },
+          },
+        });
+
+        if (error) {
+          console.error("Supabase signUp error:", error);
+          setSubmitError(error.message || "Impossible de créer le compte");
+          setIsSubmitting(false);
+          return;
+        }
+
+        // 2) Création / mise à jour du profil dans la table `profiles`
+        if (data.user) {
+          const { error: profileError } = await supabase
+            .from("profiles")
+            .upsert({
+              id: data.user.id,
+              full_name: `${formData.prenom} ${formData.nom}`,
+              email: emailValue,
+              avatar_url: null,
+              premium_active: false,
+              premium_start_date: null,
+              premium_end_date: null,
+            });
+
+          if (profileError) {
+            console.error("Erreur création profil:", profileError.message);
+            // On continue quand même, l'utilisateur est créé dans auth
+          }
+        }
+
+        // 3) Sauvegarder les préférences locales
+        const preferencesWithCgu = {
+          ...formData,
+          email: emailValue,
+          abonnementType: "free" as const,
+          cguAccepted: true,
+          cguAcceptedDate: new Date().toISOString(),
+        };
+        savePreferences(preferencesWithCgu);
+
+        // Si Supabase demande confirmation par email, data.session peut être null
+        if (!data.session) {
+          alert(
+            "Compte créé. Si la confirmation email est activée dans Supabase, vérifie ta boîte mail."
+          );
+        } else {
+          alert("Compte créé avec succès !");
+        }
+      } else {
+        // Sauvegarder les préférences
+        savePreferences(formData);
+        alert("Profil mis à jour avec succès !");
+      }
+
+      setIsEditing(false);
+      setIsNewAccount(false);
+      router.push("/");
+    } catch (err) {
+      console.error(err);
+      setSubmitError("Une erreur est survenue. Veuillez réessayer.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const preferences = loadPreferences();
@@ -268,9 +352,10 @@ export default function AccountPage() {
             </div>
             <button
               onClick={handleLogin}
-              className="w-full py-3 px-4 bg-[var(--beige-accent)] text-white rounded-lg hover:bg-[var(--beige-accent-hover)] transition-colors font-semibold"
+              disabled={isSubmitting}
+              className="w-full py-3 px-4 bg-[var(--beige-accent)] text-white rounded-lg hover:bg-[var(--beige-accent-hover)] transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Se connecter
+              {isSubmitting ? "Connexion..." : "Se connecter"}
             </button>
           </div>
         )}
@@ -315,6 +400,9 @@ export default function AccountPage() {
         {/* Formulaire de création de compte ou modification de profil */}
         {!showLoginForm && (
           <div className="space-y-6">
+            {submitError && (
+              <ErrorMessage message={submitError} onDismiss={() => setSubmitError("")} />
+            )}
           {/* Informations personnelles */}
           <div>
             <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
@@ -479,9 +567,16 @@ export default function AccountPage() {
             <div className="flex gap-3 pt-4">
               <button
                 onClick={handleSubmit}
-                className="flex-1 py-3 px-4 bg-[var(--beige-accent)] text-white rounded-lg hover:bg-[var(--beige-accent-hover)] transition-colors font-semibold"
+                disabled={isSubmitting}
+                className="flex-1 py-3 px-4 bg-[var(--beige-accent)] text-white rounded-lg hover:bg-[var(--beige-accent-hover)] transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isNewAccount ? "Créer mon compte" : "Enregistrer"}
+                {isSubmitting
+                  ? isNewAccount
+                    ? "Création..."
+                    : "Enregistrement..."
+                  : isNewAccount
+                  ? "Créer mon compte"
+                  : "Enregistrer"}
               </button>
               {!isNewAccount && (
                 <button
