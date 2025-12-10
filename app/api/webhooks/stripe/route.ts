@@ -51,10 +51,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialiser Stripe
-    const stripe = new Stripe(stripeSecretKey, {
-      apiVersion: "2023-10-16",
-    });
+    // Initialiser Stripe (on laisse Stripe choisir la bonne version d'API)
+        const stripe = new Stripe(stripeSecretKey as string);
+
 
     // Vérifier la signature du webhook
     let event: Stripe.Event;

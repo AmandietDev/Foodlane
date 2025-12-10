@@ -4,7 +4,7 @@ import Stripe from "stripe";
 /**
  * Route API pour créer une session Stripe Checkout
  * Redirige l'utilisateur vers Stripe pour le paiement
- * 
+ *
  * Body attendu :
  * - userId: string (ID utilisateur Supabase)
  * - email: string (email de l'utilisateur)
@@ -16,7 +16,10 @@ export async function POST(request: NextRequest) {
 
     // Validation des paramètres requis
     if (!userId || !email) {
-      console.error("[Checkout] Paramètres manquants:", { userId: !!userId, email: !!email });
+      console.error("[Checkout] Paramètres manquants:", {
+        userId: !!userId,
+        email: !!email,
+      });
       return NextResponse.json(
         { error: "userId et email requis" },
         { status: 400 }
@@ -43,36 +46,42 @@ export async function POST(request: NextRequest) {
     }
 
     // Récupérer le prix selon le plan choisi
-    const priceId = plan === "yearly" 
-      ? process.env.STRIPE_PRICE_ID_ANNUEL
-      : process.env.STRIPE_PRICE_ID_MENSUEL;
+    const priceId =
+      plan === "yearly"
+        ? process.env.STRIPE_PRICE_ID_ANNUEL
+        : process.env.STRIPE_PRICE_ID_MENSUEL;
 
     if (!priceId) {
-      const missingVar = plan === "yearly" ? "STRIPE_PRICE_ID_ANNUEL" : "STRIPE_PRICE_ID_MENSUEL";
+      const missingVar =
+        plan === "yearly" ? "STRIPE_PRICE_ID_ANNUEL" : "STRIPE_PRICE_ID_MENSUEL";
       console.error(`[Checkout] ${missingVar} manquante`);
-      
+
       // Message d'erreur plus détaillé pour guider l'utilisateur
-      const errorMessage = plan === "yearly"
-        ? "Configuration Stripe incomplète : STRIPE_PRICE_ID_ANNUEL manquant. Consultez STRIPE_SUPABASE_SETUP_SIMPLE.md pour configurer."
-        : "Configuration Stripe incomplète : STRIPE_PRICE_ID_MENSUEL manquant. Consultez STRIPE_SUPABASE_SETUP_SIMPLE.md pour configurer.";
-      
+      const errorMessage =
+        plan === "yearly"
+          ? "Configuration Stripe incomplète : STRIPE_PRICE_ID_ANNUEL manquant. Consultez STRIPE_SUPABASE_SETUP_SIMPLE.md pour configurer."
+          : "Configuration Stripe incomplète : STRIPE_PRICE_ID_MENSUEL manquant. Consultez STRIPE_SUPABASE_SETUP_SIMPLE.md pour configurer.";
+
       return NextResponse.json(
-        { 
+        {
           error: errorMessage,
-          details: `Ajoutez ${missingVar} dans votre fichier .env.local avec l'ID du prix créé dans Stripe Dashboard.`
+          details: `Ajoutez ${missingVar} dans votre fichier .env.local avec l'ID du prix créé dans Stripe Dashboard.`,
         },
         { status: 500 }
       );
     }
 
-    // Initialiser Stripe (mode test si la clé commence par sk_test_)
-    const stripe = new Stripe(stripeSecretKey, {
-      apiVersion: "2023-10-16",
-    });
+    // 🔧 Initialiser Stripe (on laisse le SDK choisir la version d'API)
+    const stripe = new Stripe(stripeSecretKey);
 
-    const origin = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const origin =
+      request.headers.get("origin") ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      "http://localhost:3000";
 
-    console.log(`[Checkout] Création de session pour ${email} (plan: ${plan}, priceId: ${priceId})`);
+    console.log(
+      `[Checkout] Création de session pour ${email} (plan: ${plan}, priceId: ${priceId})`
+    );
 
     // Créer la session Checkout
     const session = await stripe.checkout.sessions.create({
@@ -102,9 +111,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Checkout] ✅ Session créée: ${session.id} pour ${email}`);
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       sessionId: session.id,
-      url: session.url 
+      url: session.url,
     });
   } catch (error) {
     console.error("[Checkout] Erreur lors de la création de la session Stripe:", error);
@@ -117,4 +126,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
