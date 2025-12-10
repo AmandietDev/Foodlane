@@ -12,7 +12,7 @@ import {
 } from "../src/lib/userPreferences";
 
 // ✅ Client Supabase
-import { supabase } from "../src/lib/supabaseClient";
+import { supabase, isSupabaseConfigured } from "../src/lib/supabaseClient";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
 
@@ -84,6 +84,14 @@ export default function LoginPage() {
       return;
     }
 
+    if (!isSupabaseConfigured) {
+      setError(
+        "Configuration Supabase manquante. Veuillez configurer NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY dans les variables d'environnement."
+      );
+      setLoading(false);
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email: emailValue,
@@ -135,6 +143,17 @@ export default function LoginPage() {
     }
 
     setLoading(true);
+
+    if (!isSupabaseConfigured) {
+      const isProduction = typeof window !== "undefined" && !window.location.hostname.includes("localhost");
+      setError(
+        isProduction
+          ? "Configuration Supabase manquante sur Vercel. Configurez NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY dans Vercel → Settings → Environment Variables, puis redéployez. Consultez CONFIGURATION_VARIABLES_ENV.md pour plus de détails."
+          : "Configuration Supabase manquante. Créez un fichier .env.local avec NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY. Consultez CONFIGURATION_VARIABLES_ENV.md pour plus de détails."
+      );
+      setLoading(false);
+      return;
+    }
 
     try {
       // 1) Création de compte dans Supabase (auth.users)

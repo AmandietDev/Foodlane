@@ -9,7 +9,7 @@ import {
   isLoggedIn,
   logout,
 } from "../src/lib/userPreferences";
-import { supabase } from "../src/lib/supabaseClient";
+import { supabase, isSupabaseConfigured } from "../src/lib/supabaseClient";
 import ErrorMessage from "../components/ErrorMessage";
 
 export default function AccountPage() {
@@ -125,6 +125,17 @@ export default function AccountPage() {
       return;
     }
 
+    // Vérifier que Supabase est configuré
+    if (!isSupabaseConfigured) {
+      const isProduction = typeof window !== "undefined" && !window.location.hostname.includes("localhost");
+      setLoginError(
+        isProduction
+          ? "Configuration Supabase manquante sur Vercel. Configurez NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY dans Vercel → Settings → Environment Variables, puis redéployez."
+          : "Configuration Supabase manquante. Créez un fichier .env.local avec NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY."
+      );
+      return;
+    }
+
     const emailValue = loginEmail.trim().toLowerCase();
     setIsSubmitting(true);
 
@@ -187,6 +198,18 @@ export default function AccountPage() {
 
     try {
       if (isNewAccount) {
+        // Vérifier que Supabase est configuré
+        if (!isSupabaseConfigured) {
+          const isProduction = typeof window !== "undefined" && !window.location.hostname.includes("localhost");
+          setSubmitError(
+            isProduction
+              ? "Configuration Supabase manquante sur Vercel. Configurez NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY dans Vercel → Settings → Environment Variables, puis redéployez. Consultez CONFIGURATION_VARIABLES_ENV.md pour plus de détails."
+              : "Configuration Supabase manquante. Créez un fichier .env.local avec NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY. Consultez CONFIGURATION_VARIABLES_ENV.md pour plus de détails."
+          );
+          setIsSubmitting(false);
+          return;
+        }
+
         // Créer le compte avec Supabase
         const emailValue = formData.email.trim().toLowerCase();
 
