@@ -19,10 +19,6 @@ import type { Recipe } from '../app/src/lib/recipes';
  * - Avoir créé la table recipes dans Supabase
  */
 
-import Papa from 'papaparse';
-import { createClient } from '@supabase/supabase-js';
-import type { Recipe } from '../app/src/lib/recipes';
-
 // Créer le client Supabase pour le script
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
