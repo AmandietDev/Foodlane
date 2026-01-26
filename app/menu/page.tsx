@@ -3373,6 +3373,7 @@ export default function MenuPage() {
                               nom: "",
                               prenom: "",
                               email: "",
+                              telephone: "",
                               objet: "",
                               message: "",
                             });
