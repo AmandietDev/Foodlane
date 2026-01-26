@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { loadPreferences } from "../src/lib/userPreferences";
 import { useTranslation } from "./TranslationProvider";
 import { usePremium } from "../contexts/PremiumContext";
 
