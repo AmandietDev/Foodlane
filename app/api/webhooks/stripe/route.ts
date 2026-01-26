@@ -71,19 +71,22 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Webhook Stripe] Événement reçu: ${event.type}`);
 
-    // Helper pour déterminer le plan depuis un priceId
-    const getPremiumPlanFromPriceId = (priceId: string | null | undefined): "monthly" | "yearly" | null => {
-      if (!priceId) return null;
-      
-      const monthlyPriceId = process.env.STRIPE_PRICE_ID_MENSUEL;
-      const yearlyPriceId = process.env.STRIPE_PRICE_ID_ANNUEL;
-      
-      if (priceId === monthlyPriceId) {
-        return "monthly";
-      } else if (priceId === yearlyPriceId) {
-        return "yearly";
-      } else {
-        console.warn(`[StripeWebhook] ⚠️ PriceId inconnu: ${priceId}. Plan non déterminé.`);
+    // Helper pour déterminer le plan depuis une subscription Stripe
+    const getPremiumPlanFromSubscription = (subscription: Stripe.Subscription): "monthly" | "yearly" | null => {
+      try {
+        // Récupérer l'interval depuis le premier item de la subscription
+        const interval = subscription.items?.data?.[0]?.price?.recurring?.interval;
+        
+        if (interval === "year") {
+          return "yearly";
+        } else if (interval === "month") {
+          return "monthly";
+        } else {
+          console.warn(`[StripeWebhook] ⚠️ Interval inconnu: ${interval}. Plan non déterminé.`);
+          return null;
+        }
+      } catch (err) {
+        console.error(`[StripeWebhook] ❌ Erreur lors de la récupération du plan depuis la subscription:`, err);
         return null;
       }
     };
@@ -182,16 +185,18 @@ export async function POST(request: NextRequest) {
 
         if (subscriptionId) {
           try {
-            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-            const priceId = getPriceIdFromSubscription(subscription);
-            premiumPlan = getPremiumPlanFromPriceId(priceId);
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+              expand: ["items.data.price"],
+            });
+            
+            premiumPlan = getPremiumPlanFromSubscription(subscription);
             
             if (subscription.current_period_end) {
               premiumEndDate = new Date(subscription.current_period_end * 1000).toISOString();
             }
 
             console.log(
-              `[StripeWebhook] 📦 Subscription détails: priceId=${priceId}, premiumPlan=${premiumPlan}, premiumEndDate=${premiumEndDate}`
+              `[StripeWebhook] 📦 Subscription détails: premiumPlan=${premiumPlan}, premiumEndDate=${premiumEndDate}`
             );
           } catch (err) {
             console.error(`[StripeWebhook] ❌ Erreur lors de la récupération de la subscription ${subscriptionId}:`, err);
@@ -251,16 +256,26 @@ export async function POST(request: NextRequest) {
           break;
         }
 
-        // Extraire le plan et la date de fin
-        const priceId = getPriceIdFromSubscription(subscription);
-        const premiumPlan = getPremiumPlanFromPriceId(priceId);
-        const premiumEndDate = currentPeriodEnd
-          ? new Date(currentPeriodEnd * 1000).toISOString()
-          : null;
+        // Récupérer la subscription complète pour obtenir le plan
+        let premiumPlan: "monthly" | "yearly" | null = null;
+        let premiumEndDate: string | null = null;
 
-        console.log(
-          `[StripeWebhook] 📦 Subscription détails: priceId=${priceId}, premiumPlan=${premiumPlan}, premiumEndDate=${premiumEndDate}`
-        );
+        try {
+          const fullSubscription = await stripe.subscriptions.retrieve(subscriptionId, {
+            expand: ["items.data.price"],
+          });
+          
+          premiumPlan = getPremiumPlanFromSubscription(fullSubscription);
+          premiumEndDate = currentPeriodEnd
+            ? new Date(currentPeriodEnd * 1000).toISOString()
+            : null;
+
+          console.log(
+            `[StripeWebhook] 📦 Subscription détails: premiumPlan=${premiumPlan}, premiumEndDate=${premiumEndDate}`
+          );
+        } catch (err) {
+          console.error(`[StripeWebhook] ❌ Erreur lors de la récupération de la subscription ${subscriptionId}:`, err);
+        }
 
         // Récupérer userId
         const userId = await getUserIdFromSubscription(subscription, customerId);
@@ -321,31 +336,42 @@ export async function POST(request: NextRequest) {
           break;
         }
 
-        // Extraire le plan et la date de fin
-        const priceId = getPriceIdFromSubscription(subscription);
-        const premiumPlan = getPremiumPlanFromPriceId(priceId);
-        const premiumEndDate = currentPeriodEnd
-          ? new Date(currentPeriodEnd * 1000).toISOString()
-          : null;
+        // Récupérer la subscription complète pour obtenir le plan
+        let premiumPlan: "monthly" | "yearly" | null = null;
+        let premiumEndDate: string | null = null;
 
-        console.log(
-          `[StripeWebhook] 📦 Subscription détails: priceId=${priceId}, premiumPlan=${premiumPlan}, premiumEndDate=${premiumEndDate}`
-        );
+        try {
+          const fullSubscription = await stripe.subscriptions.retrieve(subscriptionId, {
+            expand: ["items.data.price"],
+          });
+          
+          premiumPlan = getPremiumPlanFromSubscription(fullSubscription);
+          premiumEndDate = currentPeriodEnd
+            ? new Date(currentPeriodEnd * 1000).toISOString()
+            : null;
+
+          console.log(
+            `[StripeWebhook] 📦 Subscription détails: premiumPlan=${premiumPlan}, premiumEndDate=${premiumEndDate}`
+          );
+        } catch (err) {
+          console.error(`[StripeWebhook] ❌ Erreur lors de la récupération de la subscription ${subscriptionId}:`, err);
+        }
 
         // Récupérer userId
         const userId = await getUserIdFromSubscription(subscription, customerId);
 
-        // Si l'abonnement est complètement supprimé, désactiver immédiatement
+        // Si l'abonnement est complètement supprimé, garder premium actif jusqu'à current_period_end
         if (event.type === "customer.subscription.deleted") {
           console.log(
-            `[Webhook Stripe] 🛑 Abonnement supprimé pour customer: ${customerId}, subscription: ${subscriptionId}`
+            `[Webhook Stripe] 🛑 Abonnement supprimé pour customer: ${customerId}, subscription: ${subscriptionId}. Premium maintenu jusqu'à ${premiumEndDate}`
           );
 
-          // Utiliser userId si disponible, sinon fallback sur customer_id
+          // Garder premium_active = true jusqu'à current_period_end (meilleure UX)
+          // L'utilisateur a payé jusqu'à la fin de la période
           const updateData: any = {
-            premium_active: false,
-            premium_end_date: new Date().toISOString(), // Date de suppression
-            premium_plan: null, // Réinitialiser le plan
+            premium_active: true, // Reste actif jusqu'à premium_end_date
+            premium_end_date: premiumEndDate || new Date().toISOString(), // Date de fin de période
+            premium_plan: premiumPlan, // Garder le plan pour référence
           };
 
           let result;
@@ -365,12 +391,12 @@ export async function POST(request: NextRequest) {
 
           if (result.error) {
             console.error(
-              `[Webhook Stripe] ❌ Erreur lors de la désactivation du premium:`,
+              `[Webhook Stripe] ❌ Erreur lors de la mise à jour du premium:`,
               result.error
             );
           } else if (result.data && result.data.length > 0) {
             console.log(
-              `[Webhook Stripe] ✅ Premium désactivé pour ${result.data.length} profil(s) (customer: ${customerId}, userId: ${userId || "N/A"})`
+              `[Webhook Stripe] ✅ Premium maintenu jusqu'à ${premiumEndDate} pour ${result.data.length} profil(s) (customer: ${customerId}, userId: ${userId || "N/A"}, plan: ${premiumPlan})`
             );
           }
           break;
@@ -419,18 +445,68 @@ export async function POST(request: NextRequest) {
         }
 
         // Si l'abonnement est complètement annulé (pas juste "cancel_at_period_end")
-        const mustDisable =
-          status === "canceled" ||
-          status === "unpaid" ||
-          status === "incomplete_expired" ||
-          status === "past_due";
+        // Pour canceled et incomplete_expired : garder premium actif jusqu'à current_period_end
+        // Pour unpaid et past_due : désactiver immédiatement (paiement échoué)
+        const isCanceled = status === "canceled" || status === "incomplete_expired";
+        const isUnpaid = status === "unpaid" || status === "past_due";
 
-        if (mustDisable) {
+        if (isCanceled) {
+          // Annulation : garder premium actif jusqu'à la fin de la période (meilleure UX)
           console.log(
-            `[Webhook Stripe] 🛑 Abonnement inactif (status=${status}) pour customer: ${customerId}, subscription: ${subscriptionId}`
+            `[Webhook Stripe] 🛑 Abonnement annulé (status=${status}) pour customer: ${customerId}, subscription: ${subscriptionId}. Premium maintenu jusqu'à ${premiumEndDate}`
           );
 
-          // Désactiver le premium dans Supabase
+          const updateData: any = {
+            premium_active: true, // Reste actif jusqu'à premium_end_date
+            premium_end_date: premiumEndDate || new Date().toISOString(),
+            premium_plan: premiumPlan, // Garder le plan pour référence
+          };
+
+          let result;
+          if (userId) {
+            result = await supabaseAdmin!
+              .from("profiles")
+              .update(updateData)
+              .eq("id", userId)
+              .select();
+          } else {
+            result = await supabaseAdmin!
+              .from("profiles")
+              .update(updateData)
+              .eq("stripe_customer_id", customerId)
+              .select();
+
+            if ((!result.data || result.data.length === 0) && subscriptionId) {
+              result = await supabaseAdmin!
+                .from("profiles")
+                .update(updateData)
+                .eq("stripe_subscription_id", subscriptionId)
+                .select();
+            }
+          }
+
+          if (result.error) {
+            console.error(
+              `[Webhook Stripe] ❌ Erreur lors de la mise à jour du premium:`,
+              result.error
+            );
+          } else {
+            if (result.data && result.data.length > 0) {
+              console.log(
+                `[Webhook Stripe] ✅ Premium maintenu jusqu'à ${premiumEndDate} pour ${result.data.length} profil(s) (customer: ${customerId}, userId: ${userId || "N/A"}, plan: ${premiumPlan})`
+              );
+            } else {
+              console.warn(
+                `[Webhook Stripe] ⚠️ Aucun profil trouvé avec customer_id: ${customerId} ou subscription_id: ${subscriptionId}`
+              );
+            }
+          }
+        } else if (isUnpaid) {
+          // Paiement échoué : désactiver immédiatement
+          console.log(
+            `[Webhook Stripe] 🛑 Abonnement impayé (status=${status}) pour customer: ${customerId}, subscription: ${subscriptionId}. Premium désactivé immédiatement.`
+          );
+
           const updateData: any = {
             premium_active: false,
             premium_end_date: new Date().toISOString(),
@@ -445,14 +521,12 @@ export async function POST(request: NextRequest) {
               .eq("id", userId)
               .select();
           } else {
-            // Essayer avec customer_id d'abord
             result = await supabaseAdmin!
               .from("profiles")
               .update(updateData)
               .eq("stripe_customer_id", customerId)
               .select();
 
-            // Si pas trouvé, essayer avec subscription_id
             if ((!result.data || result.data.length === 0) && subscriptionId) {
               result = await supabaseAdmin!
                 .from("profiles")
@@ -535,11 +609,12 @@ export async function POST(request: NextRequest) {
         let premiumPlan: "monthly" | "yearly" | null = null;
         if (subscriptionId) {
           try {
-            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-            const priceId = getPriceIdFromSubscription(subscription);
-            premiumPlan = getPremiumPlanFromPriceId(priceId);
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+              expand: ["items.data.price"],
+            });
+            premiumPlan = getPremiumPlanFromSubscription(subscription);
             console.log(
-              `[StripeWebhook] 📦 Subscription détails: priceId=${priceId}, premiumPlan=${premiumPlan}`
+              `[StripeWebhook] 📦 Subscription détails: premiumPlan=${premiumPlan}`
             );
           } catch (err) {
             console.error(`[StripeWebhook] ❌ Erreur lors de la récupération de la subscription ${subscriptionId}:`, err);
