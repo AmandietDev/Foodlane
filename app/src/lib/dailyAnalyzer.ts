@@ -74,9 +74,8 @@ function calculateScore(meals: MealEntry[], context: UserContext): number {
   }
   
   // +10 si féculents présents au dîner (satiété) OU si prise de masse
-  const dinnerHasCarbs = meals
-    .find(m => m.meal_type === "dinner")
-    ?.parsed.components.carb.length > 0;
+  const dinnerMeal = meals.find(m => m.meal_type === "dinner");
+  const dinnerHasCarbs = dinnerMeal?.parsed.components.carb.length > 0;
   if (dinnerHasCarbs && (context.objective === "weight_loss" || context.objective === "muscle_gain")) {
     score += 10;
     rulesTriggered.push("dinner_carbs_for_satiety");
