@@ -93,8 +93,7 @@ export default function BottomNavigation() {
       </nav>
 
       {/* Bandeau pub sous les onglets - masqué si premium */}
-      {/* Ne rendre que côté client pour éviter les erreurs d'hydratation */}
-      {mounted && !isPremium && (
+      {!isPremium && (
         <div className="h-10 bg-[var(--beige-card-alt)] border-t border-[var(--beige-border)] flex items-center justify-between px-4 text-xs">
           <span className="text-[var(--beige-text-light)]">Espace publicité</span>
           <Link
