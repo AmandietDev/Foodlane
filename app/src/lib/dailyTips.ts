@@ -5,7 +5,7 @@
 
 export type TipCategory = "nutrition" | "hydration" | "movement" | "sleep" | "stress" | "mindful" | "selfcare";
 export type Difficulty = "easy" | "medium";
-export type ObjectiveTag = "weight_loss" | "muscle_gain" | "reduce_meat" | "cook_more" | "better_energy" | "general";
+export type ObjectiveTag = "weight_loss" | "muscle_gain" | "reduce_meat" | "cook_more" | "better_energy" | "general" | "mindful";
 export type ContextTag = "busy_day" | "low_budget" | "at_home" | "outdoors" | "no_equipment" | "anytime";
 
 export interface Tip {
