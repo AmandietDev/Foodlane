@@ -133,7 +133,6 @@ export async function POST(request: NextRequest) {
       allergies: (profile?.allergies as string[]) || [],
       diets: (profile?.diets as string[]) || [],
       behavioral_preferences: (profile?.behavioral_preferences as string[]) || [],
-      behavioral_preferences: (profile?.behavioral_preferences as string[]) || [],
     };
 
     const summary = analyzeDaily(mealEntries, context);
