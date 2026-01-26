@@ -75,7 +75,7 @@ function calculateScore(meals: MealEntry[], context: UserContext): number {
   
   // +10 si féculents présents au dîner (satiété) OU si prise de masse
   const dinnerMeal = meals.find(m => m.meal_type === "dinner");
-  const dinnerHasCarbs = dinnerMeal?.parsed.components.carb.length > 0;
+  const dinnerHasCarbs = Boolean(dinnerMeal?.parsed?.components?.carb && dinnerMeal.parsed.components.carb.length > 0);
   if (dinnerHasCarbs && (context.objective === "weight_loss" || context.objective === "muscle_gain")) {
     score += 10;
     rulesTriggered.push("dinner_carbs_for_satiety");
@@ -193,7 +193,7 @@ function generatePriorityTip(meals: MealEntry[], context: UserContext): string {
   const hasFruits = meals.some(m => m.parsed.components.fruit.length > 0);
   const structuredMeals = meals.filter(m => m.meal_type !== "snack");
   const dinnerMeal = meals.find(m => m.meal_type === "dinner");
-  const dinnerHasCarbs = dinnerMeal?.parsed.components.carb.length > 0;
+  const dinnerHasCarbs = Boolean(dinnerMeal?.parsed?.components?.carb && dinnerMeal.parsed.components.carb.length > 0);
   
   // Priorité selon objectif
   if (context.objective === "weight_loss") {
@@ -344,7 +344,7 @@ export function analyzeDaily(
   const proteinMeals = meals.filter(m => m.parsed.components.protein.length > 0);
   const hasFruits = meals.some(m => m.parsed.components.fruit.length > 0);
   const dinnerMeal = meals.find(m => m.meal_type === "dinner");
-  const dinnerHasCarbs = dinnerMeal?.parsed.components.carb.length > 0;
+  const dinnerHasCarbs = Boolean(dinnerMeal?.parsed?.components?.carb && dinnerMeal.parsed.components.carb.length > 0);
   
   if (!hasVeggies) missingComponents.push("fibres");
   if (proteinMeals.length < 2) missingComponents.push("protéines au dîner");
