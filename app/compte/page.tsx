@@ -300,9 +300,6 @@ export default function AccountPage() {
     }
   };
 
-  const preferences = loadPreferences();
-  const isPremium = preferences.abonnementType === "premium";
-
   return (
     <main className="max-w-md mx-auto px-4 pt-6 pb-32">
       <header className="mb-6">
