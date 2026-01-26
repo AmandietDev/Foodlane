@@ -72,22 +72,40 @@ export async function POST(request: NextRequest) {
     console.log(`[Webhook Stripe] Événement reçu: ${event.type}`);
 
     // Helper pour déterminer le plan depuis une subscription Stripe
-    const getPremiumPlanFromSubscription = (subscription: Stripe.Subscription): "monthly" | "yearly" | null => {
+    const getPremiumPlanFromSubscription = (subscription: Stripe.Subscription): { plan: "monthly" | "yearly" | null; priceId: string | null; interval: string | null } => {
       try {
-        // Récupérer l'interval depuis le premier item de la subscription
-        const interval = subscription.items?.data?.[0]?.price?.recurring?.interval;
+        const item = subscription.items?.data?.[0];
+        const price = item?.price;
+        const priceId = price?.id || null;
+        const interval = price?.recurring?.interval || null; // "month" | "year"
         
-        if (interval === "year") {
-          return "yearly";
-        } else if (interval === "month") {
-          return "monthly";
-        } else {
-          console.warn(`[StripeWebhook] ⚠️ Interval inconnu: ${interval}. Plan non déterminé.`);
-          return null;
+        let premiumPlan: "monthly" | "yearly" | null = null;
+        
+        // Méthode 1 : Utiliser l'interval directement
+        if (interval === "month") {
+          premiumPlan = "monthly";
+        } else if (interval === "year") {
+          premiumPlan = "yearly";
         }
+        
+        // Méthode 2 : Fallback sur les priceIds des variables d'environnement
+        if (!premiumPlan && priceId) {
+          const monthlyPriceId = process.env.STRIPE_PRICE_ID_MENSUEL;
+          const yearlyPriceId = process.env.STRIPE_PRICE_ID_ANNUEL;
+          
+          if (priceId === monthlyPriceId) {
+            premiumPlan = "monthly";
+          } else if (priceId === yearlyPriceId) {
+            premiumPlan = "yearly";
+          }
+        }
+        
+        console.log(`[StripeWebhook] interval: ${interval}, priceId: ${priceId}, premiumPlan: ${premiumPlan}`);
+        
+        return { plan: premiumPlan, priceId, interval };
       } catch (err) {
         console.error(`[StripeWebhook] ❌ Erreur lors de la récupération du plan depuis la subscription:`, err);
-        return null;
+        return { plan: null, priceId: null, interval: null };
       }
     };
 
@@ -177,14 +195,15 @@ export async function POST(request: NextRequest) {
             expand: ["items.data.price"],
           });
           
-          premiumPlan = getPremiumPlanFromSubscription(subscription);
+          const planInfo = getPremiumPlanFromSubscription(subscription);
+          premiumPlan = planInfo.plan;
           
           if (subscription.current_period_end) {
             premiumEndDate = new Date(subscription.current_period_end * 1000).toISOString();
           }
 
           console.log(
-            `[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}`
+            `[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}, priceId: ${planInfo.priceId}, interval: ${planInfo.interval}`
           );
         } catch (err) {
           console.error(`[WEBHOOK] ❌ Erreur lors de la récupération de la subscription ${subscriptionId}:`, err);
@@ -197,13 +216,16 @@ export async function POST(request: NextRequest) {
         }
 
         // Mettre à jour le profil dans Supabase via userId (priorité) ou customer_id
-        const updateData = {
+        const updateData: any = {
           premium_active: true,
-          premium_plan: premiumPlan,
           premium_end_date: premiumEndDate,
           stripe_customer_id: customerId,
           stripe_subscription_id: subscriptionId,
         };
+        // Inclure premium_plan uniquement si premiumPlan n'est pas null
+        if (premiumPlan) {
+          updateData.premium_plan = premiumPlan;
+        }
 
         let result;
         if (userId) {
@@ -270,12 +292,13 @@ export async function POST(request: NextRequest) {
             expand: ["items.data.price"],
           });
           
-          premiumPlan = getPremiumPlanFromSubscription(fullSubscription);
+          const planInfo = getPremiumPlanFromSubscription(fullSubscription);
+          premiumPlan = planInfo.plan;
           premiumEndDate = fullSubscription.current_period_end
             ? new Date(fullSubscription.current_period_end * 1000).toISOString()
             : null;
 
-          console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}`);
+          console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}, priceId: ${planInfo.priceId}, interval: ${planInfo.interval}`);
         } catch (err) {
           console.error(`[WEBHOOK] ❌ Erreur lors de la récupération de la subscription:`, err);
           break;
@@ -287,15 +310,20 @@ export async function POST(request: NextRequest) {
         }
 
         // Mettre à jour le profil
+        const updateData: any = {
+          premium_active: true,
+          premium_end_date: premiumEndDate,
+          stripe_customer_id: customerId,
+          stripe_subscription_id: subscriptionId,
+        };
+        // Inclure premium_plan uniquement si premiumPlan n'est pas null
+        if (premiumPlan) {
+          updateData.premium_plan = premiumPlan;
+        }
+
         const { data: updatedProfile, error } = await supabaseAdmin!
           .from("profiles")
-          .update({
-            premium_active: true,
-            premium_plan: premiumPlan,
-            premium_end_date: premiumEndDate,
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
-          })
+          .update(updateData)
           .eq("id", userId)
           .select();
 
@@ -342,12 +370,13 @@ export async function POST(request: NextRequest) {
             expand: ["items.data.price"],
           });
           
-          premiumPlan = getPremiumPlanFromSubscription(fullSubscription);
+          const planInfo = getPremiumPlanFromSubscription(fullSubscription);
+          premiumPlan = planInfo.plan;
           premiumEndDate = fullSubscription.current_period_end
             ? new Date(fullSubscription.current_period_end * 1000).toISOString()
             : null;
 
-          console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}`);
+          console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}, priceId: ${planInfo.priceId}, interval: ${planInfo.interval}`);
         } catch (err) {
           console.error(`[WEBHOOK] ❌ Erreur lors de la récupération de la subscription:`, err);
           break;
@@ -364,8 +393,11 @@ export async function POST(request: NextRequest) {
           const updateData: any = {
             premium_active: false,
             premium_end_date: premiumEndDate || new Date().toISOString(), // Garder end_date si disponible
-            premium_plan: premiumPlan, // Garder le plan pour référence
           };
+          // Inclure premium_plan uniquement si premiumPlan n'est pas null
+          if (premiumPlan) {
+            updateData.premium_plan = premiumPlan;
+          }
 
           let result;
           if (userId) {
@@ -402,9 +434,12 @@ export async function POST(request: NextRequest) {
           // Garder premium_active à true mais mettre à jour premium_end_date et premium_plan
           const updateData: any = {
             premium_active: true, // Toujours actif jusqu'à la fin de la période
-            premium_plan: premiumPlan,
             premium_end_date: premiumEndDate,
           };
+          // Inclure premium_plan uniquement si premiumPlan n'est pas null
+          if (premiumPlan) {
+            updateData.premium_plan = premiumPlan;
+          }
 
           let result;
           if (userId) {
@@ -449,8 +484,11 @@ export async function POST(request: NextRequest) {
           const updateData: any = {
             premium_active: true, // Reste actif jusqu'à premium_end_date
             premium_end_date: premiumEndDate || new Date().toISOString(),
-            premium_plan: premiumPlan, // Garder le plan pour référence
           };
+          // Inclure premium_plan uniquement si premiumPlan n'est pas null
+          if (premiumPlan) {
+            updateData.premium_plan = premiumPlan;
+          }
 
           let result;
           if (userId) {
@@ -544,9 +582,12 @@ export async function POST(request: NextRequest) {
 
           const updateData: any = {
             premium_active: true,
-            premium_plan: premiumPlan,
             premium_end_date: premiumEndDate,
           };
+          // Inclure premium_plan uniquement si premiumPlan n'est pas null
+          if (premiumPlan) {
+            updateData.premium_plan = premiumPlan;
+          }
 
           let result;
           if (userId) {
@@ -604,27 +645,26 @@ export async function POST(request: NextRequest) {
             const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
               expand: ["items.data.price"],
             });
-            premiumPlan = getPremiumPlanFromSubscription(subscription);
+            const planInfo = getPremiumPlanFromSubscription(subscription);
+            premiumPlan = planInfo.plan;
             premiumEndDate = subscription.current_period_end
               ? new Date(subscription.current_period_end * 1000).toISOString()
               : null;
-            console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}`);
+            console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}, priceId: ${planInfo.priceId}, interval: ${planInfo.interval}`);
           } catch (err) {
             console.error(`[WEBHOOK] ❌ Erreur lors de la récupération de la subscription:`, err);
             break;
           }
         }
 
-        if (!premiumPlan) {
-          console.error(`[WEBHOOK] ❌ Impossible de déterminer le plan premium`);
-          break;
-        }
-
         const updateData: any = {
           premium_active: true,
-          premium_plan: premiumPlan,
           premium_end_date: premiumEndDate,
         };
+        // Inclure premium_plan uniquement si premiumPlan n'est pas null
+        if (premiumPlan) {
+          updateData.premium_plan = premiumPlan;
+        }
 
         let updatedProfile = null;
         let error = null;
@@ -689,7 +729,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Toujours retourner 200 pour confirmer la réception à Stripe
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ 
+      ok: true, 
+      message: "Webhook traité avec succès",
+      event: event.type 
+    });
   } catch (error) {
     console.error("[Webhook Stripe] Erreur lors du traitement:", error);
     return NextResponse.json(
