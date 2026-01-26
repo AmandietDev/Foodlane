@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Recipe } from "./src/lib/recipes";
 import { loadFavorites, saveFavorites } from "./src/lib/favorites";
@@ -23,14 +24,20 @@ import {
 import { filterRecipesBySeason, getCurrentSeason, getSeasonName } from "./src/lib/seasonalFilter";
 import { useTranslation } from "./components/TranslationProvider";
 import { useSwipeBack } from "./hooks/useSwipeBack";
+import { usePremium } from "./contexts/PremiumContext";
+import { useSupabaseSession } from "./hooks/useSupabaseSession";
 
 
 export default function Home() {
   const { t } = useTranslation();
+  const { refreshProfile } = usePremium();
+  const { user } = useSupabaseSession();
+  const searchParams = useSearchParams();
   const [showResultsPanel, setShowResultsPanel] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [favorites, setFavorites] = useState<Recipe[]>([]);
   const [results, setResults] = useState<Recipe[]>([]);
+  const [lessRelevantResults, setLessRelevantResults] = useState<Recipe[]>([]);
   const [showCalories, setShowCalories] = useState(true);
   const [showCamera, setShowCamera] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -48,6 +55,7 @@ export default function Home() {
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [recipeToAddToCollection, setRecipeToAddToCollection] = useState<Recipe | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [favoriteSuccessMessage, setFavoriteSuccessMessage] = useState<string | null>(null);
 
   // Geste de balayage pour revenir en arrière
   useSwipeBack(() => {
@@ -111,7 +119,7 @@ export default function Home() {
       setUserPrenom(preferences.prenom || "");
       setShowCalories(preferences.afficherCalories);
       setRecipeRatings(loadRatings());
-      loadPopularRecipes();
+      await loadPopularRecipes();
     };
     
     loadData();
@@ -125,10 +133,31 @@ export default function Home() {
     
     window.addEventListener("favoritesUpdated", handleFavoritesUpdated);
     
+    // Écouter le focus de la fenêtre pour rafraîchir le profil
+    // (quand l'utilisateur revient d'un autre onglet comme Stripe)
+    // Utiliser un debounce pour éviter les appels trop fréquents
+    let focusTimeout: NodeJS.Timeout | null = null;
+    const handleFocus = () => {
+      // Debounce : attendre 1 seconde après le focus avant de rafraîchir
+      if (focusTimeout) {
+        clearTimeout(focusTimeout);
+      }
+      focusTimeout = setTimeout(async () => {
+        await refreshProfile();
+      }, 1000);
+    };
+    
+    window.addEventListener("focus", handleFocus);
+    
     return () => {
       window.removeEventListener("favoritesUpdated", handleFavoritesUpdated);
+      window.removeEventListener("focus", handleFocus);
+      if (focusTimeout) {
+        clearTimeout(focusTimeout);
+      }
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Dépendances vides : ne s'exécute qu'une fois au montage
 
   // Fonction INDÉPENDANTE pour charger les "Recettes du moment"
   // Cette fonction est complètement séparée de la génération de recettes par ingrédients
@@ -169,18 +198,82 @@ export default function Home() {
         seasonalRecipes = allRecipes;
       }
       
-      // Mélange aléatoire amélioré (Fisher-Yates shuffle) pour les recettes du moment
-      const shuffled = [...seasonalRecipes];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      // Séparer les recettes salées et sucrées
+      const normalizeType = (type: string): string => {
+        return (type || "").toLowerCase().trim();
+      };
+      
+      const savoryRecipes = seasonalRecipes.filter(recipe => {
+        const type = normalizeType(recipe.type);
+        return type.includes("salé") || type.includes("sale") || type.includes("sal");
+      });
+      
+      const sweetRecipes = seasonalRecipes.filter(recipe => {
+        const type = normalizeType(recipe.type);
+        return type.includes("sucré") || type.includes("sucree") || type.includes("sucr");
+      });
+      
+      console.log(`[RecettesDuMoment] ${savoryRecipes.length} salées, ${sweetRecipes.length} sucrées de saison`);
+      
+      // Mélange aléatoire amélioré (Fisher-Yates shuffle)
+      const shuffleArray = <T,>(array: T[]): T[] => {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+      };
+      
+      const shuffledSavory = shuffleArray(savoryRecipes);
+      const shuffledSweet = shuffleArray(sweetRecipes);
+      
+      // Sélectionner 4 recettes : majoritairement salées (3) + au moins 1 sucrée (1)
+      const selectedRecipes: Recipe[] = [];
+      
+      // Prendre 3 recettes salées
+      if (shuffledSavory.length > 0) {
+        selectedRecipes.push(...shuffledSavory.slice(0, 3));
       }
       
-      // Prendre 4 recettes aléatoires de saison pour l'affichage sur la page d'accueil
-      const selectedRecipes = shuffled.slice(0, 4);
-      // Recettes du moment sélectionnées
+      // Prendre au moins 1 recette sucrée si disponible
+      if (shuffledSweet.length > 0) {
+        selectedRecipes.push(shuffledSweet[0]);
+      } else if (shuffledSavory.length > 3) {
+        // Si pas de recette sucrée disponible, prendre une 4ème recette salée
+        selectedRecipes.push(shuffledSavory[3]);
+      }
       
-      setPopularRecipes(selectedRecipes);
+      // Si on n'a pas assez de recettes, compléter avec des recettes aléatoires
+      if (selectedRecipes.length < 4) {
+        const remaining = seasonalRecipes.filter(r => !selectedRecipes.includes(r));
+        const shuffledRemaining = shuffleArray(remaining);
+        selectedRecipes.push(...shuffledRemaining.slice(0, 4 - selectedRecipes.length));
+      }
+      
+      // Limiter à 4 recettes maximum
+      const finalRecipes = selectedRecipes.slice(0, 4);
+      
+      console.log(`[RecettesDuMoment] ${finalRecipes.filter(r => {
+        const type = normalizeType(r.type);
+        return type.includes("salé") || type.includes("sale") || type.includes("sal");
+      }).length} salées, ${finalRecipes.filter(r => {
+        const type = normalizeType(r.type);
+        return type.includes("sucré") || type.includes("sucree") || type.includes("sucr");
+      }).length} sucrées sélectionnées`);
+      
+      setPopularRecipes(finalRecipes);
+      
+      // Si le paramètre showRecipes est présent, afficher les recettes suggérées
+      const showRecipes = searchParams?.get("showRecipes");
+      if (showRecipes === "true" && finalRecipes.length > 0) {
+        setResults(finalRecipes);
+        setShowResultsPanel(true);
+        // Nettoyer l'URL en retirant le paramètre
+        if (typeof window !== "undefined") {
+          window.history.replaceState({}, "", "/");
+        }
+      }
     } catch (error) {
       console.error("[RecettesDuMoment] ❌ Erreur lors du chargement des recettes du moment:", error);
       setPopularRecipes([]);
@@ -203,12 +296,19 @@ export default function Home() {
     setSelectedIngredients(selectedIngredients.filter(ing => ing !== ingredientToRemove));
   };
 
-  // Fonction pour gérer la touche Espace dans le champ de saisie
+  // Fonction pour gérer les touches Espace et Enter dans le champ de saisie
   const handleIngredientInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === " " || e.key === "Enter") {
+    if (e.key === "Enter") {
       e.preventDefault();
       if (currentIngredientInput.trim()) {
         handleAddIngredient(currentIngredientInput);
+      }
+    } else if (e.key === " ") {
+      // Pour l'espace, on ajoute l'ingrédient avant l'espace
+      e.preventDefault();
+      const textBeforeSpace = currentIngredientInput.trim();
+      if (textBeforeSpace) {
+        handleAddIngredient(textBeforeSpace);
       }
     }
   };
@@ -230,9 +330,22 @@ export default function Home() {
     setGenerateError(null);
 
     try {
-      // Début de la génération avec ingrédients
-      
-      const res = await fetch("/api/recipes", {
+      // Construire l'URL de recherche avec les paramètres
+      const searchParams = new URLSearchParams();
+      if (ingredientsToSearch) {
+        searchParams.set("ingredients", selectedIngredients.join(","));
+      }
+      if (recipeTypeFilter !== "all") {
+        searchParams.set("type", recipeTypeFilter);
+      }
+      if (user?.id) {
+        searchParams.set("userId", user.id);
+      }
+
+      const searchUrl = `/api/recipes/search?${searchParams.toString()}`;
+      console.log("[Generate] Recherche via API:", searchUrl);
+
+      const res = await fetch(searchUrl, {
         cache: "no-store",
         headers: {
           'Cache-Control': 'no-cache',
@@ -254,387 +367,51 @@ export default function Home() {
       }
 
       const data = await res.json();
-      const recipes: Recipe[] = data.recipes || [];
+      const results: Recipe[] = data.results || [];
+      const suggestions: Recipe[] = data.suggestions || [];
+      const lessRelevant: Recipe[] = data.lessRelevant || [];
+      const meta = data.meta || {};
 
-      // Recettes récupérées depuis l'API
+      console.log(`[Generate] ${results.length} résultats, ${suggestions.length} suggestions, ${lessRelevant.length} moins pertinentes`);
+      console.log("[Generate] Meta:", meta);
 
-      if (recipes.length === 0) {
-        console.warn("[Generate] ⚠️ Aucune recette récupérée depuis l'API");
-        setGenerateError("Aucune recette disponible. Vérifiez la configuration de la base de données.");
-        setResults([]);
-        setShowResultsPanel(true);
-        setLoadingGenerate(false);
-        return;
-      }
+      // Gérer les résultats et suggestions
+      let bestRecipes: Recipe[] = [];
+      let lessRelevantRecipes: Recipe[] = [];
+      let errorMessage: string | null = null;
 
-      // Fonction pour normaliser le texte (enlever accents, espaces, etc.)
-      const normalizeText = (text: string): string => {
-        return text
-          .toLowerCase()
-          .normalize("NFD") // Décompose les caractères accentués
-          .replace(/[\u0300-\u036f]/g, "") // Enlève les accents
-          .replace(/[^\w\s]/g, " ") // Remplace les caractères spéciaux par des espaces
-          .replace(/\s+/g, " ") // Normalise les espaces
-          .trim();
-      };
-
-      // Utiliser la liste d'ingrédients sélectionnés (déjà en minuscules)
-      // Si aucun ingrédient n'est renseigné, on génère juste les recettes du type sélectionné
-      const hasIngredients = selectedIngredients.length > 0;
-      const searchTerms = hasIngredients
-        ? selectedIngredients
-            .map(term => normalizeText(term)) // Normaliser chaque terme
-        : [];
-      
-      console.log("[Generate] Termes de recherche normalisés:", searchTerms);
-      console.log("[Generate] Nombre total de recettes récupérées:", recipes.length);
-      console.log("[Generate] Ingrédients renseignés:", hasIngredients ? "Oui" : "Non - génération par type uniquement");
-      
-      // Afficher quelques exemples de recettes pour vérifier qu'elles sont bien chargées
-      if (recipes.length > 0) {
-        console.log("[Generate] Exemples de recettes chargées:");
-        recipes.slice(0, 2).forEach(r => {
-          console.log(`  - "${r.nom}" (Type: ${r.type})`);
-          console.log(`    Ingrédients: "${(r.ingredients || "").substring(0, 100)}..."`);
-        });
-      }
-
-      // SIMPLIFICATION: On ne filtre QUE par les ingrédients recherchés et le type (sucré/salé)
-      // Pas de filtre par régimes, allergies, équipements ou saison
-      // L'objectif est simple: trouver les recettes qui contiennent les ingrédients recherchés
-      console.log(`[Generate] Recherche SIMPLIFIÉE: uniquement par ingrédients et type (pas de filtres régimes/allergies/équipements/saison)`);
-
-      // Filtrer par type (sucré/salé) si sélectionné
-      let filteredRecipes = recipes;
-      if (recipeTypeFilter !== "all") {
-        filteredRecipes = recipes.filter(recipe => {
-          const type = (recipe.type || "").toLowerCase().trim();
-          if (recipeTypeFilter === "sweet") {
-            // Rechercher "sucré", "sucree", "sucr", etc.
-            return type.includes("sucré") || type.includes("sucree") || type.includes("sucr");
-          } else if (recipeTypeFilter === "savory") {
-            // Rechercher "salé", "sale", "sal", etc.
-            return type.includes("salé") || type.includes("sale") || type.includes("sal");
-          }
-          return true;
-        });
-        console.log(`[Generate] ${filteredRecipes.length} recettes après filtrage par type "${recipeTypeFilter}" (sur ${recipes.length})`);
+      if (results.length > 0) {
+        // Résultats exacts trouvés
+        bestRecipes = results; // Utiliser tous les résultats pertinents (déjà limités par l'API)
+        lessRelevantRecipes = lessRelevant; // Recettes moins pertinentes mais faisables
+        console.log(`[Generate] ✅ ${bestRecipes.length} résultats exacts trouvés, ${lessRelevantRecipes.length} moins pertinentes`);
+      } else if (suggestions.length > 0) {
+        // Aucun résultat exact, mais des suggestions disponibles
+        bestRecipes = suggestions;
+        errorMessage = "Aucune recette n'a été trouvée avec votre combinaison d'aliments, mais voici des idées que vous pouvez utiliser :";
+        console.log(`[Generate] ⚠️ Aucun résultat exact, ${bestRecipes.length} suggestions affichées`);
       } else {
-        console.log(`[Generate] ${filteredRecipes.length} recettes disponibles pour recherche par ingrédients (tous types)`);
+        // Aucun résultat du tout
+        errorMessage = "Aucune recette disponible. Vérifiez la configuration de la base de données.";
+        console.warn("[Generate] ⚠️ Aucune recette trouvée");
       }
 
-      // Afficher quelques exemples de recettes pour déboguer
-      if (filteredRecipes.length > 0) {
-        const sampleRecipes = filteredRecipes.slice(0, 3);
-        console.log("[Generate] Exemples de recettes filtrées:");
-        sampleRecipes.forEach(r => {
-          const ingredientsPreview = (r.ingredients || "").substring(0, 100);
-          console.log(`  - "${r.nom}" (${r.type}): "${ingredientsPreview}..."`);
-        });
-      }
-
-      // Si aucun ingrédient n'est renseigné, afficher simplement les recettes du type sélectionné
-      if (!hasIngredients && filteredRecipes.length > 0) {
-        console.log(`[Generate] Aucun ingrédient renseigné - affichage de ${filteredRecipes.length} recettes du type "${recipeTypeFilter}"`);
-        
-        // Mélanger les recettes pour avoir une sélection variée
-        const shuffled = [...filteredRecipes];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      // Afficher les filtres actifs si disponibles
+      if (meta.filters && (meta.filters.allergies.length > 0 || meta.filters.diets.length > 0)) {
+        const activeFilters: string[] = [];
+        if (meta.filters.allergies.length > 0) {
+          activeFilters.push(`Allergies: ${meta.filters.allergies.join(", ")}`);
         }
-        
-        // Prendre 6-8 recettes aléatoires
-        const bestRecipes = shuffled.slice(0, 8);
-        console.log(`[Generate] ✅ ${bestRecipes.length} recettes sélectionnées (par type uniquement)`);
-        
-        setResults(bestRecipes);
-        setShowResultsPanel(true);
-        setGenerateError(null);
-        setLoadingGenerate(false);
-        return;
-      }
-
-      // Calculer un score pour chaque recette basé sur les ingrédients recherchés
-      // IMPORTANT: Les ingrédients sont stockés avec quantités séparés par ; (ex: "100 g beurre; 50 g compote")
-      // On doit chercher dans chaque ingrédient individuellement pour mieux matcher
-      const scored = filteredRecipes
-        .map((recipe) => {
-          // Séparer les ingrédients (séparés par ;) et normaliser
-          const ingredientsList = (recipe.ingredients || "")
-            .split(";")
-            .map(ing => normalizeText(ing.trim()))
-            .filter(ing => ing.length > 0);
-          
-          // Aussi garder le texte complet normalisé pour recherche globale
-          const ingredientsText = normalizeText(recipe.ingredients || "");
-          
-          let score = 0;
-          const matchedTerms: string[] = [];
-
-          // Compter combien d'ingrédients recherchés sont trouvés dans la recette
-          let matchedIngredientsCount = 0;
-          const totalSearchTerms = searchTerms.length;
-          
-          searchTerms.forEach((term) => {
-            let found = false;
-            const originalTerm = term; // Garder le terme original pour les logs
-            
-            // 1. Recherche dans le texte complet normalisé
-            if (ingredientsText.includes(term)) {
-              found = true;
-    } else {
-              // 2. Chercher dans chaque ingrédient individuellement
-              for (const ingredient of ingredientsList) {
-                // Extraire le nom de l'ingrédient (sans quantité)
-                // Format typique: "100 g beurre" -> on cherche dans "beurre"
-                // Ou: "2 cuillères à soupe d'huile" -> on cherche dans "huile"
-                const ingredientParts = ingredient.split(/\s+/);
-                let ingredientName = ingredient;
-                
-                // Si l'ingrédient commence par un nombre ou une unité, extraire le nom
-                if (ingredientParts.length > 1) {
-                  // Chercher à partir du premier mot qui n'est pas un nombre ou une unité
-                  const units = ['g', 'kg', 'ml', 'l', 'cl', 'dl', 'cuillere', 'cuilleres', 'tasse', 'tasses', 'pincee', 'pincées', 'pincees', 'soupe', 'cafe', 'the'];
-                  let startIdx = 0;
-                  for (let i = 0; i < ingredientParts.length; i++) {
-                    const part = ingredientParts[i];
-                    // Si c'est un nombre ou une unité, continuer
-                    if (/^\d+([.,]\d+)?$/.test(part) || units.some(u => part.includes(u)) || part === 'd' || part === "de" || part === "d'") {
-                      startIdx = i + 1;
-                    } else {
-                      break;
-                    }
-                  }
-                  if (startIdx < ingredientParts.length) {
-                    ingredientName = ingredientParts.slice(startIdx).join(" ");
-                  }
-                }
-                
-                // Normaliser le nom de l'ingrédient
-                const normalizedIngredientName = normalizeText(ingredientName);
-                const normalizedIngredient = normalizeText(ingredient);
-                
-                // Recherche exacte du terme dans le nom de l'ingrédient (normalisé)
-                if (normalizedIngredientName.includes(term) || normalizedIngredient.includes(term)) {
-                  found = true;
-                  break; // Sortir de la boucle dès qu'on trouve
-                }
-                
-                // Recherche par mot avec pluriel et variations
-                // IMPORTANT: Pour éviter les confusions (pommes vs pommes de terre, poire vs poireaux)
-                // On cherche d'abord le terme complet, puis les mots individuels
-                const termWords = term.split(/\s+/).filter(w => w.length > 0);
-                
-                // 1. Chercher le terme complet d'abord (pour "pommes de terre", "poireaux", etc.)
-                if (termWords.length > 1) {
-                  // Terme composé : chercher le terme complet avec word boundaries pour plus de précision
-                  const fullTermPattern = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-                  if (fullTermPattern.test(normalizedIngredientName) || fullTermPattern.test(normalizedIngredient)) {
-                    found = true;
-                    break;
-                  }
-                }
-                
-                // 2. Chercher chaque mot individuellement (pour les termes simples)
-                for (const word of termWords) {
-                  if (word.length >= 2) {
-                    // Pour les mots courts ou simples, chercher avec word boundaries pour éviter les confusions
-                    // Ex: "poire" ne doit pas matcher "poireaux"
-                    const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    
-                    // Si c'est un mot simple (1 mot), utiliser word boundary strict
-                    if (termWords.length === 1) {
-                      // Recherche avec word boundary pour éviter les confusions
-                      // Ex: "poire" ne matchera pas "poireaux", "pommes" ne matchera pas "pommes de terre"
-                      const wordPattern = new RegExp(`\\b${escapedWord}(s|x|aux)?(?!\\w)`, 'i');
-                      if (wordPattern.test(normalizedIngredientName) || wordPattern.test(normalizedIngredient)) {
-                        found = true;
-                        break;
-                      }
-                    } else {
-                      // Pour les mots dans un terme composé, recherche plus flexible
-                      const wordPattern = new RegExp(`\\b${escapedWord}(s|x|aux)?\\b`, 'i');
-                      if (wordPattern.test(normalizedIngredientName) || wordPattern.test(normalizedIngredient)) {
-                        found = true;
-                        break;
-                      }
-                    }
-                    
-                    // Fallback: recherche simple mais avec vérification pour éviter les confusions
-                    // Ex: "pommes" ne doit pas matcher "pommes de terre" si on cherche juste "pommes"
-                    const simpleMatch = normalizedIngredientName.includes(word) || normalizedIngredient.includes(word);
-                    if (simpleMatch) {
-                      // Vérifier que ce n'est pas un préfixe d'un mot composé
-                      // Ex: "pommes" dans "pommes de terre" -> ne pas matcher si on cherche juste "pommes"
-                      // Mais "pommes" dans "pommes" -> matcher
-                      const wordEndCheck = new RegExp(`\\b${escapedWord}(s|x|aux)?(?:\\s|$|[^a-z])`, 'i');
-                      if (wordEndCheck.test(normalizedIngredientName) || wordEndCheck.test(normalizedIngredient)) {
-                        found = true;
-                        break;
-                      }
-                    }
-                  }
-                }
-                
-                if (found) break; // Sortir de la boucle des ingrédients si trouvé
-              }
-            }
-            
-            if (found) {
-              matchedIngredientsCount++;
-              score += 1;
-              matchedTerms.push(originalTerm);
-            }
-          });
-          
-          // AMÉLIORATION DU SCORING POUR MEILLEURE PERTINENCE :
-          // 1. Score de base = nombre d'ingrédients recherchés trouvés
-          // 2. Bonus si plusieurs ingrédients sont trouvés (favorise les recettes complètes)
-          // 3. BONUS MAJEUR si TOUS les ingrédients recherchés sont trouvés (recette parfaite)
-          
-          if (matchedIngredientsCount > 1) {
-            // Bonus progressif : plus on trouve d'ingrédients, plus le bonus est élevé
-            score += matchedIngredientsCount * 0.5;
-          }
-          
-          // Bonus majeur si TOUS les ingrédients recherchés sont trouvés
-          if (matchedIngredientsCount === totalSearchTerms && totalSearchTerms > 1) {
-            score += 5; // Bonus important pour les recettes qui contiennent TOUS les ingrédients
-          }
-          
-          // Score final = pertinence de la recette
-          // Plus le score est élevé, plus la recette est pertinente
-
-          // Log détaillé pour les premières recettes qui matchent
-          if (score > 0) {
-            console.log(`[Generate] ✅ "${recipe.nom}" - Score: ${score}, Termes: ${matchedTerms.join(", ")}, Ingrédients: "${ingredientsText.substring(0, 80)}..."`);
-          }
-
-          return { recipe, score, matchedTerms };
-        })
-        // Filtrer SEULEMENT les recettes avec score > 0 (qui contiennent au moins un ingrédient recherché)
-        .filter((item) => item.score > 0)
-        // TRI PAR PERTINENCE : les plus pertinentes en premier
-        .sort((a, b) => {
-          // 1. Trier par score décroissant (les plus pertinentes en premier)
-          if (b.score !== a.score) {
-            return b.score - a.score;
-          }
-          
-          // 2. Si même score, trier par nombre d'ingrédients trouvés (plus = mieux)
-          const aMatched = a.matchedTerms.length;
-          const bMatched = b.matchedTerms.length;
-          if (bMatched !== aMatched) {
-            return bMatched - aMatched;
-          }
-          
-          // 3. Si toujours égal, trier par ordre alphabétique (stable et prévisible)
-          return a.recipe.nom.localeCompare(b.recipe.nom);
-        });
-      
-      console.log(`[Generate] ${scored.length} recettes avec score > 0 (contiennent au moins un ingrédient recherché)`);
-      
-      // Afficher SEULEMENT les recettes qui ont un score > 0 (qui contiennent vraiment les ingrédients)
-      let bestRecipes: Recipe[];
-      if (scored.length > 0) {
-        // Prendre les meilleures recettes (jusqu'à 8)
-        bestRecipes = scored
-          .slice(0, 8)
-          .map(item => item.recipe);
-        
-        console.log(`[Generate] Top ${bestRecipes.length} recettes sélectionnées (par score):`);
-        scored.slice(0, Math.min(5, bestRecipes.length)).forEach((item, idx) => {
-          console.log(`  ${idx + 1}. "${item.recipe.nom}" - Score: ${item.score.toFixed(1)}, Termes: ${item.matchedTerms.join(", ")}`);
-        });
-      } else {
-        // AUCUNE recette ne contient les ingrédients recherchés
-        console.warn("[Generate] ⚠️ Aucune recette ne contient les ingrédients recherchés");
-        bestRecipes = [];
-        setGenerateError(`Aucune recette ne contient "${selectedIngredients.join(", ")}". Essayez avec d'autres ingrédients.`);
-      }
-      
-      // Si aucune recette n'a de score, afficher plus de détails
-      if (scored.length === 0 && filteredRecipes.length > 0) {
-        console.warn("[Generate] ⚠️ Aucune recette ne correspond - Analyse détaillée:");
-        const firstRecipe = filteredRecipes[0];
-        console.log(`[Generate] Exemple de recette: "${firstRecipe.nom}"`);
-        console.log(`[Generate] Ingrédients (texte complet): "${firstRecipe.ingredients}"`);
-        console.log(`[Generate] Ingrédients (lowercase): "${(firstRecipe.ingredients || "").toLowerCase()}"`);
-        console.log(`[Generate] Termes recherchés:`, searchTerms);
-        searchTerms.forEach(term => {
-          const ingredientsLower = (firstRecipe.ingredients || "").toLowerCase();
-          const found = ingredientsLower.includes(term);
-          console.log(`[Generate]   - "${term}" trouvé dans texte complet: ${found}`);
-          
-          // Tester aussi dans chaque ingrédient séparément
-          const ingredientsList = ingredientsLower.split(";").map(i => i.trim());
-          ingredientsList.forEach((ing, idx) => {
-            if (ing.includes(term)) {
-              console.log(`[Generate]     - Trouvé dans ingrédient ${idx + 1}: "${ing}"`);
-            }
-          });
-          
-          if (!found && term.length >= 3) {
-            // Tester avec pluriel
-            const withS = term + "s";
-            const foundWithS = ingredientsLower.includes(withS);
-            console.log(`[Generate]     - "${withS}" (pluriel) trouvé: ${foundWithS}`);
-          }
-        });
-        
-        // Afficher tous les ingrédients uniques de quelques recettes pour aider
-        const allIngredients = new Set<string>();
-        filteredRecipes.slice(0, 5).forEach(r => {
-          const ingList = (r.ingredients || "").split(";").map(i => {
-            // Extraire juste le nom de l'ingrédient (sans quantité)
-            const parts = i.trim().split(/\s+/);
-            if (parts.length > 1) {
-              // Enlever la quantité (premier mot) et garder le reste
-              return parts.slice(1).join(" ").toLowerCase();
-            }
-            return i.trim().toLowerCase();
-          });
-          ingList.forEach(ing => {
-            if (ing.length > 2) allIngredients.add(ing);
-          });
-        });
-        console.log("[Generate] Exemples d'ingrédients disponibles dans les recettes:", Array.from(allIngredients).slice(0, 20));
-      }
-
-      console.log(`[Generate] ${scored.length} recettes avec au moins un ingrédient correspondant`);
-      
-      if (scored.length > 0) {
-        console.log("[Generate] Top 3 recettes:", scored.slice(0, 3).map(s => ({
-          nom: s.recipe.nom,
-          score: s.score,
-          termes: s.matchedTerms
-        })));
-      } else {
-        console.warn("[Generate] ⚠️ Aucune recette ne correspond aux ingrédients recherchés");
-        // Afficher quelques exemples d'ingrédients disponibles pour aider l'utilisateur
-        const sampleIngredients = filteredRecipes.slice(0, 3).map(r => {
-          const ing = (r.ingredients || "").split(";").slice(0, 3).join(", ");
-          return `${r.nom}: ${ing}`;
-        });
-        console.log("[Generate] Exemples d'ingrédients dans les recettes:", sampleIngredients);
-        setGenerateError(`Aucune recette ne correspond à "${selectedIngredients.join(", ")}". Essayez avec d'autres ingrédients ou vérifiez l'orthographe.`);
-      }
-
-      console.log(`[Generate] ✅ ${bestRecipes.length} recettes sélectionnées pour affichage`);
-
-      if (bestRecipes.length === 0) {
-        // L'erreur est déjà définie plus haut si aucune recette n'a de score > 0
-        if (!generateError) {
-          setGenerateError(`Aucune recette ne correspond à "${selectedIngredients.join(", ")}". Essayez avec d'autres ingrédients.`);
+        if (meta.filters.diets.length > 0) {
+          activeFilters.push(`Régimes: ${meta.filters.diets.join(", ")}`);
         }
-      } else {
-        setGenerateError(null); // Effacer l'erreur si on a des résultats
+        console.log(`[Generate] Filtres actifs: ${activeFilters.join(" | ")}`);
       }
 
-      // IMPORTANT: Ne pas modifier popularRecipes ici - c'est complètement indépendant
-      // On utilise setResults pour les recettes générées par ingrédients
+      // Stocker les recettes moins pertinentes dans un state séparé
       setResults(bestRecipes);
+      setLessRelevantResults(lessRelevantRecipes);
+      setGenerateError(errorMessage);
       setShowResultsPanel(true);
       
       console.log(`[Generate] ✅ ${bestRecipes.length} recettes générées et affichées (indépendantes des recettes du moment)`);
@@ -731,12 +508,15 @@ export default function Home() {
       setFavorites(newFavorites);
       console.log(`[Favorites] Recette "${recipe.nom}" ajoutée aux favoris`);
       
-      // Ensuite, ouvrir le modal de sélection de collection (optionnel)
-      setRecipeToAddToCollection(recipe);
-      setShowCollectionModal(true);
-      // Recharger les collections pour avoir les dernières données
-      const updatedCollections = await loadCollections();
-      setCollections(updatedCollections);
+      // Afficher un message de succès
+      setFavoriteSuccessMessage("Recette ajoutée aux favoris avec succès");
+      // Masquer le message après 3 secondes
+      setTimeout(() => {
+        setFavoriteSuccessMessage(null);
+      }, 3000);
+      
+      // Ne plus ouvrir automatiquement le modal de collection
+      // L'utilisateur peut ajouter à une collection manuellement depuis la fiche recette si souhaité
     }
   }
 
@@ -765,6 +545,17 @@ export default function Home() {
 
   return (
     <main className="max-w-md mx-auto px-4 pt-6 pb-6">
+      {/* Message de succès pour l'ajout aux favoris */}
+      {favoriteSuccessMessage && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[100] bg-gradient-to-r from-[#D44A4A] to-[#C03A3A] text-white px-6 py-4 rounded-xl shadow-2xl border-2 border-white/20">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+              <span className="text-lg font-bold">✓</span>
+            </div>
+            <p className="text-sm font-semibold">{favoriteSuccessMessage}</p>
+          </div>
+        </div>
+      )}
       {/* Header avec message de bienvenue - style moderne */}
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-[#6B2E2E] mb-1">
@@ -806,15 +597,33 @@ export default function Home() {
         )}
 
         <div className="relative mb-4">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
           <input
             type="text"
-            className="w-full rounded-xl bg-white border border-[var(--beige-border)] px-4 py-3 pl-12 text-sm outline-none focus:border-[#D44A4A] text-[#6B2E2E] placeholder:text-[var(--text-muted)]"
-            placeholder="Tapez un ingrédient et appuyez sur Espace..."
+                className="w-full rounded-xl bg-white border border-[var(--beige-border)] px-4 py-3 pl-12 pr-4 text-sm outline-none focus:border-[#D44A4A] text-[#6B2E2E] placeholder:text-[var(--text-muted)]"
+                placeholder="Tapez un ingrédient..."
             value={currentIngredientInput}
             onChange={(e) => setCurrentIngredientInput(e.target.value)}
             onKeyDown={handleIngredientInputKeyDown}
           />
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7A3A3A] text-lg">🔍</span>
+            </div>
+            <button
+              onClick={() => {
+                if (currentIngredientInput.trim()) {
+                  handleAddIngredient(currentIngredientInput);
+                }
+              }}
+              disabled={!currentIngredientInput.trim()}
+              className="px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              Ajouter
+            </button>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-2">
+            Appuyez sur <kbd className="px-1.5 py-0.5 bg-[var(--beige-card)] rounded text-[var(--foreground)]">Espace</kbd> ou <kbd className="px-1.5 py-0.5 bg-[var(--beige-card)] rounded text-[var(--foreground)]">Entrée</kbd> pour ajouter, ou cliquez sur "Ajouter"
+          </p>
         </div>
 
         {/* Filtre par type (sucré/salé) */}
@@ -967,16 +776,59 @@ export default function Home() {
                       seasonalRecipes = allRecipes;
                     }
                     
-                    // Mélange aléatoire (Fisher-Yates)
-                    const shuffled = [...seasonalRecipes];
-                    for (let i = shuffled.length - 1; i > 0; i--) {
-                      const j = Math.floor(Math.random() * (i + 1));
-                      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                    // Séparer les recettes salées et sucrées
+                    const normalizeType = (type: string): string => {
+                      return (type || "").toLowerCase().trim();
+                    };
+                    
+                    const savoryRecipes = seasonalRecipes.filter(recipe => {
+                      const type = normalizeType(recipe.type);
+                      return type.includes("salé") || type.includes("sale") || type.includes("sal");
+                    });
+                    
+                    const sweetRecipes = seasonalRecipes.filter(recipe => {
+                      const type = normalizeType(recipe.type);
+                      return type.includes("sucré") || type.includes("sucree") || type.includes("sucr");
+                    });
+                    
+                    // Mélange aléatoire amélioré (Fisher-Yates shuffle)
+                    const shuffleArray = <T,>(array: T[]): T[] => {
+                      const shuffled = [...array];
+                      for (let i = shuffled.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                      }
+                      return shuffled;
+                    };
+                    
+                    const shuffledSavory = shuffleArray(savoryRecipes);
+                    const shuffledSweet = shuffleArray(sweetRecipes);
+                    
+                    // Sélectionner 10 recettes : majoritairement salées (7-8) + quelques sucrées (2-3)
+                    const allPopularRecipes: Recipe[] = [];
+                    
+                    // Prendre 7-8 recettes salées
+                    if (shuffledSavory.length > 0) {
+                      const savoryCount = Math.min(8, shuffledSavory.length);
+                      allPopularRecipes.push(...shuffledSavory.slice(0, savoryCount));
                     }
                     
-                    // Prendre environ 10 recettes
-                    const allPopularRecipes = shuffled.slice(0, 10);
-                    setResults(allPopularRecipes);
+                    // Prendre 2-3 recettes sucrées si disponibles
+                    if (shuffledSweet.length > 0) {
+                      const sweetCount = Math.min(3, shuffledSweet.length, 10 - allPopularRecipes.length);
+                      allPopularRecipes.push(...shuffledSweet.slice(0, sweetCount));
+                    }
+                    
+                    // Si on n'a pas assez de recettes, compléter avec des recettes aléatoires
+                    if (allPopularRecipes.length < 10) {
+                      const remaining = seasonalRecipes.filter(r => !allPopularRecipes.includes(r));
+                      const shuffledRemaining = shuffleArray(remaining);
+                      allPopularRecipes.push(...shuffledRemaining.slice(0, 10 - allPopularRecipes.length));
+                    }
+                    
+                    // Limiter à 10 recettes maximum
+                    const finalRecipes = allPopularRecipes.slice(0, 10);
+                    setResults(finalRecipes);
                     setShowResultsPanel(true);
                     console.log(`[RecettesDuMoment] ${allPopularRecipes.length} recettes chargées pour "Voir tout"`);
                   } catch (error) {
@@ -1386,7 +1238,19 @@ export default function Home() {
                   Fermer ✕
                 </button>
               </div>
-              {results.length === 0 && (
+              {results.length > 0 && (
+                <p className="text-xs text-[var(--text-muted)] mb-2">
+                  Résultats triés par pertinence ({results.length} recette{results.length > 1 ? "s" : ""})
+                </p>
+              )}
+              {generateError && (
+                <div className="mb-4 p-3 rounded-xl bg-yellow-50 border border-yellow-200">
+                  <p className="text-xs text-yellow-800">
+                    {generateError}
+                  </p>
+                </div>
+              )}
+              {results.length === 0 && !generateError && (
                 <p className="text-xs text-[var(--text-muted)] mb-2">
                     Aucune recette ne correspond encore à ces aliments. Tu peux
                     essayer avec d&apos;autres combinaisons ou moins
@@ -1466,6 +1330,92 @@ export default function Home() {
                     </article>
                   ))}
                 </div>
+
+              {/* Section recettes moins pertinentes mais faisables */}
+              {lessRelevantResults.length > 0 && (
+                <div className="mt-8 pt-6 border-t-2 border-dashed border-[var(--beige-border)]">
+                  <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200">
+                    <p className="text-xs text-blue-800 font-semibold mb-1">
+                      💡 Recettes moins pertinentes mais faisables
+                    </p>
+                    <p className="text-xs text-blue-700">
+                      Ces recettes peuvent être réalisées avec tes ingrédients, mais elles sont moins adaptées à ta recherche. Tu auras peut-être besoin d&apos;ajouter quelques ingrédients supplémentaires.
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    {lessRelevantResults.map((recipe) => (
+                      <article
+                        key={recipe.id}
+                        className="cursor-pointer group opacity-90 hover:opacity-100 transition-opacity"
+                        onClick={() => setSelectedRecipe(recipe)}
+                      >
+                        {/* Image de la recette - carrée avec coins arrondis */}
+                        <div className="relative w-full aspect-square rounded-2xl overflow-hidden mb-2 bg-gray-100 shadow-md group-hover:shadow-lg transition-shadow border-2 border-dashed border-[var(--beige-border)]">
+                          {recipe.image_url ? (
+                            <RecipeImage
+                              imageUrl={recipe.image_url}
+                              alt={recipe.nom}
+                              className="w-full h-full"
+                              fallbackClassName="rounded-2xl"
+                              priority={false}
+                              sizes="(max-width: 768px) 50vw, 33vw"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-[#FFD9D9] to-[#FFC4C4] flex items-center justify-center rounded-2xl">
+                              <span className="text-4xl">🍽️</span>
+                            </div>
+                          )}
+                          {/* Badge favori en overlay */}
+                          <button
+                            className={`absolute top-2 right-2 p-2 rounded-full backdrop-blur-sm transition-all ${
+                              isFavorite(recipe.id)
+                                ? "bg-[#C03A3A]/90 text-white"
+                                : "bg-white/80 text-[#7A3A3A] hover:bg-white"
+                            }`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleFavorite(recipe);
+                            }}
+                            aria-label={
+                              isFavorite(recipe.id)
+                                ? "Retirer des favoris"
+                                : "Ajouter aux favoris"
+                            }
+                          >
+                            {isFavorite(recipe.id) ? "★" : "☆"}
+                          </button>
+                          {/* Badges diététiques en overlay en bas */}
+                          {detectDietaryBadges(recipe).length > 0 && (
+                            <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1">
+                              {detectDietaryBadges(recipe).slice(0, 2).map((badge) => (
+                                <span
+                                  key={badge}
+                                  className="px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-[#D44A4A]/95 text-white backdrop-blur-sm border border-white/30 flex items-center gap-0.5"
+                                  title={badge}
+                                >
+                                  <span className="text-[7px]">{DIETARY_BADGE_ICONS[badge]}</span>
+                                  <span>{badge}</span>
+                                </span>
+                              ))}
+                              {detectDietaryBadges(recipe).length > 2 && (
+                                <span className="px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-[#D44A4A]/95 text-white backdrop-blur-sm border border-white/30">
+                                  +{detectDietaryBadges(recipe).length - 2}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Nom de la recette en dessous */}
+                        <h4 className="font-semibold text-sm text-[#6B2E2E] text-center leading-tight px-1 line-clamp-2">
+                          {recipe.nom}
+                        </h4>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             )}
           </div>

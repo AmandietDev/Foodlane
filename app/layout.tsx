@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProviderWrapper } from "./providers/ThemeProviderWrapper";
 import { TranslationProvider } from "./components/TranslationProvider";
+import { PremiumProvider } from "./contexts/PremiumContext";
 import BottomNavigation from "./components/BottomNavigation";
 import AuthGuard from "./components/AuthGuard";
 import SplashScreen from "./components/SplashScreen";
+import EnvChecker from "./components/EnvChecker";
 
 export const metadata: Metadata = {
   title: "Foodlane",
@@ -23,14 +25,17 @@ export default function RootLayout({
         <ThemeProviderWrapper>
           <TranslationProvider>
             <AuthGuard>
-              {/* Contenu principal avec marge en bas pour ne pas passer sous la barre */}
-              <div className="min-h-screen pb-32">
-                {children}
-              </div>
+              <PremiumProvider>
+                {/* Contenu principal avec marge en bas pour ne pas passer sous la barre */}
+                <div className="min-h-screen pb-32">
+                  {children}
+                </div>
 
-              {/* Zone fixe en bas : barre d'onglets + pub sous les onglets */}
-              <BottomNavigation />
+                {/* Zone fixe en bas : barre d'onglets + pub sous les onglets */}
+                <BottomNavigation />
+              </PremiumProvider>
             </AuthGuard>
+            <EnvChecker />
           </TranslationProvider>
         </ThemeProviderWrapper>
       </body>

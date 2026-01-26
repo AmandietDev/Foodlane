@@ -135,14 +135,12 @@ export default function MenuPage() {
     confirmPassword: "",
     nom: "",
     prenom: "",
-    telephone: "",
   });
   const [loginError, setLoginError] = useState("");
   const [contactForm, setContactForm] = useState({
     nom: "",
     prenom: "",
     email: "",
-    telephone: "",
     objet: "",
     message: "",
   });
@@ -273,7 +271,7 @@ export default function MenuPage() {
       password: signUpForm.password,
       nom: signUpForm.nom,
       prenom: signUpForm.prenom,
-      telephone: signUpForm.telephone,
+      telephone: "", // Champ non requis, conservé pour compatibilité
     });
     setLoggedIn(true);
     setPreferences((prev) => ({
@@ -281,7 +279,7 @@ export default function MenuPage() {
       email: signUpForm.email,
       nom: signUpForm.nom,
       prenom: signUpForm.prenom,
-      telephone: signUpForm.telephone,
+      telephone: "", // Champ non requis, conservé pour compatibilité
     }));
     setSignUpForm({
       email: "",
@@ -289,7 +287,6 @@ export default function MenuPage() {
       confirmPassword: "",
       nom: "",
       prenom: "",
-      telephone: "",
     });
     setShowSignUp(false);
   }
@@ -304,7 +301,6 @@ export default function MenuPage() {
         email: "",
         nom: "",
         prenom: "",
-        telephone: "",
       }));
       // Rediriger vers la page de connexion
       router.push("/login");
@@ -356,7 +352,6 @@ export default function MenuPage() {
         nom: "",
         prenom: "",
         email: "",
-        telephone: "",
         objet: "",
         message: "",
       });
@@ -863,20 +858,6 @@ export default function MenuPage() {
                     </div>
                     <div>
                       <label className="block text-xs text-[var(--beige-text-muted)] mb-1">
-                        Téléphone
-                      </label>
-                      <input
-                        type="tel"
-                        value={signUpForm.telephone}
-                        onChange={(e) =>
-                          setSignUpForm({ ...signUpForm, telephone: e.target.value })
-                        }
-                        placeholder="06 12 34 56 78"
-                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-[var(--beige-text-muted)] mb-1">
                         Mot de passe
                       </label>
                       <input
@@ -1082,8 +1063,37 @@ export default function MenuPage() {
                 Tu bénéficies de toutes les fonctionnalités Premium.
               </p>
               <button
-                onClick={() => {
-                  alert("Historique de facturation / lien vers le store (à venir)");
+                onClick={async () => {
+                  if (!user) {
+                    alert("Tu dois être connecté pour gérer ton abonnement.");
+                    return;
+                  }
+                  
+                  try {
+                    const response = await fetch("/api/billing/portal", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({ userId: user.id }),
+                    });
+
+                    if (!response.ok) {
+                      const errorData = await response.json();
+                      throw new Error(errorData.error || "Erreur lors de l'ouverture du portail");
+                    }
+
+                    const { url } = await response.json();
+                    if (url) {
+                      // Ouvrir dans un nouvel onglet pour permettre de revenir facilement à l'app
+                      window.open(url, '_blank');
+                    } else {
+                      throw new Error("URL du portail non reçue");
+                    }
+                  } catch (error) {
+                    console.error("[Menu] Erreur portal:", error);
+                    alert(error instanceof Error ? error.message : "Erreur lors de l'ouverture du portail de gestion");
+                  }
                 }}
                 className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
               >
@@ -3118,8 +3128,37 @@ export default function MenuPage() {
                     Gestion de l&apos;abonnement
                   </p>
                   <button
-                    onClick={() => {
-                      alert("Historique de facturation / lien vers le store (à venir)");
+                    onClick={async () => {
+                      if (!user) {
+                        alert("Tu dois être connecté pour gérer ton abonnement.");
+                        return;
+                      }
+                      
+                      try {
+                        const response = await fetch("/api/billing/portal", {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({ userId: user.id }),
+                        });
+
+                        if (!response.ok) {
+                          const errorData = await response.json();
+                          throw new Error(errorData.error || "Erreur lors de l'ouverture du portail");
+                        }
+
+                        const { url } = await response.json();
+                        if (url) {
+                          // Ouvrir dans un nouvel onglet pour permettre de revenir facilement à l'app
+                          window.open(url, '_blank');
+                        } else {
+                          throw new Error("URL du portail non reçue");
+                        }
+                      } catch (error) {
+                        console.error("[Menu] Erreur portal:", error);
+                        alert(error instanceof Error ? error.message : "Erreur lors de l'ouverture du portail de gestion");
+                      }
                     }}
                     className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
                   >
@@ -3332,7 +3371,6 @@ export default function MenuPage() {
                               nom: "",
                               prenom: "",
                               email: "",
-                              telephone: "",
                               objet: "",
                               message: "",
                             });

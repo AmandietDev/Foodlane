@@ -25,7 +25,6 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [nom, setNom] = useState("");
   const [prenom, setPrenom] = useState("");
-  const [telephone, setTelephone] = useState("");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -164,7 +163,6 @@ export default function LoginPage() {
           data: {
             nom,
             prenom,
-            telephone,
           },
         },
       });
@@ -202,7 +200,7 @@ export default function LoginPage() {
         nom,
         prenom,
         email: emailValue,
-        telephone,
+        telephone: "", // Champ conservé pour compatibilité mais non requis
         langue: "fr",
         afficherCalories: true,
         notificationsNewRecipes: true,
@@ -427,19 +425,6 @@ export default function LoginPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Téléphone
-                </label>
-                <input
-                  type="tel"
-                  value={telephone}
-                  onChange={(e) => setTelephone(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
-                  placeholder="06 12 34 56 78"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Mot de passe *
                 </label>
                 <input
@@ -490,7 +475,6 @@ export default function LoginPage() {
                       setPassword("");
                       setNom("");
                       setPrenom("");
-                      setTelephone("");
                       setConfirmPassword("");
                     }}
                     className="text-[#D44A4A] font-semibold hover:underline"

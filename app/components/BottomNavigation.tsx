@@ -6,38 +6,12 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { loadPreferences } from "../src/lib/userPreferences";
 import { useTranslation } from "./TranslationProvider";
+import { usePremium } from "../contexts/PremiumContext";
 
 export default function BottomNavigation() {
-  const [isPremium, setIsPremium] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const { isPremium } = usePremium();
   const { t } = useTranslation();
   const pathname = usePathname();
-
-  useEffect(() => {
-    setMounted(true);
-    const checkPremium = () => {
-      const preferences = loadPreferences();
-      setIsPremium(preferences.abonnementType === "premium");
-    };
-
-    // Vérifier au montage
-    checkPremium();
-
-    // Écouter les changements de localStorage
-    const handleStorageChange = () => {
-      checkPremium();
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-    
-    // Écouter les changements personnalisés (quand les préférences changent dans la même page)
-    const interval = setInterval(checkPremium, 1000);
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      clearInterval(interval);
-    };
-  }, []);
 
   const isActive = (path: string) => pathname === path;
 
@@ -79,7 +53,7 @@ export default function BottomNavigation() {
         </Link>
         <Link 
           href="/equilibre" 
-          className={`flex flex-col items-center gap-1 py-1 px-2 transition-all ${
+          className={`relative flex flex-col items-center gap-1 py-1 px-2 transition-all ${
             isActive("/equilibre") ? "text-[#6B2E2E]" : "text-[#8A4A4A] hover:text-[#6B2E2E]"
           }`}
         >
@@ -91,7 +65,14 @@ export default function BottomNavigation() {
             className="object-contain"
             unoptimized
           />
-          <span>{t("nav.equilibre")}</span>
+          <span className="flex items-center gap-1">
+            {t("nav.equilibre")}
+            {!isPremium && (
+              <span className="px-1.5 py-0.5 bg-[#D44A4A] text-white text-[8px] font-bold rounded">
+                PREMIUM
+              </span>
+            )}
+          </span>
         </Link>
         <Link 
           href="/menu" 

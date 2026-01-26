@@ -26,6 +26,7 @@ import {
   formatShoppingListItem,
   type ShoppingListItem,
 } from "../src/lib/shoppingList";
+import { filterRecipesBySeason } from "../src/lib/seasonalFilter";
 
 export default function FavorisPage() {
   const router = useRouter();
@@ -47,6 +48,19 @@ export default function FavorisPage() {
   const [showAllFavorites, setShowAllFavorites] = useState(false);
   const [showAllCollections, setShowAllCollections] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [favoriteSuccessMessage, setFavoriteSuccessMessage] = useState<string | null>(null);
+  
+  // États pour l'outil de création de menu
+  const [showMenuCreator, setShowMenuCreator] = useState(false);
+  const [menuCreatorRecipes, setMenuCreatorRecipes] = useState<Recipe[]>([]);
+  const [loadingMenuRecipes, setLoadingMenuRecipes] = useState(false);
+  const [menuCreatorFilters, setMenuCreatorFilters] = useState({
+    type: "all" as "all" | "sweet" | "savory",
+    difficulte: "all" as "all" | "Facile" | "Moyen" | "Difficile",
+    tempsMax: "" as string,
+  });
+  const [menuCreatorSearch, setMenuCreatorSearch] = useState("");
+  const [selectedRecipeFromMenuCreator, setSelectedRecipeFromMenuCreator] = useState<Recipe | null>(null);
 
   // Vérifier la session et protéger la page
   useEffect(() => {
@@ -203,13 +217,126 @@ export default function FavorisPage() {
   }
 
   async function toggleFavorite(recipe: Recipe) {
-    const updated = favorites.some((fav) => fav.id === recipe.id)
+    const wasFavorite = favorites.some((fav) => fav.id === recipe.id);
+    const updated = wasFavorite
       ? favorites.filter((fav) => fav.id !== recipe.id)
       : [...favorites, recipe];
     
     setFavorites(updated);
     await saveFavorites(updated);
+    
+    // Afficher un message de succès uniquement quand on ajoute aux favoris
+    if (!wasFavorite) {
+      setFavoriteSuccessMessage("Recette ajoutée aux favoris avec succès");
+      // Masquer le message après 3 secondes
+      setTimeout(() => {
+        setFavoriteSuccessMessage(null);
+      }, 3000);
+    } else {
+      // Si on retire des favoris, s'assurer qu'aucun message ne s'affiche
+      setFavoriteSuccessMessage(null);
+    }
   }
+
+  // Fonction pour charger les recettes pour l'outil de création de menu
+  async function loadMenuCreatorRecipes() {
+    setLoadingMenuRecipes(true);
+    try {
+      const res = await fetch("/api/recipes", {
+        cache: "no-store",
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+      
+      if (!res.ok) {
+        throw new Error(`Erreur API: ${res.status}`);
+      }
+      
+      const data = await res.json();
+      const allRecipes: Recipe[] = data.recipes || [];
+      
+      // Filtrer par saison pour avoir des recettes pertinentes
+      let filteredRecipes = filterRecipesBySeason(allRecipes);
+      if (filteredRecipes.length < 20) {
+        filteredRecipes = allRecipes;
+      }
+      
+      // Mélanger les recettes
+      const shuffled = [...filteredRecipes];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      
+      setMenuCreatorRecipes(shuffled);
+    } catch (error) {
+      console.error("[MenuCreator] Erreur lors du chargement des recettes:", error);
+      setMenuCreatorRecipes([]);
+    } finally {
+      setLoadingMenuRecipes(false);
+    }
+  }
+
+  // Filtrer les recettes pour l'outil de création de menu
+  const filteredMenuCreatorRecipes = menuCreatorRecipes.filter((recipe: Recipe) => {
+    // Filtre par type (sucré/salé)
+    if (menuCreatorFilters.type !== "all") {
+      const normalizeType = (type: string): string => (type || "").toLowerCase().trim();
+      const recipeType = normalizeType(recipe.type);
+      if (menuCreatorFilters.type === "sweet") {
+        if (!recipeType.includes("sucré") && !recipeType.includes("sucree") && !recipeType.includes("sucr")) {
+          return false;
+        }
+      } else if (menuCreatorFilters.type === "savory") {
+        if (!recipeType.includes("salé") && !recipeType.includes("sale") && !recipeType.includes("sal")) {
+          return false;
+        }
+      }
+    }
+    
+    // Filtre par difficulté
+    if (menuCreatorFilters.difficulte !== "all") {
+      if (recipe.difficulte !== menuCreatorFilters.difficulte) {
+        return false;
+      }
+    }
+    
+    // Filtre par temps maximum
+    if (menuCreatorFilters.tempsMax && menuCreatorFilters.tempsMax !== "") {
+      const tempsMax = parseInt(menuCreatorFilters.tempsMax);
+      if (recipe.temps_preparation_min > tempsMax) {
+        return false;
+      }
+    }
+    
+    // Filtre par recherche texte
+    if (menuCreatorSearch.trim() !== "") {
+      const searchLower = menuCreatorSearch.toLowerCase();
+      const nomMatch = recipe.nom?.toLowerCase().includes(searchLower);
+      const descMatch = recipe.description_courte?.toLowerCase().includes(searchLower);
+      const ingMatch = recipe.ingredients?.toLowerCase().includes(searchLower);
+      if (!nomMatch && !descMatch && !ingMatch) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+
+  // Fonction pour afficher la fiche recette depuis l'outil de création de menu
+  const handleSelectRecipeFromMenuCreator = (recipe: Recipe) => {
+    setSelectedRecipeFromMenuCreator(recipe);
+    setSelectedRecipe(recipe); // Afficher la fiche recette
+  };
+
+  // Fonction pour ajouter une recette au menu depuis la fiche recette
+  const handleAddRecipeToMenuFromDetail = (recipe: Recipe) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("foodlane_recipe_to_add", JSON.stringify(recipe));
+      window.location.href = "/menu-semaine";
+    }
+  };
 
   async function handleCreateCollection() {
     if (!newCollectionName.trim()) {
@@ -234,8 +361,30 @@ export default function FavorisPage() {
       setNewCollectionName("");
       setShowCreateCollection(false);
       
-      // Ouvrir immédiatement le modal pour ajouter des recettes à cette nouvelle collection
-      setShowAddRecipesToNewCollection(true);
+      // Si on vient du modal "Ajouter à une collection" et qu'une recette est sélectionnée, l'ajouter automatiquement
+      if (recipeToAdd) {
+        try {
+          console.log("[FavorisPage] Ajout automatique de la recette à la nouvelle collection:", {
+            recipeId: recipeToAdd.id,
+            recipeName: recipeToAdd.nom,
+            collectionId: savedCollection.id,
+            collectionName: savedCollection.name
+          });
+          await addRecipeToCollection(savedCollection.id, recipeToAdd.id);
+          const updated = await loadCollections();
+          setCollections(updated);
+          // Fermer les modals
+          setShowAddToCollection(false);
+          setShowCreateCollection(false);
+          setRecipeToAdd(null);
+        } catch (error) {
+          console.error("[FavorisPage] Erreur lors de l'ajout de la recette à la collection:", error);
+          alert(`Erreur lors de l'ajout de la recette à la collection: ${error instanceof Error ? error.message : "Erreur inconnue"}`);
+        }
+      } else {
+        // Sinon, ouvrir le modal pour ajouter des recettes à cette nouvelle collection
+        setShowAddRecipesToNewCollection(true);
+      }
     } catch (error) {
       console.error("[FavorisPage] ❌ Erreur lors de la création de la collection:", error);
       alert(`Erreur lors de la création de la collection: ${error instanceof Error ? error.message : "Erreur inconnue"}`);
@@ -285,6 +434,17 @@ export default function FavorisPage() {
 
   return (
     <main className="max-w-md mx-auto px-4 pt-6 pb-24">
+      {/* Message de succès pour l'ajout aux favoris */}
+      {favoriteSuccessMessage && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[100] bg-gradient-to-r from-[#D44A4A] to-[#C03A3A] text-white px-6 py-4 rounded-xl shadow-2xl border-2 border-white/20">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+              <span className="text-lg font-bold">✓</span>
+            </div>
+            <p className="text-sm font-semibold">{favoriteSuccessMessage}</p>
+          </div>
+        </div>
+      )}
       {/* En-tête avec recherche - style inspiré de l'image */}
       <header className="mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -313,12 +473,16 @@ export default function FavorisPage() {
                 <p className="text-sm text-[#7A3A3A] mb-4">
                   Crée ton menu de la semaine
                 </p>
-                <Link
-                  href="/menu-semaine"
+                <button
+                  onClick={() => {
+                    setShowMenuCreator(true);
+                    setSelectedRecipeFromMenuCreator(null); // Réinitialiser
+                    loadMenuCreatorRecipes();
+                  }}
                   className="inline-block px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
                 >
                   Créer un menu
-                </Link>
+                </button>
               </div>
             ) : (
               <>
@@ -529,7 +693,7 @@ export default function FavorisPage() {
         <section className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-[#6B2E2E]">
-              Toutes mes recettes ({favorites.length})
+              Favoris ({favorites.length})
             </h2>
             {!showAllFavorites && favorites.length > 4 && (
               <button
@@ -695,7 +859,7 @@ export default function FavorisPage() {
 
       {/* Modal de création de collection */}
       {showCreateCollection && (
-        <div className="fixed inset-0 bg-[#6B2E2E]/70 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[#6B2E2E]/70 z-[100] flex items-center justify-center p-4">
           <div className="bg-[#FFF0F0] rounded-2xl p-6 shadow-xl w-full max-w-sm">
             <h3 className="text-lg font-bold text-[#6B2E2E] mb-4">Créer une collection</h3>
             <input
@@ -984,7 +1148,7 @@ export default function FavorisPage() {
 
       {/* Modal d'ajout à une collection */}
       {showAddToCollection && recipeToAdd && (
-        <div className="fixed inset-0 bg-[#6B2E2E]/70 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[#6B2E2E]/70 z-[90] flex items-center justify-center p-4">
           <div className="bg-[#FFF0F0] rounded-2xl p-6 shadow-xl w-full max-w-sm max-h-[80vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-[#6B2E2E] mb-4">
               Ajouter à une collection
@@ -1020,34 +1184,73 @@ export default function FavorisPage() {
               })}
             </div>
             {collections.length === 0 && (
-              <p className="text-sm text-[#7A3A3A] text-center mb-4">
-                Aucune collection. Crée-en une d'abord !
-              </p>
+              <div className="mb-4">
+                <p className="text-sm text-[#7A3A3A] text-center mb-3">
+                  Aucune collection. Crée-en une d'abord !
+                </p>
+                <button
+                  className="w-full px-4 py-3 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md"
+                  onClick={() => {
+                    // Ne pas fermer le modal "Ajouter à une collection" pour conserver recipeToAdd
+                    // Juste ouvrir le modal de création par-dessus
+                    setShowCreateCollection(true);
+                  }}
+                >
+                  ➕ Créer une collection
+                </button>
+              </div>
             )}
-            <button
-              className="w-full px-4 py-2 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md"
-              onClick={() => {
-                setShowAddToCollection(false);
-                setRecipeToAdd(null);
-              }}
-            >
-              Fermer
-            </button>
+            <div className="flex gap-2">
+              {collections.length > 0 && (
+                <button
+                  className="flex-1 px-4 py-2 rounded-xl bg-[var(--beige-card-alt)] border border-[var(--beige-border)] text-sm text-[var(--text-primary)] font-semibold hover:border-[var(--beige-accent)] transition-colors"
+                  onClick={() => {
+                    // Ne pas fermer le modal "Ajouter à une collection" pour conserver recipeToAdd
+                    // Juste ouvrir le modal de création par-dessus
+                    setShowCreateCollection(true);
+                  }}
+                >
+                  ➕ Créer une collection
+                </button>
+              )}
+              <button
+                className={`px-4 py-2 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md ${collections.length > 0 ? 'flex-1' : 'w-full'}`}
+                onClick={() => {
+                  setShowAddToCollection(false);
+                  setRecipeToAdd(null);
+                }}
+              >
+                Fermer
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Modal de détail de recette */}
       {selectedRecipe && (
-        <div className="fixed inset-0 bg-[#6B2E2E]/70 z-50 flex items-center justify-center">
-          <div className="w-full h-full max-w-md bg-[#FFF0F0] border-l border-r border-[#E8A0A0] overflow-y-auto px-4 pt-4 pb-8">
+        <div className="fixed inset-0 bg-[#6B2E2E]/70 z-[80] flex items-center justify-center" onClick={(e) => {
+          // Fermer si on clique sur le fond
+          if (e.target === e.currentTarget) {
+            if (selectedRecipeFromMenuCreator && selectedRecipeFromMenuCreator.id === selectedRecipe.id) {
+              setSelectedRecipeFromMenuCreator(null);
+            }
+            setSelectedRecipe(null);
+          }
+        }}>
+          <div className="w-full h-full max-w-md bg-[#FFF0F0] border-l border-r border-[#E8A0A0] overflow-y-auto px-4 pt-4 pb-8 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-[#6B2E2E]">
                 {selectedRecipe.nom}
               </h3>
               <button
                 className="text-xs text-[#7A3A3A] hover:text-[#6B2E2E]"
-                onClick={() => setSelectedRecipe(null)}
+                onClick={() => {
+                  if (selectedRecipeFromMenuCreator && selectedRecipeFromMenuCreator.id === selectedRecipe.id) {
+                    setSelectedRecipeFromMenuCreator(null);
+                  }
+                  setSelectedRecipe(null);
+                }}
               >
                 Fermer ✕
               </button>
@@ -1068,8 +1271,9 @@ export default function FavorisPage() {
                     />
                     <div className="absolute top-4 right-4 flex gap-2">
                       <button
-                        className="p-2.5 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all"
-                        onClick={() => {
+                        className="p-2.5 rounded-full bg-white/90 backdrop-blur-md hover:bg-white transition-all pointer-events-auto"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           toggleFavorite(selectedRecipe);
                         }}
                       >
@@ -1197,23 +1401,42 @@ export default function FavorisPage() {
               {/* Bouton pour ajouter/retirer d'une collection */}
               <div className="mb-3 space-y-2">
                 <button
-                  className="w-full px-4 py-3 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#6B5F3F] transition-all shadow-md"
-                  onClick={() => {
+                  className="w-full px-4 py-3 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#6B5F3F] transition-all shadow-md pointer-events-auto cursor-pointer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log("[FavorisPage] Bouton 'Ajouter au menu' cliqué", { selectedRecipe, selectedRecipeFromMenuCreator });
                     if (typeof window !== "undefined" && selectedRecipe) {
-                      // Sauvegarder la recette à ajouter au menu
-                      localStorage.setItem("foodlane_recipe_to_add", JSON.stringify(selectedRecipe));
-                      // Rediriger vers la page du menu
-                      window.location.href = "/menu-semaine";
+                      try {
+                        // Si on vient de l'outil de création de menu, fermer le modal et rediriger
+                        if (selectedRecipeFromMenuCreator && selectedRecipeFromMenuCreator.id === selectedRecipe.id) {
+                          setShowMenuCreator(false);
+                          setSelectedRecipeFromMenuCreator(null);
+                        }
+                        // Sauvegarder la recette à ajouter au menu
+                        localStorage.setItem("foodlane_recipe_to_add", JSON.stringify(selectedRecipe));
+                        console.log("[FavorisPage] Recette sauvegardée dans localStorage:", selectedRecipe.nom);
+                        // Rediriger vers la page du menu
+                        window.location.href = "/menu-semaine";
+                      } catch (error) {
+                        console.error("[FavorisPage] Erreur lors de l'ajout au menu:", error);
+                        alert(`Erreur lors de l'ajout au menu: ${error instanceof Error ? error.message : "Erreur inconnue"}`);
+                      }
+                    } else {
+                      console.warn("[FavorisPage] selectedRecipe est null ou window n'est pas défini");
                     }
                   }}
                 >
                   📅 Ajouter au menu
                 </button>
                 <button
-                  className="w-full px-4 py-3 rounded-xl bg-[var(--beige-card-alt)] border border-[var(--beige-border)] text-sm text-[var(--text-primary)] font-semibold hover:border-[var(--beige-accent)] transition-colors"
-                  onClick={() => {
-                    setRecipeToAdd(selectedRecipe);
-                    setShowAddToCollection(true);
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--beige-card-alt)] border border-[var(--beige-border)] text-sm text-[var(--text-primary)] font-semibold hover:border-[var(--beige-accent)] transition-colors pointer-events-auto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (selectedRecipe) {
+                      setRecipeToAdd(selectedRecipe);
+                      setShowAddToCollection(true);
+                    }
                   }}
                 >
                   📁 Gérer les collections
@@ -1233,17 +1456,197 @@ export default function FavorisPage() {
                 )}
               </div>
 
-              <button
-                className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] border border-[#C03A3A] text-sm font-semibold text-white hover:bg-[#C03A3A] transition-colors"
-                onClick={() => setSelectedRecipe(null)}
-              >
-                Fermer
-              </button>
+              <div className="flex gap-2">
+                {selectedRecipeFromMenuCreator && selectedRecipeFromMenuCreator.id === selectedRecipe.id && (
+                  <button
+                    className="flex-1 px-4 py-3 rounded-xl bg-[var(--beige-card-alt)] border border-[var(--beige-border)] text-sm text-[var(--text-primary)] font-semibold hover:border-[var(--beige-accent)] transition-colors"
+                    onClick={() => {
+                      setSelectedRecipe(null);
+                      setSelectedRecipeFromMenuCreator(null);
+                    }}
+                  >
+                    Retour à la sélection
+                  </button>
+                )}
+                <button
+                  className={`px-4 py-3 rounded-xl bg-[#D44A4A] border border-[#C03A3A] text-sm font-semibold text-white hover:bg-[#C03A3A] transition-colors ${selectedRecipeFromMenuCreator && selectedRecipeFromMenuCreator.id === selectedRecipe.id ? "flex-1" : "w-full"}`}
+                  onClick={() => {
+                    if (selectedRecipeFromMenuCreator && selectedRecipeFromMenuCreator.id === selectedRecipe.id) {
+                      // Si on vient de l'outil de création de menu, fermer le modal aussi
+                      setShowMenuCreator(false);
+                      setSelectedRecipeFromMenuCreator(null);
+                    }
+                    setSelectedRecipe(null);
+                  }}
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* Outil de création de menu */}
+      {showMenuCreator && (
+        <div className={`fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 ${selectedRecipe ? 'pointer-events-none' : ''}`}>
+          <div className={`bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl ${selectedRecipe ? 'pointer-events-none' : ''}`}>
+            {/* En-tête */}
+            <div className="flex items-center justify-between p-4 border-b border-[var(--beige-border)]">
+              <h2 className="text-xl font-bold text-[#6B2E2E]">Créer un menu</h2>
+              <button
+                className="text-[#7A3A3A] hover:text-[#6B2E2E] text-2xl"
+                onClick={() => {
+                  setShowMenuCreator(false);
+                  setSelectedRecipeFromMenuCreator(null);
+                  setSelectedRecipe(null); // Fermer aussi la fiche recette si elle est ouverte
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Filtres et recherche */}
+            <div className="p-4 border-b border-[var(--beige-border)] space-y-3 bg-[var(--beige-rose)]">
+              {/* Barre de recherche */}
+              <input
+                type="text"
+                placeholder="🔍 Rechercher une recette..."
+                value={menuCreatorSearch}
+                onChange={(e) => setMenuCreatorSearch(e.target.value)}
+                className="w-full px-4 py-2 rounded-xl border border-[var(--beige-border)] focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
+              />
+
+              {/* Filtres */}
+              <div className="grid grid-cols-3 gap-2">
+                {/* Filtre type */}
+                <div>
+                  <label className="block text-xs text-[#7A3A3A] mb-1">Type</label>
+                  <select
+                    value={menuCreatorFilters.type}
+                    onChange={(e) => setMenuCreatorFilters({ ...menuCreatorFilters, type: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--beige-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[#D44A4A]"
+                  >
+                    <option value="all">Tous</option>
+                    <option value="sweet">Sucré</option>
+                    <option value="savory">Salé</option>
+                  </select>
+                </div>
+
+                {/* Filtre difficulté */}
+                <div>
+                  <label className="block text-xs text-[#7A3A3A] mb-1">Difficulté</label>
+                  <select
+                    value={menuCreatorFilters.difficulte}
+                    onChange={(e) => setMenuCreatorFilters({ ...menuCreatorFilters, difficulte: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--beige-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[#D44A4A]"
+                  >
+                    <option value="all">Toutes</option>
+                    <option value="Facile">Facile</option>
+                    <option value="Moyen">Moyen</option>
+                    <option value="Difficile">Difficile</option>
+                  </select>
+                </div>
+
+                {/* Filtre temps */}
+                <div>
+                  <label className="block text-xs text-[#7A3A3A] mb-1">Temps max (min)</label>
+                  <input
+                    type="number"
+                    placeholder="∞"
+                    value={menuCreatorFilters.tempsMax}
+                    onChange={(e) => setMenuCreatorFilters({ ...menuCreatorFilters, tempsMax: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--beige-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[#D44A4A]"
+                  />
+                </div>
+              </div>
+
+              {/* Compteur de résultats */}
+              <p className="text-xs text-[#7A3A3A]">
+                {filteredMenuCreatorRecipes.length} recette{filteredMenuCreatorRecipes.length > 1 ? "s" : ""} trouvée{filteredMenuCreatorRecipes.length > 1 ? "s" : ""}
+              </p>
+            </div>
+
+            {/* Liste des recettes */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingMenuRecipes ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-[#7A3A3A]">Chargement des recettes...</p>
+                </div>
+              ) : filteredMenuCreatorRecipes.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-[#7A3A3A]">Aucune recette ne correspond à vos filtres.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  {filteredMenuCreatorRecipes.slice(0, 50).map((recipe) => (
+                    <article
+                      key={recipe.id}
+                      className="cursor-pointer group"
+                      onClick={() => handleSelectRecipeFromMenuCreator(recipe)}
+                    >
+                      {/* Image de la recette */}
+                      <div className="relative w-full aspect-square rounded-2xl overflow-hidden mb-2 bg-gray-100 shadow-md group-hover:shadow-lg transition-shadow">
+                        {recipe.image_url ? (
+                          <RecipeImage
+                            imageUrl={recipe.image_url}
+                            alt={recipe.nom}
+                            className="w-full h-full"
+                            fallbackClassName="rounded-2xl"
+                            priority={false}
+                            sizes="(max-width: 768px) 50vw, 33vw"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-[#FFD9D9] to-[#FFC4C4] flex items-center justify-center rounded-2xl">
+                            <span className="text-4xl">🍽️</span>
+                          </div>
+                        )}
+                        {/* Badge favori */}
+                        <button
+                          className={`absolute top-2 right-2 p-2 rounded-full backdrop-blur-sm transition-all ${
+                            isFavorite(recipe.id)
+                              ? "bg-[#C03A3A]/90 text-white"
+                              : "bg-white/80 text-[#7A3A3A] hover:bg-white"
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(recipe);
+                          }}
+                        >
+                          {isFavorite(recipe.id) ? "★" : "☆"}
+                        </button>
+                        {/* Badges diététiques */}
+                        {detectDietaryBadges(recipe).length > 0 && (
+                          <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1">
+                            {detectDietaryBadges(recipe).slice(0, 2).map((badge) => (
+                              <span
+                                key={badge}
+                                className="px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-[#D44A4A]/95 text-white backdrop-blur-sm"
+                              >
+                                {DIETARY_BADGE_ICONS[badge]} {badge}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Nom et infos */}
+                      <h4 className="font-semibold text-sm text-[#6B2E2E] text-center leading-tight px-1 line-clamp-2 mb-1">
+                        {recipe.nom}
+                      </h4>
+                      <div className="flex items-center justify-center gap-2 text-xs text-[#7A3A3A]">
+                        <span>{recipe.temps_preparation_min} min</span>
+                        <span>•</span>
+                        <span>{recipe.difficulte}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

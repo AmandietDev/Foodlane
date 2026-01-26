@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadPreferences, savePreferences, type UserPreferences } from "../src/lib/userPreferences";
 import { supabase } from "../src/lib/supabaseClient";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
+import { usePremium } from "../contexts/PremiumContext";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
 
@@ -12,9 +13,15 @@ export default function PremiumPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useSupabaseSession();
+  const { isPremium, refreshProfile, loading: premiumLoading } = usePremium();
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<"monthly" | "yearly">("monthly");
+  const [isActivating, setIsActivating] = useState(false);
+  const [activationAttempts, setActivationAttempts] = useState(0);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const maxPollingAttempts = 10; // 10 tentatives max (environ 20 secondes)
 
   useEffect(() => {
     setPreferences(loadPreferences());
@@ -22,21 +29,68 @@ export default function PremiumPage() {
     // Vérifier si l'utilisateur revient de Stripe
     const success = searchParams.get("success");
     const canceled = searchParams.get("canceled");
+    const sessionId = searchParams.get("session_id");
     
-    if (success) {
+    if (success && sessionId) {
       // L'utilisateur a payé avec succès
       // Le webhook Stripe va mettre à jour le statut premium
-      // On peut afficher un message de succès
       setError(null);
-      // Recharger les préférences après un court délai pour laisser le webhook se déclencher
-      setTimeout(() => {
-        const updated = loadPreferences();
-        setPreferences(updated);
-      }, 2000);
+      setIsActivating(true);
+      setActivationAttempts(0);
+      
+      // Rafraîchir immédiatement
+      refreshProfile();
+      
+      // Polling pour vérifier l'activation Premium
+      pollingIntervalRef.current = setInterval(async () => {
+        setActivationAttempts((prev) => {
+          const newAttempts = prev + 1;
+          
+          if (newAttempts >= maxPollingAttempts) {
+            // Arrêter le polling après max tentatives
+            if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+            }
+            setIsActivating(false);
+            return newAttempts;
+          }
+          
+          return newAttempts;
+        });
+        
+        // Rafraîchir le profil (en dehors de setState pour pouvoir utiliser await)
+        await refreshProfile();
+      }, 2000); // Toutes les 2 secondes
+      
+      // Nettoyer l'intervalle au démontage
+      return () => {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+        }
+      };
     } else if (canceled) {
       setError("Paiement annulé. Tu peux réessayer quand tu veux.");
     }
-  }, [searchParams]);
+  }, [searchParams, refreshProfile]);
+
+  // Arrêter le polling si Premium est activé
+  useEffect(() => {
+    if (isPremium && isActivating) {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      setIsActivating(false);
+      
+      // Rediriger vers une page de succès ou rafraîchir après un court délai
+      setTimeout(() => {
+        router.refresh();
+        // Optionnel : rediriger vers une fonctionnalité Premium
+        // router.push("/menu-semaine");
+      }, 1000);
+    }
+  }, [isPremium, isActivating, router]);
 
   const handleSubscribe = async () => {
     // Vérifications préalables
@@ -72,7 +126,7 @@ export default function PremiumPage() {
         body: JSON.stringify({
           userId: user.id,
           email: userEmail,
-          plan: "monthly", // Par défaut, plan mensuel
+          plan: plan, // Plan choisi par l'utilisateur (monthly ou yearly)
         }),
       });
 
@@ -165,10 +219,54 @@ export default function PremiumPage() {
         )}
         
         {searchParams.get("success") && !error && (
-          <div className="mt-4 p-3 rounded-xl bg-green-50 border border-green-200">
-            <p className="text-xs text-center text-green-700">
-              ✅ <strong>Paiement réussi !</strong> Ton abonnement Premium est en cours d'activation...
-            </p>
+          <div className="mt-4 p-4 rounded-xl bg-green-50 border border-green-200">
+            {isPremium ? (
+              <div className="text-center">
+                <p className="text-sm font-semibold text-green-700 mb-2">
+                  ✅ <strong>Premium activé !</strong>
+                </p>
+                <p className="text-xs text-green-600">
+                  Ton abonnement Premium est maintenant actif. Tu peux accéder à toutes les fonctionnalités Premium.
+                </p>
+              </div>
+            ) : isActivating ? (
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                  <p className="text-sm font-semibold text-green-700">
+                    Paiement validé. Activation en cours...
+                  </p>
+                </div>
+                <p className="text-xs text-green-600">
+                  Nous vérifions ton paiement ({activationAttempts}/{maxPollingAttempts})...
+                </p>
+                <button
+                  onClick={async () => {
+                    await refreshProfile();
+                    router.refresh();
+                  }}
+                  className="mt-2 text-xs text-green-700 underline hover:text-green-800"
+                >
+                  Actualiser maintenant
+                </button>
+              </div>
+            ) : (
+              <div className="text-center">
+                <p className="text-xs text-center text-green-700">
+                  ✅ <strong>Paiement réussi !</strong> Ton abonnement Premium est en cours d'activation...
+                </p>
+                <button
+                  onClick={async () => {
+                    setIsActivating(true);
+                    await refreshProfile();
+                    router.refresh();
+                  }}
+                  className="mt-2 text-xs text-green-700 underline hover:text-green-800"
+                >
+                  Vérifier l'activation
+                </button>
+              </div>
+            )}
           </div>
         )}
       </header>
@@ -181,11 +279,50 @@ export default function PremiumPage() {
           <p className="text-sm opacity-90 mb-4">
             Accède à toutes les fonctionnalités avancées
           </p>
-          <div className="flex items-baseline justify-center gap-2">
-            <span className="text-3xl font-bold">9,99€</span>
-            <span className="text-sm opacity-80">/ mois</span>
+          
+          {/* Sélection du plan : Mensuel / Annuel */}
+          <div className="mb-4">
+            <div className="flex gap-2 justify-center mb-3">
+              <button
+                onClick={() => setPlan("monthly")}
+                className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                  plan === "monthly"
+                    ? "bg-white text-[#D44A4A] shadow-lg"
+                    : "bg-white/20 text-white hover:bg-white/30"
+                }`}
+              >
+                Mensuel
+              </button>
+              <button
+                onClick={() => setPlan("yearly")}
+                className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                  plan === "yearly"
+                    ? "bg-white text-[#D44A4A] shadow-lg"
+                    : "bg-white/20 text-white hover:bg-white/30"
+                }`}
+              >
+                Annuel
+              </button>
+            </div>
+            {plan === "yearly" && (
+              <p className="text-xs opacity-90 font-semibold">
+                💰 Économisez 34% avec l'abonnement annuel
+              </p>
+            )}
           </div>
-          <p className="text-xs opacity-75 mt-2">ou 79€ / an (économisez 34%)</p>
+
+          {/* Prix affiché selon le plan */}
+          <div className="flex items-baseline justify-center gap-2">
+            <span className="text-3xl font-bold">
+              {plan === "monthly" ? "9,99€" : "79€"}
+            </span>
+            <span className="text-sm opacity-80">
+              / {plan === "monthly" ? "mois" : "an"}
+            </span>
+          </div>
+          {plan === "monthly" && (
+            <p className="text-xs opacity-75 mt-2">ou 79€ / an (économisez 34%)</p>
+          )}
         </div>
       </div>
 

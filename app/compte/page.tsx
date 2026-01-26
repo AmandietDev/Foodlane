@@ -10,12 +10,17 @@ import {
   logout,
 } from "../src/lib/userPreferences";
 import { supabase, isSupabaseConfigured } from "../src/lib/supabaseClient";
+import { useSupabaseSession } from "../hooks/useSupabaseSession";
+import { usePremium } from "../contexts/PremiumContext";
 import ErrorMessage from "../components/ErrorMessage";
 
 export default function AccountPage() {
   const router = useRouter();
+  const { user } = useSupabaseSession();
+  const { isPremium, refreshProfile } = usePremium();
   const [isEditing, setIsEditing] = useState(false);
   const [isNewAccount, setIsNewAccount] = useState(false);
+  const [loadingPortal, setLoadingPortal] = useState(false);
   const [formData, setFormData] = useState<UserPreferences>(() => {
     if (typeof window !== "undefined") {
       return loadPreferences();
@@ -400,6 +405,53 @@ export default function AccountPage() {
             >
               Modifier mon profil
             </button>
+            
+            {/* Section Compte - Gestion d'abonnement (discret) */}
+            {isPremium && user && (
+              <div className="pt-3 border-t border-[var(--beige-border)]">
+                <p className="text-xs text-[var(--beige-text-muted)] mb-2 text-center">
+                  Compte Premium actif
+                </p>
+                <button
+                  onClick={async () => {
+                    if (!user) return;
+                    
+                    setLoadingPortal(true);
+                    try {
+                      const response = await fetch("/api/billing/portal", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ userId: user.id }),
+                      });
+
+                      if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || "Erreur lors de l'ouverture du portail");
+                      }
+
+                      const { url } = await response.json();
+                      if (url) {
+                        // Ouvrir dans un nouvel onglet pour permettre de revenir facilement à l'app
+                        window.open(url, '_blank');
+                      } else {
+                        throw new Error("URL du portail non reçue");
+                      }
+                    } catch (error) {
+                      console.error("[Account] Erreur portal:", error);
+                      alert(error instanceof Error ? error.message : "Erreur lors de l'ouverture du portail de gestion");
+                      setLoadingPortal(false);
+                    }
+                  }}
+                  disabled={loadingPortal}
+                  className="w-full py-2 px-4 text-xs text-[var(--beige-text-muted)] hover:text-[var(--foreground)] transition-colors underline disabled:opacity-50"
+                >
+                  {loadingPortal ? "Chargement..." : "Gérer mon abonnement"}
+                </button>
+              </div>
+            )}
+            
             <button
               onClick={async () => {
                 if (confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {

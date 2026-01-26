@@ -35,6 +35,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validation stricte du plan (allowlist)
+    const allowedPlans = ["monthly", "yearly"] as const;
+    if (!allowedPlans.includes(plan as typeof allowedPlans[number])) {
+      console.error("[Checkout] Plan invalide:", plan);
+      return NextResponse.json(
+        { error: `Plan invalide. Valeurs autorisées: ${allowedPlans.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
     // Vérifier que la clé Stripe est configurée
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeSecretKey) {
@@ -94,17 +104,19 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: "subscription", // Mode abonnement récurrent
-      success_url: `${origin}/premium?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/premium?canceled=true`,
-      // Metadata importante : stocker l'email et userId pour le webhook
+      success_url: `${origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/billing/cancel`,
+      // Metadata importante : stocker l'email, userId et plan pour le webhook
       metadata: {
         userId: userId,
         email: email, // Email dans les metadata pour le webhook
+        plan: plan, // Plan choisi (monthly ou yearly) pour traçabilité
       },
       subscription_data: {
         metadata: {
           userId: userId,
           email: email, // Email aussi dans les metadata de l'abonnement
+          plan: plan, // Plan choisi (monthly ou yearly) pour traçabilité
         },
       },
     });

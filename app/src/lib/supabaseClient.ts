@@ -1,35 +1,43 @@
 import { createClient } from "@supabase/supabase-js";
 
+// Récupérer les variables d'environnement
+// Note: En production, ces variables sont injectées au moment du BUILD
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 
-if (!isSupabaseConfigured) {
-  const isProduction = typeof window !== "undefined" && window.location.hostname !== "localhost";
-  const errorMessage = isProduction
-    ? `[SupabaseClient] Variables d'environnement manquantes sur Vercel.
-    
-⚠️ IMPORTANT : Les variables d'environnement sont chargées au moment du BUILD.
-Si vous venez d'ajouter les variables dans Vercel, vous DEVEZ redéployer :
+// Fonction pour vérifier et logger les variables (utile pour le debug)
+if (typeof window !== "undefined") {
+  // Côté client uniquement
+  if (!isSupabaseConfigured) {
+    console.error(
+      `[SupabaseClient] Variables d'environnement manquantes côté client.
+      
+🔍 Diagnostic:
+- NEXT_PUBLIC_SUPABASE_URL: ${supabaseUrl ? "✅ Présent" : "❌ Manquant"}
+- NEXT_PUBLIC_SUPABASE_ANON_KEY: ${supabaseAnonKey ? "✅ Présent" : "❌ Manquant"}
 
-1. Allez dans Vercel → Deployments
-2. Cliquez sur les 3 points (⋯) du dernier déploiement
-3. Sélectionnez "Redeploy"
-4. Attendez la fin du build
+⚠️ SOLUTION:
+1. Vérifiez Vercel → Settings → Environment Variables
+2. Vérifiez que les variables sont pour Production, Preview, ET Development
+3. Redéployez en allant dans Deployments → 3 points (⋯) → Redeploy
+4. Attendez la fin du build (2-5 minutes)
+5. Videz le cache du navigateur (Ctrl+Shift+R)
 
-Vérifiez aussi que :
-- Les variables sont dans Vercel → Settings → Environment Variables
-- Vous avez coché Production, Preview, ET Development
-- Les noms sont exactement : NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-Pour vérifier : visitez /api/debug-env`
-    : "[SupabaseClient] Variables d'environnement manquantes. Créez un fichier .env.local à la racine du projet avec NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY. Voir .env.example pour référence.";
-  console.error(errorMessage);
+Pour vérifier côté serveur: visitez /api/debug-env`
+    );
+  } else {
+    // Log de confirmation en mode développement uniquement
+    if (process.env.NODE_ENV === "development") {
+      console.log("[SupabaseClient] ✅ Variables d'environnement configurées correctement");
+    }
+  }
 }
 
-// Créer le client même si les variables sont manquantes (pour éviter les crashes)
-// Les erreurs seront gérées dans les hooks
+// Créer le client Supabase
+// Si les variables sont manquantes, on utilise des placeholders pour éviter les crashes
+// Les erreurs seront gérées dans les composants qui utilisent Supabase
 export const supabase = createClient(
   supabaseUrl || "https://placeholder.supabase.co",
   supabaseAnonKey || "placeholder-key"

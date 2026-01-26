@@ -105,11 +105,12 @@ export function useSupabaseSession(): SessionState {
         let profile = null;
         try {
           // Timeout de 2 secondes pour la requête du profil (non bloquant)
+          // Utiliser select avec les colonnes exactes pour éviter l'erreur 406
           const profilePromise = supabase
             .from("profiles")
-            .select("id, full_name")
+            .select("id, full_name, email")
             .eq("id", session.user.id)
-            .single();
+            .maybeSingle(); // Utiliser maybeSingle() au lieu de single() pour éviter l'erreur si le profil n'existe pas
 
           const profileResult = await Promise.race([
             profilePromise,
@@ -121,14 +122,15 @@ export function useSupabaseSession(): SessionState {
           const { data, error: profileError } = profileResult;
 
           if (profileError) {
-            if (profileError.code === "PGRST116") {
+            if (profileError.code === "PGRST116" || profileError.code === "PGRST116") {
               // PGRST116 = pas de ligne trouvée (normal si le profil n'existe pas encore)
               // On continue sans profil
             } else if (profileError.code === "TIMEOUT") {
               // Timeout - on continue sans profil pour ne pas bloquer
               console.warn("[useSupabaseSession] Timeout lors du chargement du profil, continuation sans profil");
             } else {
-              console.error("[useSupabaseSession] Erreur lors du chargement du profil:", profileError);
+              // Log l'erreur mais continue sans bloquer
+              console.warn("[useSupabaseSession] Erreur lors du chargement du profil (non bloquant):", profileError.code, profileError.message);
             }
           } else {
             profile = data;
@@ -190,9 +192,9 @@ export function useSupabaseSession(): SessionState {
           try {
             const profilePromise = supabase
               .from("profiles")
-              .select("id, full_name")
+              .select("id, full_name, email")
               .eq("id", session.user.id)
-              .single();
+              .maybeSingle(); // Utiliser maybeSingle() au lieu de single()
 
             const profileResult = await Promise.race([
               profilePromise,
