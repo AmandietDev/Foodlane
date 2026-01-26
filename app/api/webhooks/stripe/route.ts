@@ -595,34 +595,35 @@ export async function POST(request: NextRequest) {
           break;
         }
 
-        // Récupérer la subscription pour obtenir le plan
+        // Récupérer la subscription pour obtenir le plan et la date de fin
         let premiumPlan: "monthly" | "yearly" | null = null;
+        let premiumEndDate: string | null = null;
+
         if (subscriptionId) {
           try {
             const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
               expand: ["items.data.price"],
             });
             premiumPlan = getPremiumPlanFromSubscription(subscription);
-            console.log(
-              `[StripeWebhook] 📦 Subscription détails: premiumPlan=${premiumPlan}`
-            );
+            premiumEndDate = subscription.current_period_end
+              ? new Date(subscription.current_period_end * 1000).toISOString()
+              : null;
+            console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}`);
           } catch (err) {
-            console.error(`[StripeWebhook] ❌ Erreur lors de la récupération de la subscription ${subscriptionId}:`, err);
+            console.error(`[WEBHOOK] ❌ Erreur lors de la récupération de la subscription:`, err);
+            break;
           }
         }
 
-        // Mettre à jour la date de fin de l'abonnement (prolonger d'un mois)
-        const nextPeriodEnd = invoice.period_end
-          ? new Date(invoice.period_end * 1000).toISOString()
-          : null;
+        if (!premiumPlan) {
+          console.error(`[WEBHOOK] ❌ Impossible de déterminer le plan premium`);
+          break;
+        }
 
         const updateData: any = {
           premium_active: true,
           premium_plan: premiumPlan,
-          premium_start_date: invoice.period_start
-            ? new Date(invoice.period_start * 1000).toISOString()
-            : undefined,
-          premium_end_date: nextPeriodEnd,
+          premium_end_date: premiumEndDate,
         };
 
         let updatedProfile = null;
