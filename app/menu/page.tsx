@@ -141,6 +141,7 @@ export default function MenuPage() {
     nom: "",
     prenom: "",
     email: "",
+    telephone: "",
     objet: "",
     message: "",
   });
@@ -352,6 +353,7 @@ export default function MenuPage() {
         nom: "",
         prenom: "",
         email: "",
+        telephone: "",
         objet: "",
         message: "",
       });
