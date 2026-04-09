@@ -300,7 +300,7 @@ export default function FavorisPage() {
     // Filtre par type (sucré/salé)
     if (menuCreatorFilters.type !== "all") {
       const normalizeType = (type: string): string => (type || "").toLowerCase().trim();
-      const recipeType = normalizeType(recipe.type);
+      const recipeType = normalizeType(recipe.type ?? "");
       if (menuCreatorFilters.type === "sweet") {
         if (!recipeType.includes("sucré") && !recipeType.includes("sucree") && !recipeType.includes("sucr")) {
           return false;
@@ -322,7 +322,7 @@ export default function FavorisPage() {
     // Filtre par temps maximum
     if (menuCreatorFilters.tempsMax && menuCreatorFilters.tempsMax !== "") {
       const tempsMax = parseInt(menuCreatorFilters.tempsMax);
-      if (recipe.temps_preparation_min > tempsMax) {
+      if ((recipe.temps_preparation_min ?? 0) > tempsMax) {
         return false;
       }
     }
@@ -433,7 +433,7 @@ export default function FavorisPage() {
 
   function getCollectionImage(collection: Collection): string | undefined {
     const recipes = getCollectionRecipes(collection);
-    return recipes.find((r) => r.image_url)?.image_url;
+    return recipes.find((r) => r.image_url)?.image_url ?? undefined;
   }
 
   const displayRecipes = selectedCollection
@@ -1435,7 +1435,7 @@ export default function FavorisPage() {
               </h2>
 
               <div className="grid grid-cols-4 gap-3 mb-4 pb-4 border-b border-[#E8A0A0]">
-                {selectedRecipe.temps_preparation_min > 0 && (
+                {(selectedRecipe.temps_preparation_min ?? 0) > 0 && (
                   <div className="text-center">
                     <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] flex items-center justify-center mx-auto mb-2 shadow-md">
                       <span className="text-white text-lg">⏱</span>
@@ -1482,7 +1482,7 @@ export default function FavorisPage() {
                   <h3 className="text-lg font-bold text-[#6B2E2E] uppercase tracking-wide">Ingrédients</h3>
                 </div>
                 <ul className="space-y-2">
-                  {selectedRecipe.ingredients
+                  {(selectedRecipe.ingredients ?? "")
                     .split(";")
                     .filter((item) => item.trim().length > 0)
                     .map((item, idx) => {
@@ -1500,7 +1500,7 @@ export default function FavorisPage() {
               <div className="mb-6">
                 <h3 className="text-lg font-bold text-[#6B2E2E] uppercase tracking-wide mb-4">Préparation</h3>
                 <ol className="space-y-3">
-                  {selectedRecipe.instructions
+                  {(selectedRecipe.instructions ?? "")
                     .split(";")
                     .filter((item) => item.trim().length > 0)
                     .map((item, idx) => {

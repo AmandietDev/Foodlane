@@ -22,6 +22,7 @@ type PlanRecipe = {
   type?: string;
   difficulte?: string;
   temps_preparation_min?: number;
+  categorie_temps?: string | null;
   description?: string;
   description_courte?: string;
   calories?: number;
@@ -30,6 +31,7 @@ type PlanRecipe = {
   equipements?: string;
   nombre_personnes?: number;
   image_url?: string | null;
+  created_at?: string;
 };
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
@@ -50,7 +52,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 function sanitizePlanRecipes(
   plan: NonNullable<Awaited<ReturnType<typeof buildWeeklyPlanWithAi>>> | ReturnType<typeof buildWeeklyPlan>
 ) {
-  plan.days = plan.days.map((day) => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (plan as any).days = plan.days.map((day) => ({
     ...day,
     meals: day.meals.map((meal) => {
       const payload = (meal.recipe_payload || {}) as PlanRecipe;

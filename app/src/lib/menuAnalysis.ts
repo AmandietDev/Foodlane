@@ -45,7 +45,7 @@ export function analyzeMenu(menu: WeeklyMenu, recipes: Recipe[]): MenuAdvice[] {
 
   // Analyser les ingrédients pour détecter les groupes alimentaires
   const allIngredients = menuRecipes
-    .map((r) => r.ingredients.toLowerCase())
+    .map((r) => (r.ingredients ?? "").toLowerCase())
     .join(" ");
 
   // Détecter les légumes

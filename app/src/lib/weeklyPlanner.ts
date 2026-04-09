@@ -238,12 +238,12 @@ function preferSweetForMeal(meal: PlannerMealType): boolean {
 }
 
 function isSavoryRecipe(r: Recipe): boolean {
-  const t = normalize(r.type);
+  const t = normalize(r.type || "");
   return t.includes("sale") || t.includes("salé") || (!t.includes("sucre") && !t.includes("sucré"));
 }
 
 function isSweetRecipe(r: Recipe): boolean {
-  const t = normalize(r.type);
+  const t = normalize(r.type || "");
   return t.includes("sucre") || t.includes("sucré");
 }
 

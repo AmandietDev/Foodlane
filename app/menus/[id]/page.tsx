@@ -371,7 +371,7 @@ export default function MenuDetailPage() {
               <div>
                 <h4 className="font-semibold text-[#6B2E2E] mb-2">Ingrédients ajustés</h4>
                 <ul className="space-y-1.5 text-sm text-[#6B2E2E]">
-                  {selectedRecipe.ingredients
+                  {(selectedRecipe.ingredients ?? "")
                     .split(";")
                     .map((x) => x.trim())
                     .filter(Boolean)
@@ -387,7 +387,7 @@ export default function MenuDetailPage() {
               <div>
                 <h4 className="font-semibold text-[#6B2E2E] mb-2">Étapes</h4>
                 <ol className="space-y-2 text-sm text-[#6B2E2E]">
-                  {selectedRecipe.instructions
+                  {(selectedRecipe.instructions ?? "")
                     .split(";")
                     .map((x) => x.trim())
                     .filter(Boolean)

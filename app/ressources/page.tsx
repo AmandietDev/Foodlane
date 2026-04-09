@@ -412,7 +412,7 @@ export default function RessourcesPage() {
             <div className="mb-3">
               <h4 className="font-semibold text-sm mb-1">Ingrédients</h4>
               <ul className="list-disc list-inside space-y-1 text-xs text-[#726566]">
-                {selectedRecipe.ingredients.split(";").map((item, idx) => {
+                {(selectedRecipe.ingredients ?? "").split(";").map((item, idx) => {
                   const trimmed = item.trim();
                   if (!trimmed) return null;
                   return <li key={`ing-${idx}`}>{trimmed}</li>;
@@ -423,7 +423,7 @@ export default function RessourcesPage() {
             <div className="mb-3">
               <h4 className="font-semibold text-sm mb-1">Étapes</h4>
               <ol className="space-y-3 text-xs text-[#726566]">
-                {selectedRecipe.instructions.split(";").map((item, idx) => {
+                {(selectedRecipe.instructions ?? "").split(";").map((item, idx) => {
                   const trimmed = item.trim();
                   if (!trimmed) return null;
                   return (

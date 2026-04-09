@@ -46,22 +46,22 @@ export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
     .filter((row) => row["Nom de la recette"])
     .map((row) => ({
       id: Number(row["ID"] || 0),
-      type: row["Type (sucré/salé)"] || null,
-      difficulte: row["Difficulté (Facile/Moyen/Difficile)"] || null,
+      type: row["Type (sucré/salé)"] ? String(row["Type (sucré/salé)"]) : null,
+      difficulte: row["Difficulté (Facile/Moyen/Difficile)"] ? String(row["Difficulté (Facile/Moyen/Difficile)"]) : null,
       temps_preparation_min: row["Temps de préparation (min)"]
         ? Number(row["Temps de préparation (min)"])
         : null,
-      categorie_temps: row["Catégorie temps (sélection)"] || null,
+      categorie_temps: row["Catégorie temps (sélection)"] ? String(row["Catégorie temps (sélection)"]) : null,
       nombre_personnes: row["Nombre de personnes"]
         ? Number(row["Nombre de personnes"])
         : null,
-      nom_recette: row["Nom de la recette"] || null,
-      description_courte: row["Description courte"] || null,
-      ingredients: row["Ingrédients + quantités (séparés par ;)"] || null,
-      instructions: row["Instructions (étapes séparées par ;)"] || null,
-      equipements: row["Équipements nécessaires (séparés par ;)"] || null,
+      nom_recette: row["Nom de la recette"] ? String(row["Nom de la recette"]) : null,
+      description_courte: row["Description courte"] ? String(row["Description courte"]) : null,
+      ingredients: row["Ingrédients + quantités (séparés par ;)"] ? String(row["Ingrédients + quantités (séparés par ;)"]) : null,
+      instructions: row["Instructions (étapes séparées par ;)"] ? String(row["Instructions (étapes séparées par ;)"]) : null,
+      equipements: row["Équipements nécessaires (séparés par ;)"] ? String(row["Équipements nécessaires (séparés par ;)"]) : null,
       calories: row["Calories (pour une portion)"] ? Number(row["Calories (pour une portion)"]) : null,
-      image_url: row["image_url"] || null,
+      image_url: row["image_url"] ? String(row["image_url"]) : null,
       created_at: new Date().toISOString(),
     }));
 

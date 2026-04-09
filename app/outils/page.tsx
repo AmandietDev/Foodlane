@@ -137,7 +137,7 @@ export default function OutilsPage() {
                   >
                     <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
                       <RecipeImage 
-                        imageUrl={recipe.image_url} 
+                        imageUrl={recipe.image_url ?? undefined}
                         alt={recipe.nom_recette || "Recette"}
                         className="h-full w-full"
                       />
