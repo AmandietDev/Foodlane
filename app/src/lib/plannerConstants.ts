@@ -19,9 +19,18 @@ export const COOKING_TIME_OPTIONS = [
   { key: "15_30", label: "15 à 30 min", maxMinutes: 30 },
   { key: "30_45", label: "30 à 45 min", maxMinutes: 45 },
   { key: "45_plus", label: "45 min et plus", maxMinutes: 999 },
+  { key: "peu_importe", label: "Peu importe", maxMinutes: 9999 },
 ] as const;
 
 export type CookingTimeKey = (typeof COOKING_TIME_OPTIONS)[number]["key"];
+
+export const BREAKFAST_PREFERENCE_OPTIONS = [
+  { key: "sweet", label: "🍯 Sucré" },
+  { key: "savory", label: "🥚 Salé" },
+  { key: "both", label: "🌅 Les deux" },
+] as const;
+
+export type BreakfastPreferenceKey = (typeof BREAKFAST_PREFERENCE_OPTIONS)[number]["key"];
 
 export const COOKING_SKILL_OPTIONS = [
   { key: "debutant", label: "Débutant" },

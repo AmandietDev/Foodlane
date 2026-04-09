@@ -121,14 +121,27 @@ export async function POST(request: NextRequest) {
 
   const merged = mergePlannerPreferences(basePrefs, body.overrides || {});
 
+  // Récupérer les recettes non aimées par l'utilisateur
+  const { data: dislikedRows } = await supabaseAdmin
+    .from("user_disliked_recipes")
+    .select("recipe_id")
+    .eq("user_id", userId);
+  const dislikedIds = new Set<number>((dislikedRows || []).map((r) => Number(r.recipe_id)));
+
   const now = Date.now();
-  const recipes =
+  let allRecipes =
     recipesCache && now - recipesCache.at < RECIPES_TTL_MS
       ? recipesCache.data
       : await fetchRecipes().then((data) => {
           recipesCache = { at: now, data };
           return data;
         });
+
+  // Exclure les recettes non aimées
+  const recipes = dislikedIds.size > 0
+    ? allRecipes.filter((r) => !dislikedIds.has(r.id))
+    : allRecipes;
+
   const openaiKey = process.env.OPENAI_API_KEY;
   const shouldUseAi = Boolean(openaiKey);
   const aiPlan = shouldUseAi

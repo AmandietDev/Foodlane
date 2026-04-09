@@ -76,20 +76,51 @@ export async function buildWeeklyPlanWithAi(
     !prefs.dietary_filters.includes("vegetarien") &&
     !prefs.dietary_filters.includes("vegan");
 
+  const breakfastPrefFr =
+    prefs.breakfast_preference === "sweet"
+      ? "UNIQUEMENT sucré (céréales, crêpes, porridge, pain, viennoiserie, fruits)"
+      : prefs.breakfast_preference === "savory"
+      ? "UNIQUEMENT salé (œufs, toast salé, légumes, fromage)"
+      : "sucré ou salé selon la recette";
+
+  const seasonNames: Record<string, string> = {
+    printemps: "printemps (mars-mai)",
+    ete: "été (juin-août)",
+    automne: "automne (septembre-novembre)",
+    hiver: "hiver (décembre-février)",
+  };
+  const currentSeason = getCurrentSeason();
+  const seasonLabel = seasonNames[currentSeason] || currentSeason;
+
   const system = `Tu es un nutritionniste et chef cuisinier expert.
 Tu dois générer un plan alimentaire sur N jours pour un utilisateur dont voici le profil.
 
-Contraintes obligatoires :
-- Respecter les allergies et intolérances (aucune exception) : n'utiliser QUE des recipe_id de la liste fournie.
-- Maximum 2 repas avec viande rouge (bœuf, porc, agneau, cheval) sur toute la semaine.
-- Minimum 1 repas à base de poisson sur la semaine (sauf si le profil exclut le poisson).
-- Minimum 2 repas végétariens sur la semaine (pas de viande ni poisson), sauf si le profil indique un utilisateur explicitement très carnivore (flag fourni).
-- Alterner les sources de protéines d'un jour à l'autre.
-- Ne pas répéter la même protéine dominante sur deux repas le même jour (ex. éviter saumon au déjeuner et saumon au dîner) ; varier poisson, volaille, viande ou plat végétal.
-- Adapter les repas à l'objectif santé et au temps de préparation disponible.
-- Assurer un équilibre nutritionnel quotidien (protéines, fibres/légumes, glucides complexes, lipides de qualité).
-- Varier les types de plats et saveurs.
-- Pour chaque créneau repas, choisir exactement UNE recette par son recipe_id présent dans le catalogue.
+CONTRAINTES OBLIGATOIRES :
+1. Respecter les allergies et intolérances (aucune exception) : n'utiliser QUE des recipe_id de la liste fournie.
+2. Maximum 2 repas avec viande rouge (bœuf, porc, agneau, cheval) sur toute la semaine.
+3. Minimum 1 repas à base de poisson sur la semaine (sauf si le profil exclut le poisson).
+4. Minimum 2 repas végétariens sur la semaine (pas de viande ni poisson), sauf si carnivore explicite.
+5. Alterner les sources de protéines d'un jour à l'autre.
+6. Ne pas répéter la même protéine dominante sur deux repas le même jour.
+7. Adapter les repas à l'objectif santé et au temps de préparation disponible.
+8. Assurer un équilibre nutritionnel quotidien (protéines, fibres/légumes, glucides complexes, lipides de qualité).
+
+DIVERSITÉ (CRITIQUE) :
+- Ne jamais proposer deux recettes du même type de plat sur la semaine (ex. pas 2 gratins, pas 2 quiches, pas 2 pizzas, pas 2 tartes, pas 2 salades niçoise).
+- Varier les méthodes de cuisson : rôti, sauté, mijoté, grillé, vapeur, cru.
+- Varier les cuisines : méditerranéenne, asiatique, française, mexicaine, etc.
+- Utiliser le maximum de recettes différentes du catalogue — ne jamais réutiliser la même recette deux fois.
+- Varier les féculents (riz, pâtes, quinoa, pommes de terre, etc.) au fil de la semaine.
+
+SAISON (IMPORTANT) :
+- Nous sommes en ${seasonLabel}. Privilégier fortement les recettes avec des ingrédients de saison.
+- Éviter les fruits et légumes hors saison quand des alternatives saisonnières existent dans le catalogue.
+
+PETIT-DÉJEUNER :
+- Préférence de l'utilisateur : ${breakfastPrefFr}.
+- Choisir des recettes réellement adaptées au petit-déjeuner (pas de plats du soir).
+
+Pour chaque créneau repas, choisir exactement UNE recette par son recipe_id présent dans le catalogue.
 
 Réponds UNIQUEMENT en JSON objet :
 {

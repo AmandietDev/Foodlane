@@ -102,7 +102,7 @@ export default function TableauPage() {
             Bonjour{firstName ? `, ${firstName}` : ""} !
           </h1>
           <p className="text-base text-[#7A3A3A] font-medium">
-            Génère ton menu de la semaine selon tes envies et ton profil.
+            Génère ton menu de la semaine.
           </p>
         </header>
 
@@ -128,7 +128,7 @@ export default function TableauPage() {
                 Génération de menus
               </h3>
               <p className="text-sm text-white mt-1.5 leading-snug max-w-[300px] drop-shadow-sm">
-                Crée un planning clair de tes repas, puis récupère ta liste de courses.
+                Menu personnalisé selon tes envies et préférences, avec liste de courses incluse.
               </p>
             </div>
           </div>

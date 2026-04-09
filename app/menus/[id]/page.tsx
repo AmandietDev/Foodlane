@@ -68,6 +68,8 @@ export default function MenuDetailPage() {
   const [savedInCarnet, setSavedInCarnet] = useState(false);
   const [householdSize, setHouseholdSize] = useState(2);
   const [savingCarnet, setSavingCarnet] = useState(false);
+  const [dislikedIds, setDislikedIds] = useState<Set<number>>(new Set());
+  const [dislikingId, setDislikingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -116,6 +118,26 @@ export default function MenuDetailPage() {
     if (res.ok) {
       setGroceryItems((prev) => prev.filter((x) => x.id !== item.id));
     }
+  }
+
+  async function dislikeRecipe(recipeId: number, recipeName: string) {
+    if (dislikingId === recipeId) return;
+    setDislikingId(recipeId);
+    const already = dislikedIds.has(recipeId);
+    const method = already ? "DELETE" : "POST";
+    const res = await plannerFetch("/disliked-recipes", {
+      method,
+      body: JSON.stringify({ recipe_id: recipeId, recipe_name: recipeName }),
+    });
+    if (res.ok) {
+      setDislikedIds((prev) => {
+        const next = new Set(prev);
+        if (already) next.delete(recipeId);
+        else next.add(recipeId);
+        return next;
+      });
+    }
+    setDislikingId(null);
   }
 
   async function saveInCarnet() {
@@ -249,6 +271,19 @@ export default function MenuDetailPage() {
                               ))}
                             </div>
                           )}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); dislikeRecipe(r.id, m.recipe_name); }}
+                            disabled={dislikingId === r.id}
+                            title={dislikedIds.has(r.id) ? "Retirer des recettes exclues" : "Ne plus proposer cette recette"}
+                            className={`mt-1 text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                              dislikedIds.has(r.id)
+                                ? "bg-[#6B2E2E] text-white border-[#6B2E2E]"
+                                : "text-[#9a7a7a] border-[#E8D5D5] hover:border-[#D44A4A] hover:text-[#D44A4A]"
+                            }`}
+                          >
+                            {dislikedIds.has(r.id) ? "✓ Recette exclue" : "👎 Ne plus proposer"}
+                          </button>
                         </div>
                       </li>
                     );

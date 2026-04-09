@@ -412,39 +412,56 @@ export default function AccountPage() {
                 <button
                   onClick={async () => {
                     if (!user) return;
-                    
                     setLoadingPortal(true);
                     try {
                       const response = await fetch("/api/billing/portal", {
                         method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
+                        headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ userId: user.id }),
                       });
-
                       if (!response.ok) {
                         const errorData = await response.json();
                         throw new Error(errorData.error || "Erreur lors de l'ouverture du portail");
                       }
-
                       const { url } = await response.json();
-                      if (url) {
-                        // Ouvrir dans un nouvel onglet pour permettre de revenir facilement à l'app
-                        window.open(url, '_blank');
-                      } else {
-                        throw new Error("URL du portail non reçue");
-                      }
+                      if (url) window.open(url, "_blank");
+                      else throw new Error("URL du portail non reçue");
                     } catch (error) {
                       console.error("[Account] Erreur portal:", error);
                       alert(error instanceof Error ? error.message : "Erreur lors de l'ouverture du portail de gestion");
+                    } finally {
                       setLoadingPortal(false);
                     }
                   }}
                   disabled={loadingPortal}
-                  className="w-full py-2 px-4 text-xs text-[var(--beige-text-muted)] hover:text-[var(--foreground)] transition-colors underline disabled:opacity-50"
+                  className="w-full py-2 px-4 text-sm font-medium text-white bg-[#D44A4A] hover:bg-[#C03A3A] rounded-xl transition-colors disabled:opacity-50"
                 >
                   {loadingPortal ? "Chargement..." : "Gérer mon abonnement"}
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!user) return;
+                    if (!confirm("Confirmer la résiliation de ton abonnement Premium ? Tu perdras l'accès aux fonctionnalités premium à la fin de la période en cours.")) return;
+                    setLoadingPortal(true);
+                    try {
+                      const response = await fetch("/api/billing/portal", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ userId: user.id }),
+                      });
+                      if (!response.ok) throw new Error("Erreur portail");
+                      const { url } = await response.json();
+                      if (url) window.open(url, "_blank");
+                    } catch {
+                      alert("Impossible d'ouvrir le portail de résiliation.");
+                    } finally {
+                      setLoadingPortal(false);
+                    }
+                  }}
+                  disabled={loadingPortal}
+                  className="w-full py-2 px-4 text-xs text-[var(--beige-text-muted)] hover:text-red-600 transition-colors underline disabled:opacity-50"
+                >
+                  Résilier mon abonnement
                 </button>
               </div>
             )}

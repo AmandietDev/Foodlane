@@ -9,6 +9,7 @@ import { getCurrentSeason, isRecipeSeasonal, type Season } from "./seasonalFilte
 import { sortMealTypesForDisplay } from "./mealOrder";
 import {
   EQUIPMENT_KEY_SYNONYMS,
+  type BreakfastPreferenceKey,
   type CookingSkillLevel,
   type CookingTimeKey,
   type DietaryFilterKey,
@@ -44,6 +45,7 @@ export interface PlannerPreferences {
   dietary_filters: DietaryFilterKey[];
   world_cuisines: string[];
   seasonal_preference: boolean;
+  breakfast_preference: BreakfastPreferenceKey;
   equipment_keys: string[];
   allergy_keys: string[];
   excluded_ingredients: string[];
@@ -120,6 +122,8 @@ export function maxMinutesForCookingPreference(key: CookingTimeKey): number {
       return 30;
     case "30_45":
       return 45;
+    case "peu_importe":
+      return 9999;
     default:
       return 999;
   }
@@ -398,58 +402,49 @@ export interface GroceryListItemDraft {
 function inferCategory(line: string): GroceryCategorySlug {
   const n = normalize(line);
 
+  // Épices & condiments — liste étendue
   if (
-    /\b(sel|poivre|curry|cumin|paprika|piment|coriandre|gingembre|bouillon|moutarde|ketchup|mayonnaise|wasabi|sauce soja|sauce worcestershire|miso|harissa|tabasco|nuoc mam|nuoc-mam|herbes de provence|thym|romarin|laurier|cannelle|muscade|noix de muscade|persil|basilic|menthe|ciboulette|estragon|cerfeuil|origan|aneth|safran|quatre epices|quatre épices|cardamome|clou de girofle|girofle|fenugrec|pâte de curry|pate de curry|relish|cornichon|cornichons|capre|capres|câpre|câpres)\b/.test(
-      n
-    )
+    /\b(sel\b|poivre|curry|cumin|paprika|piment|coriandre|gingembre|bouillon|moutarde|ketchup|mayonnaise|wasabi|sauce soja|sauce worcestershire|miso|harissa|tabasco|nuoc mam|nuoc-mam|herbes de provence|thym|romarin|laurier|cannelle|muscade|noix de muscade|persil|basilic|menthe|ciboulette|estragon|cerfeuil|origan|aneth|safran|quatre epices|cardamome|clou de girofle|girofle|fenugrec|pate de curry|relish|cornichon|capre|zaatar|ras el hanout|epice|assaisonnement|herbe|aromate|fleur de sel|sel de mer|poivre noir|poivre blanc|piment d'espelette)\b/.test(n)
   )
     return "epices_condiments";
-  if (/\b(vinaigre|vinaigrette)\b/.test(n)) return "epices_condiments";
+  if (/\b(vinaigre|vinaigrette|citron\b|citrons|jus de citron|jus d'orange|lime)\b/.test(n)) return "epices_condiments";
 
-  if (/\blait de coco\b/.test(n)) return "epicerie_salee";
+  // Épicerie salée
+  if (/\b(lait de coco|creme de coco|conserve|boite de|concentre de tomates|double concentre|coulis de tomates|tomates en boite|tomates pelees|pulpe de tomates|sauce tomate|bouillon de|fond de|fumet)\b/.test(n)) return "epicerie_salee";
+  if (/\b(farine|maizena|levure|bicarbonate|huile\b|huile d'olive|huile de tournesol|huile de sesame|huile de coco|huile de colza|vinaigre balsamique|sauce|moutarde|ketchup|tamari|worcestershire|nuoc|tabasco|eau gazeuse|eau minerale|eau\b)\b/.test(n)) return "epicerie_salee";
 
+  // Fruits & légumes — liste très étendue
   if (
-    /\b(tomate|tomates|carotte|carottes|salade|laitue|roquette|épinard|epinard|chou\b|courgette|aubergine|poivron|oignon|ail\b|échalote|echalote|poireau|céleri|celeri|fenouil|asperge|brocoli|chou-fleur|chou fleur|artichaut|betterave|radis|navet|pomme de terre|patate douce|potiron|courge|butternut|petit pois|haricot vert|fève|champignon|girolle|cep\b|morille|pomme\b|poire\b|banane|orange|clémentine|citron\b|kiwi|raisin|fraise|framboise|myrtille|cerise|pêche|peche|nectarine|abricot|prune|figue|datte|ananas|mangue|avocat|melon|pastèque|pasteque|citrons verts?|lime)\b/.test(
-      n
-    )
+    /\b(tomate|carotte|salade|laitue|roquette|epinard|chou\b|courgette|aubergine|poivron|oignon|ail\b|echalote|poireau|celeri|fenouil|asperge|brocoli|chou-fleur|artichaut|betterave|radis|navet|pomme de terre|patate douce|potiron|courge|butternut|petit pois|haricot vert|feve|champignon|girolle|cep\b|morille|truffe|pomme\b|poire\b|banane|orange|clementine|kiwi|raisin|fraise|framboise|myrtille|cerise|peche|nectarine|abricot|prune|figue|datte|ananas|mangue|avocat|melon|pasteque|concombre|mais\b|artichaut|endive|cresson|blette|bette|navet|rutabaga|topinambour|igname|manioc|taro|papaye|grenade|litchi|carambole|goyave|passion|physalis|sureau|baie|airelle|canneberge|groseille|mure\b|noix de coco\b|citron vert|pamplemousse|kumquat)\b/.test(n)
   )
     return "fruits_legumes";
 
+  // Produits laitiers — étendu
   if (
-    /\b(lait\b|yaourt|yogourt|fromage|beurre|crème fraiche|crème fraîche|crème liquide|mozzarella|parmesan|emmental|cheddar|feta|féta|ricotta|mascarpone|burrata|comté|conté|chèvre|chevre|st nectaire|reblochon|camembert|brie\b|roquefort)\b/.test(
-      n
-    )
+    /\b(lait\b|yaourt|yogourt|fromage|fromage blanc|fromage frais|creme fraiche|creme liquide|creme\b|beurre|mozzarella|parmesan|emmental|cheddar|feta|ricotta|mascarpone|burrata|comte|chevre|reblochon|camembert|brie\b|roquefort|gruyere|raclette|munster|beaufort|saint-nectaire|gouda|edam|mimolette|tomme|lait de vache|lait de brebis|lait d'amande|lait de soja|lait d'avoine|lait vegetal|creme vegetal|oeufs\b|oeuf\b)\b/.test(n)
   )
     return "produits_laitiers";
 
+  // Protéines — étendu
   if (
-    /\b(poulet|dinde|canard|boeuf|bœuf|porc|veau|agneau|mouton|lapin|jambon|lardons|bacon|saucisse|chorizo|merguez|andouille|poisson|saumon|thon|cabillaud|maquereau|sardine|anchois|crevette|moule\b|calamar|poulpe|œuf|oeuf|œufs|oeufs|tofu|tempeh|seitan|steak haché|steak hache)\b/.test(
-      n
-    )
+    /\b(poulet|dinde|canard|boeuf|porc|veau|agneau|mouton|lapin|gibier|jambon|lardons|bacon|saucisse|chorizo|merguez|andouille|chipolata|boudin|pate de campagne|rillette|saumon|thon|cabillaud|maquereau|sardine|anchois|crevette|moule\b|calamar|poulpe|bar\b|daurade|dorade|truite|lieu|merlu|sole\b|turbot|langoustine|homard|langouste|crabe|seiche|palourde|huitre|morue|stockfish|surimi|tofu|tempeh|seitan|proteine|viande|filet|escalope|blanquette|boulette|hache|steak|roti\b|cuisse|aile\b|pilon|lardon|jambon cru|jambon cuit)\b/.test(n)
   )
     return "proteines";
 
+  // Épicerie sucrée
   if (
-    /\b(sucre\b|cassonade|vergeoise|chocolat\b|pâte à tartiner|pate a tartiner|confiture|miel|sirop d'érable|sirop d erable|vanille|extrait de vanille|pépites|pepites|cacao en poudre|noix de coco râpée|raisins secs|praliné|nutella)\b/.test(
-      n
-    )
+    /\b(sucre\b|cassonade|vergeoise|chocolat\b|praline|nutella|pate a tartiner|confiture|miel|sirop d'erable|sirop d agave|sirop\b|vanille|extrait de vanille|pepites|cacao|poudre de cacao|noix de coco rapee|raisins secs|fruits secs|abricot sec|figue seche|pruneau|datte|cranberry|chips de|cookie|biscuit|gateau|cake|madeleine|brioche|pain au lait|cereale|muesli|granola|flocon d'avoine)\b/.test(n)
   )
     return "epicerie_sucree";
 
+  // Féculents — étendu
   if (
-    /\b(pâtes\b|pates\b|nouilles|spaghetti|penne|tagliatelle|riz\b|quinoa|boulgour|semoule|couscous|polenta|flocon d'avoine|flocons d'avoine|avoine|lentille|lentilles|pois chiche|haricot blanc|haricots blancs|pain\b|pain de mie|tortilla|wrap|patate|pomme de terre)\b/.test(
-      n
-    )
+    /\b(pates\b|nouilles|spaghetti|penne|tagliatelle|fusilli|rigatoni|lasagne|gnocchi|riz\b|riz basmati|riz complet|riz arborio|quinoa|boulgour|semoule|couscous|polenta|avoine|lentille|pois chiche|haricot blanc|haricot rouge|flageolet|pain\b|pain de mie|pain complet|baguette|tortilla|wrap|galette|crackers|biscottes|chapelure|panure|fecule)\b/.test(n)
   )
     return "feculents";
-  if (
-    /\b(farine|maizena|levure chimique|levure de boulanger|bicarbonate|huile d'olive|huile de tournesol|huile de sésame|huile de sesame|huile de coco|huile\b|eau gazeuse|eau minerale|eau minérale|jus de|concentré de tomates|double concentré)\b/.test(
-      n
-    )
-  )
-    return "epicerie_salee";
 
-  if (/\b(eau\b|vin|cidre|bière|biere|soda|jus\b)\b/.test(n)) return "autres";
+  // Boissons → épicerie salée
+  if (/\b(vin\b|cidre|biere\b|soda\b|jus\b|sirop de|bouteille)\b/.test(n)) return "epicerie_salee";
 
   return "autres";
 }
@@ -581,6 +576,7 @@ export function mergePlannerPreferences(
     cooking_skill_level: override.cooking_skill_level ?? base.cooking_skill_level,
     world_cuisines: override.world_cuisines ?? base.world_cuisines,
     seasonal_preference: override.seasonal_preference ?? base.seasonal_preference,
+    breakfast_preference: override.breakfast_preference ?? base.breakfast_preference,
     equipment_keys: override.equipment_keys ?? base.equipment_keys,
     allergy_keys: override.allergy_keys ?? base.allergy_keys,
     excluded_ingredients: override.excluded_ingredients ?? base.excluded_ingredients,
@@ -601,6 +597,7 @@ export const DEFAULT_PLANNER_PREFERENCES: PlannerPreferences = {
   dietary_filters: [],
   world_cuisines: [],
   seasonal_preference: true,
+  breakfast_preference: "both",
   equipment_keys: ["four", "plaque_cuisson", "refrigerateur"],
   allergy_keys: [],
   excluded_ingredients: [],

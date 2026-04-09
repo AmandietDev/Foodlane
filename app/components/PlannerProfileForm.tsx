@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { PlannerPreferences } from "../src/lib/weeklyPlanner";
 import {
+  BREAKFAST_PREFERENCE_OPTIONS,
   COOKING_SKILL_OPTIONS,
   COOKING_TIME_OPTIONS,
   DIETARY_FILTER_OPTIONS,
@@ -39,6 +40,7 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
   const [dietary_filters, setDietary] = useState<string[]>(initial.dietary_filters);
   const [world_cuisines, setWorld] = useState(initial.world_cuisines.join(", "));
   const [seasonal_preference, setSeasonal] = useState(initial.seasonal_preference);
+  const [breakfast_preference, setBreakfastPref] = useState(initial.breakfast_preference);
   const [equipment_keys, setEquipment] = useState<string[]>(initial.equipment_keys);
   const [allergiesText, setAllergiesText] = useState(initial.allergy_keys.join(", "));
   const [excludedText, setExcludedText] = useState(initial.excluded_ingredients.join(", "));
@@ -115,6 +117,7 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
           .map((s) => s.trim())
           .filter(Boolean),
         seasonal_preference,
+        breakfast_preference: breakfast_preference as PlannerPreferences["breakfast_preference"],
         equipment_keys,
         allergy_keys,
         excluded_ingredients,
@@ -245,15 +248,34 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         </div>
         <div>
           <label className="block text-sm font-medium text-[#5c3d3d] mb-1">
-            Préférences &quot;cuisine du monde&quot; (mots-clés, séparés par des virgules)
+            Autres (texte libre : cuisines préférées, contraintes spécifiques…)
           </label>
           <input
             className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm"
             value={world_cuisines}
             onChange={(e) => setWorld(e.target.value)}
-            placeholder="ex: italien, japonais, maghrébin"
+            placeholder="ex: cuisine italienne, pas de coriandre, végétarien le week-end"
           />
         </div>
+      </section>
+
+      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3">
+        <h2 className="text-lg font-semibold text-[#4a2c2c]">Allergies &amp; exclusions</h2>
+        <p className="text-sm text-[#7a5a5a]">
+          Liste libre (séparateurs : virgule ou point-virgule). Appliqué comme contrainte stricte.
+        </p>
+        <textarea
+          className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm min-h-[72px]"
+          placeholder="Allergies : ex. céleri, moutarde"
+          value={allergiesText}
+          onChange={(e) => setAllergiesText(e.target.value)}
+        />
+        <textarea
+          className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm min-h-[72px]"
+          placeholder="Aliments à éviter / détestés"
+          value={excludedText}
+          onChange={(e) => setExcludedText(e.target.value)}
+        />
       </section>
 
       <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-4">
@@ -342,6 +364,24 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
           />
           Privilégier les recettes de saison
         </label>
+
+        {meal_types.includes("breakfast") && (
+          <div>
+            <span className="block text-sm text-[#7a5a5a] mb-2">Petit-déjeuner préféré</span>
+            <div className="flex flex-wrap gap-2">
+              {BREAKFAST_PREFERENCE_OPTIONS.map((o) => (
+                <button
+                  key={o.key}
+                  type="button"
+                  className={`${chip} ${breakfast_preference === o.key ? chipOn : chipOff}`}
+                  onClick={() => setBreakfastPref(o.key)}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3">

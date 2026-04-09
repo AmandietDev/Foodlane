@@ -1,6 +1,7 @@
 import type { PlannerPreferences } from "./weeklyPlanner";
 import { DEFAULT_PLANNER_PREFERENCES } from "./weeklyPlanner";
 import type {
+  BreakfastPreferenceKey,
   CookingSkillLevel,
   CookingTimeKey,
   DietaryFilterKey,
@@ -23,6 +24,7 @@ export type UserPreferencesRow = {
   dietary_filters: string[];
   world_cuisines: string[];
   seasonal_preference: boolean;
+  breakfast_preference?: string | null;
 };
 
 function isCookingTimeKey(s: string): s is CookingTimeKey {
@@ -102,6 +104,12 @@ export function rowToPlannerPreferences(
 
   const eqKeys = equipment.map((e) => e.equipment_key);
 
+  const bpRaw = row.breakfast_preference;
+  const breakfast_preference: BreakfastPreferenceKey =
+    bpRaw === "sweet" || bpRaw === "savory" || bpRaw === "both"
+      ? bpRaw
+      : DEFAULT_PLANNER_PREFERENCES.breakfast_preference;
+
   return {
     cooking_time_preference: cooking,
     cooking_skill_level,
@@ -116,6 +124,7 @@ export function rowToPlannerPreferences(
     dietary_filters,
     world_cuisines: Array.isArray(row.world_cuisines) ? row.world_cuisines : [],
     seasonal_preference: Boolean(row.seasonal_preference),
+    breakfast_preference,
     equipment_keys: eqKeys.length ? eqKeys : DEFAULT_PLANNER_PREFERENCES.equipment_keys,
     allergy_keys: allergies.map((a) => a.allergy_key),
     excluded_ingredients: excluded.map((x) => x.ingredient_name),
