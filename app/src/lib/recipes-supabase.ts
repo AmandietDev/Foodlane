@@ -7,19 +7,34 @@ import type { Recipe } from './recipes';
  */
 export async function fetchRecipesFromSupabase(): Promise<Recipe[]> {
   try {
-    console.log('[Recipes] Récupération des recettes depuis Supabase...');
+    console.log('[Recipes] Récupération des recettes depuis Supabase (pagination)...');
 
-    const { data, error } = await supabase
-      .from('recipes_v2')
-      .select('*')
-      .order('nom_recette', { ascending: true });
+    const PAGE_SIZE = 1000;
+    let allRows: Record<string, unknown>[] = [];
+    let from = 0;
 
-    if (error) {
-      console.error('[Recipes] Erreur Supabase:', error);
-      throw new Error(`Erreur lors de la récupération des recettes: ${error.message}`);
+    while (true) {
+      const { data, error } = await supabase
+        .from('recipes_v2')
+        .select('*')
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) {
+        console.error('[Recipes] Erreur Supabase:', error);
+        throw new Error(`Erreur lors de la récupération des recettes: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) break;
+
+      allRows = allRows.concat(data);
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
     }
 
-    if (!data || data.length === 0) {
+    const data = allRows;
+
+    if (data.length === 0) {
       console.warn('[Recipes] Aucune recette trouvée dans Supabase');
       return [];
     }
