@@ -8,9 +8,12 @@ import {
   filterRecipesByMaxPrepTime,
   filterRecipesByStrictExclusions,
   maxMinutesForCookingPreference,
+  scoreRecipeForPlanner,
 } from "./weeklyPlanner";
 import { getCurrentSeason } from "./seasonalFilter";
 import { sortMealTypesForDisplay, sortMealsByDisplayOrder } from "./mealOrder";
+import type { Locale } from "./i18n";
+import { aiOutputLanguageDirective } from "./aiLocale";
 import {
   addRecipeDominantKeys,
   dominantKeysConflictWithDay,
@@ -48,7 +51,9 @@ export async function buildWeeklyPlanWithAi(
   recipes: Recipe[],
   prefs: PlannerPreferences,
   weekStartISO: string,
-  openaiKey: string
+  openaiKey: string,
+  locale: Locale = "fr",
+  recentlyUsed?: Map<number, number>
 ): Promise<PlannedWeek | null> {
   const exclusions = buildExclusionList(prefs);
   let pool = filterRecipesByStrictExclusions(recipes, exclusions);
@@ -59,15 +64,43 @@ export async function buildWeeklyPlanWithAi(
 
   if (pool.length === 0) return null;
 
-  const randomizedPool = shuffleArray(pool);
-  const byId = new Map(randomizedPool.map((r) => [r.id, r]));
-  const catalog = randomizedPool.slice(0, 120).map((r) => ({
+  const season = getCurrentSeason();
+
+  // Score toutes les recettes filtrées, avec pénalité sur les recettes récemment utilisées
+  const scoredPool = pool
+    .map((r) => {
+      let score = scoreRecipeForPlanner(r, season, prefs);
+      if (recentlyUsed) {
+        const menusAgo = recentlyUsed.get(r.id);
+        if (menusAgo === 0) score = Math.max(0, score - 50);      // dernier menu
+        else if (menusAgo === 1) score = Math.max(0, score - 25); // 2e menu précédent
+        else if (menusAgo === 2) score = Math.max(0, score - 10); // 3e menu précédent
+      }
+      return { r, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  // Échantillonnage stratifié sur 300 recettes réparties en 4 quartiles de score.
+  // Garantit que l'IA découvre des recettes variées, pas seulement les 120 même meilleures.
+  const CATALOG_SIZE = 300;
+  const qSize = Math.max(1, Math.ceil(scoredPool.length / 4));
+  const stratifiedSample = shuffleArray([
+    ...shuffleArray(scoredPool.slice(0, qSize)).slice(0, Math.round(CATALOG_SIZE * 0.45)),
+    ...shuffleArray(scoredPool.slice(qSize, qSize * 2)).slice(0, Math.round(CATALOG_SIZE * 0.30)),
+    ...shuffleArray(scoredPool.slice(qSize * 2, qSize * 3)).slice(0, Math.round(CATALOG_SIZE * 0.15)),
+    ...shuffleArray(scoredPool.slice(qSize * 3)).slice(0, Math.round(CATALOG_SIZE * 0.10)),
+  ]);
+
+  const randomizedPool = shuffleArray(pool); // conservé pour le fallback de remplissage
+  const byId = new Map(pool.map((r) => [r.id, r]));
+  const catalog = stratifiedSample.map(({ r }) => ({
     id: r.id,
     nom_recette: r.nom_recette,
     type: r.type,
     temps_preparation_min: r.temps_preparation_min,
     difficulte: r.difficulte,
-    ingredients: (r.ingredients || "").slice(0, 300),
+    ingredients: (r.ingredients || "").slice(0, 200),
+    ...(recentlyUsed?.has(r.id) ? { recently_used: true } : {}),
   }));
 
   const carnivoreExplicite =
@@ -89,7 +122,7 @@ export async function buildWeeklyPlanWithAi(
     automne: "automne (septembre-novembre)",
     hiver: "hiver (décembre-février)",
   };
-  const currentSeason = getCurrentSeason();
+  const currentSeason = season; // déjà calculé plus haut
   const seasonLabel = seasonNames[currentSeason] || currentSeason;
 
   const system = `Tu es un nutritionniste et chef cuisinier expert.
@@ -111,6 +144,10 @@ DIVERSITÉ (CRITIQUE) :
 - Varier les cuisines : méditerranéenne, asiatique, française, mexicaine, etc.
 - Utiliser le maximum de recettes différentes du catalogue — ne jamais réutiliser la même recette deux fois.
 - Varier les féculents (riz, pâtes, quinoa, pommes de terre, etc.) au fil de la semaine.
+
+ANTI-RÉPÉTITION (IMPORTANT) :
+- Les recettes marquées "recently_used: true" dans le catalogue ont déjà été proposées dans de récents menus.
+- Évite-les impérativement. Utilise uniquement des recettes sans ce marqueur sauf si aucune alternative n'existe.
 
 SAISON (IMPORTANT) :
 - Nous sommes en ${seasonLabel}. Privilégier fortement les recettes avec des ingrédients de saison.
@@ -134,7 +171,10 @@ Réponds UNIQUEMENT en JSON objet :
   ]
 }
 
-Utilise uniquement les meal_type demandés dans le profil. Nombre de jours = N.`;
+Utilise uniquement les meal_type demandés dans le profil. Nombre de jours = N.
+
+${aiOutputLanguageDirective(locale)}
+Les noms de recettes du catalogue (nom_recette) restent tels quels ; ne les traduis pas dans le JSON.`;
 
   const userPayload = {
     profile_text: buildUserProfileForAi(prefs),
@@ -236,7 +276,6 @@ Utilise uniquement les meal_type demandés dans le profil. Nombre de jours = N.`
       previousDayDominant = new Set(dayDominant);
     }
 
-    const season = getCurrentSeason();
     return {
       days,
       meta: {

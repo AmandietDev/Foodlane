@@ -8,6 +8,13 @@ import { rowToPlannerPreferences, type UserPreferencesRow } from "../../../src/l
 import type { PlannerPreferences } from "../../../src/lib/weeklyPlanner";
 import { persistWeeklyPlanToSupabase } from "../../../src/lib/plannerPersistence";
 import { buildWeeklyPlanWithAi } from "../../../src/lib/weeklyMenuAi";
+import type { Locale } from "../../../src/lib/i18n";
+
+const AI_LOCALES: Locale[] = ["fr", "en", "es", "de"];
+
+function parseAiLocale(x: unknown): Locale {
+  return typeof x === "string" && AI_LOCALES.includes(x as Locale) ? (x as Locale) : "fr";
+}
 
 export const dynamic = "force-dynamic";
 
@@ -88,12 +95,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Serveur non configuré (Supabase admin)" }, { status: 503 });
   }
 
-  let body: { week_start_date?: string; overrides?: PlannerGenerateInput; use_ai_menu?: boolean };
+  let body: {
+    week_start_date?: string;
+    overrides?: PlannerGenerateInput;
+    use_ai_menu?: boolean;
+    locale?: string;
+  };
   try {
     body = await request.json();
   } catch {
     body = {};
   }
+
+  const aiLocale = parseAiLocale(body.locale);
 
   const weekStart = body.week_start_date || mondayISO();
 
@@ -142,12 +156,42 @@ export async function POST(request: NextRequest) {
     ? allRecipes.filter((r) => !dislikedIds.has(r.id))
     : allRecipes;
 
+  // Charger les recipe_id des 3 derniers menus pour pénaliser les répétitions
+  const recentlyUsed = new Map<number, number>();
+  if (supabaseAdmin) {
+    const { data: recentMenus } = await supabaseAdmin
+      .from("weekly_menus")
+      .select("id, weekly_menu_days(weekly_menu_meals(recipe_id))")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(3);
+
+    if (recentMenus) {
+      type MealRow = { recipe_id: number | string };
+      type DayRow = { weekly_menu_meals: MealRow[] };
+      recentMenus.forEach((menu, menuIdx) => {
+        const days = (menu.weekly_menu_days as DayRow[]) || [];
+        for (const day of days) {
+          for (const meal of (day.weekly_menu_meals || [])) {
+            const rid = Number(meal.recipe_id);
+            if (Number.isFinite(rid) && !recentlyUsed.has(rid)) {
+              recentlyUsed.set(rid, menuIdx); // 0 = menu le plus récent
+            }
+          }
+        }
+      });
+    }
+  }
+
   const openaiKey = process.env.OPENAI_API_KEY;
   const shouldUseAi = Boolean(openaiKey);
   const aiPlan = shouldUseAi
-    ? await withTimeout(buildWeeklyPlanWithAi(recipes, merged, weekStart, openaiKey as string), AI_MENU_TIMEOUT_MS)
+    ? await withTimeout(
+        buildWeeklyPlanWithAi(recipes, merged, weekStart, openaiKey as string, aiLocale, recentlyUsed),
+        AI_MENU_TIMEOUT_MS
+      )
     : null;
-  const plan = aiPlan ?? buildWeeklyPlan(recipes, merged, weekStart);
+  const plan = aiPlan ?? buildWeeklyPlan(recipes, merged, weekStart, recentlyUsed);
   sanitizePlanRecipes(plan);
 
   const title = `Menu semaine du ${weekStart}`;

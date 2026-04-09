@@ -10,7 +10,8 @@ export async function fetchRecipesFromSupabase(): Promise<Recipe[]> {
     console.log('[Recipes] Récupération des recettes depuis Supabase (pagination)...');
 
     const PAGE_SIZE = 1000;
-    let allRows: Record<string, unknown>[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let allRows: any[] = [];
     let from = 0;
 
     while (true) {

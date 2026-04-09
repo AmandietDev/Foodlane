@@ -34,6 +34,8 @@ export interface PlannerPreferences {
   cooking_time_preference: CookingTimeKey;
   cooking_skill_level: CookingSkillLevel;
   household_size: number;
+  /** Pour un foyer de 5 pers. : 4, 5 ou 6 portions pour recettes / courses ; ignoré sinon. */
+  recipe_scaling_portions: number | null;
   adults_count: number;
   children_count: number;
   planning_days: number;
@@ -53,6 +55,17 @@ export interface PlannerPreferences {
 
 export interface PlannerGenerateInput extends Partial<PlannerPreferences> {
   variety_boost?: number;
+}
+
+/** Portions utilisées pour mettre à l’échelle ingrédients et liste de courses. */
+export function getEffectiveRecipePortions(
+  prefs: Pick<PlannerPreferences, "household_size" | "recipe_scaling_portions">
+): number {
+  const h = Math.max(1, Number(prefs.household_size) || 1);
+  if (h !== 5) return h;
+  const r = prefs.recipe_scaling_portions;
+  if (r === 4 || r === 5 || r === 6) return r;
+  return 5;
 }
 
 const FILTER_EXCLUSIONS: Record<DietaryFilterKey, string[]> = {
@@ -285,7 +298,8 @@ function addDaysISO(isoDate: string, days: number): string {
 export function buildWeeklyPlan(
   recipes: Recipe[],
   prefs: PlannerPreferences,
-  weekStartISO: string
+  weekStartISO: string,
+  recentlyUsed?: Map<number, number>
 ): PlannedWeek {
   const season = getCurrentSeason();
   const maxMin = maxMinutesForCookingPreference(prefs.cooking_time_preference);
@@ -300,7 +314,17 @@ export function buildWeeklyPlan(
   }
 
   const scored = pool
-    .map((r) => ({ r, s: scoreRecipeForPlanner(r, season, prefs) }))
+    .map((r) => {
+      let s = scoreRecipeForPlanner(r, season, prefs);
+      // Priorité 2 : pénalité cross-générations sur les recettes récemment servies
+      if (recentlyUsed) {
+        const menusAgo = recentlyUsed.get(r.id);
+        if (menusAgo === 0) s = Math.max(0, s - 50);      // dernier menu
+        else if (menusAgo === 1) s = Math.max(0, s - 25); // avant-dernier
+        else if (menusAgo === 2) s = Math.max(0, s - 10); // 3e menu précédent
+      }
+      return { r, s };
+    })
     .sort((a, b) => b.s - a.s);
 
   const used = new Set<number>();
@@ -321,14 +345,14 @@ export function buildWeeklyPlan(
         return true;
       });
       if (primaryCandidates.length > 0) {
-        // Mélange contrôlé : tirage pondéré parmi le top pour éviter "toujours les mêmes".
-        const top = primaryCandidates.slice(0, Math.min(10, primaryCandidates.length));
+        // Pool élargi à 30 : moins biaisé vers le top absolu, plus de variété entre générations
+        const top = primaryCandidates.slice(0, Math.min(30, primaryCandidates.length));
         const randomizedTop = shuffleArray(top);
         picked =
           pickWeightedRandom(
             randomizedTop.map(({ r, s }, idx) => ({
               item: r,
-              weight: Math.max(1, (top.length - idx) * 1.2 + s / 12),
+              weight: Math.max(1, (top.length - idx) * 0.6 + s / 10),
             }))
           ) ?? null;
       }
@@ -340,13 +364,13 @@ export function buildWeeklyPlan(
           return true;
         });
         if (secondaryCandidates.length > 0) {
-          const top = secondaryCandidates.slice(0, Math.min(12, secondaryCandidates.length));
+          const top = secondaryCandidates.slice(0, Math.min(20, secondaryCandidates.length));
           const randomizedTop = shuffleArray(top);
           picked =
             pickWeightedRandom(
               randomizedTop.map(({ r, s }, idx) => ({
                 item: r,
-                weight: Math.max(1, (top.length - idx) + s / 14),
+                weight: Math.max(1, (top.length - idx) * 0.7 + s / 12),
               }))
             ) ?? null;
         }
@@ -354,12 +378,12 @@ export function buildWeeklyPlan(
       if (!picked) {
         const anyRemaining = scored.filter(({ r }) => !used.has(r.id));
         if (anyRemaining.length > 0) {
-          const randomized = shuffleArray(anyRemaining).slice(0, Math.min(15, anyRemaining.length));
+          const randomized = shuffleArray(anyRemaining).slice(0, Math.min(25, anyRemaining.length));
           picked =
             pickWeightedRandom(
               randomized.map(({ r, s }, idx) => ({
                 item: r,
-                weight: Math.max(1, (randomized.length - idx) * 0.8 + s / 18),
+                weight: Math.max(1, (randomized.length - idx) * 0.5 + s / 15),
               }))
             ) ?? null;
         }
@@ -565,6 +589,10 @@ export function mergePlannerPreferences(
     cooking_time_preference:
       override.cooking_time_preference ?? base.cooking_time_preference,
     household_size: override.household_size ?? base.household_size,
+    recipe_scaling_portions:
+      override.recipe_scaling_portions !== undefined
+        ? override.recipe_scaling_portions
+        : base.recipe_scaling_portions,
     adults_count: override.adults_count ?? base.adults_count,
     children_count: override.children_count ?? base.children_count,
     planning_days: override.planning_days ?? base.planning_days,
@@ -587,6 +615,7 @@ export const DEFAULT_PLANNER_PREFERENCES: PlannerPreferences = {
   cooking_time_preference: "15_30",
   cooking_skill_level: "intermediaire",
   household_size: 2,
+  recipe_scaling_portions: null,
   adults_count: 2,
   children_count: 0,
   planning_days: 7,
