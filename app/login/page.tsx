@@ -12,13 +12,13 @@ import {
 } from "../src/lib/userPreferences";
 
 // ✅ Client Supabase
-import { supabase, isSupabaseConfigured } from "../src/lib/supabaseClient";
+import { supabase, isSupabaseConfigured, getSessionResilient } from "../src/lib/supabaseClient";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "signup">("login");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,24 +29,50 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [resetEmail, setResetEmail] = useState("");
-  const [resetSent, setResetSent] = useState(false);
-
   const [checkingSession, setCheckingSession] = useState(true);
+  const [passwordResetSuccess, setPasswordResetSuccess] = useState(false);
+  const [sessionCheckError, setSessionCheckError] = useState<string | null>(null);
 
-  // ✅ Rediriger si déjà connecté via Supabase
+  // ✅ Rediriger si déjà connecté via Supabase (ne jamais rester bloqué si le réseau échoue)
   useEffect(() => {
     let ignore = false;
 
     async function checkSession() {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error("Erreur getSession:", error.message);
-      }
-      if (!ignore && data.session) {
-        router.push("/");
-      } else if (!ignore) {
+      try {
+        if (!isSupabaseConfigured) {
+          if (!ignore) {
+            setSessionCheckError(
+              "Configuration Supabase absente ou invalide. Vérifie .env.local à la racine du projet."
+            );
+            setCheckingSession(false);
+          }
+          return;
+        }
+
+        const { session, error } = await getSessionResilient(12000);
+        if (ignore) return;
+
+        if (error) {
+          console.error("[Login] Session:", error.message);
+          setSessionCheckError(error.message);
+          setCheckingSession(false);
+          return;
+        }
+
+        if (session) {
+          router.push("/tableau");
+          return;
+        }
+
         setCheckingSession(false);
+      } catch (e) {
+        if (!ignore) {
+          console.error("[Login] checkSession:", e);
+          setSessionCheckError(
+            e instanceof Error ? e.message : "Erreur lors de la vérification de la session."
+          );
+          setCheckingSession(false);
+        }
       }
     }
 
@@ -57,11 +83,19 @@ export default function LoginPage() {
     };
   }, [router]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("reset") === "success") {
+      setPasswordResetSuccess(true);
+      window.history.replaceState({}, "", "/login");
+    }
+  }, []);
+
   if (checkingSession) {
-    // On attend de savoir si l'utilisateur est déjà connecté
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <LoadingSpinner message="Vérification de la session..." />
+        <LoadingSpinner message="Vérification de la session…" />
       </div>
     );
   }
@@ -104,8 +138,8 @@ export default function LoginPage() {
         return;
       }
 
-      // Succès : redirection vers l'accueil
-      router.push("/");
+      // Succès : tableau de bord (menus hebdo)
+      router.push("/tableau");
     } catch (err) {
       console.error(err);
       setError("Une erreur est survenue pendant la connexion");
@@ -223,58 +257,13 @@ export default function LoginPage() {
         alert(
           "Compte créé. Si la confirmation email est activée dans Supabase, vérifie ta boîte mail."
         );
+      } else {
+        router.push("/onboarding");
       }
-
-      router.push("/");
     } catch (err) {
       console.error(err);
       setError("Une erreur est survenue pendant la création du compte");
     } finally {
-      setLoading(false);
-    }
-  };
-
-  // ✅ Mot de passe oublié via Supabase
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-
-    const emailValue = cleanEmail(resetEmail);
-
-    if (!emailValue) {
-      setError("Veuillez entrer votre email");
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
-      setError("L'email n'est pas valide");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(emailValue, {
-        redirectTo:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/reset-password`
-            : undefined,
-      });
-
-      if (error) {
-        console.error("Supabase resetPassword error:", error);
-        setError(
-          error.message || "Impossible d'envoyer le lien de réinitialisation"
-        );
-        setLoading(false);
-        return;
-      }
-
-      setResetSent(true);
-      setLoading(false);
-    } catch (err) {
-      console.error(err);
-      setError("Une erreur est survenue pendant l'envoi de l'email");
       setLoading(false);
     }
   };
@@ -288,12 +277,38 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-[#6B2E2E] mt-4">
             {mode === "login" && "Connexion"}
             {mode === "signup" && "Créer un compte"}
-            {mode === "forgot" && "Mot de passe oublié"}
           </h1>
         </div>
 
         {/* Carte principale */}
         <div className="bg-white rounded-2xl shadow-xl p-6 border border-[#E8A0A0]">
+          {passwordResetSuccess && (
+            <div className="mb-4 p-4 rounded-xl bg-green-50 border border-green-200 text-green-800 text-sm">
+              Ton mot de passe a été mis à jour. Tu peux te connecter avec ton nouveau mot de passe.
+            </div>
+          )}
+          {sessionCheckError && (
+            <div
+              className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+              role="alert"
+            >
+              <strong className="block mb-1">Impossible de joindre Supabase</strong>
+              <p className="whitespace-pre-wrap text-amber-900/90">{sessionCheckError}</p>
+              <p className="mt-2 text-xs text-amber-800">
+                Astuce : le fichier <code className="bg-amber-100 px-1 rounded">.env.local</code> doit être à la
+                racine du projet (même niveau que <code className="bg-amber-100 px-1 rounded">package.json</code>
+                ), puis redémarre <code className="bg-amber-100 px-1 rounded">npm run dev</code>.
+              </p>
+              <a
+                href="/api/debug-env"
+                className="mt-2 inline-block text-xs font-semibold text-[#8B4513] underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Vérifier la config (debug-env)
+              </a>
+            </div>
+          )}
           {/* Formulaire de connexion */}
           {mode === "login" && (
             <form onSubmit={handleLogin} className="space-y-4">
@@ -330,18 +345,9 @@ export default function LoginPage() {
               </div>
 
               <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("forgot");
-                    setError("");
-                    setEmail("");
-                    setPassword("");
-                  }}
-                  className="text-sm text-[#D44A4A] hover:underline"
-                >
+                <Link href="/forgot-password" className="text-sm text-[#D44A4A] hover:underline">
                   Mot de passe oublié ?
-                </button>
+                </Link>
               </div>
 
               <button
@@ -486,86 +492,6 @@ export default function LoginPage() {
             </form>
           )}
 
-          {/* Formulaire mot de passe oublié */}
-          {mode === "forgot" && (
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              {resetSent ? (
-                <div className="text-center space-y-4">
-                  <div className="p-4 rounded-xl bg-green-50 border border-green-200">
-                    <p className="text-green-700 text-sm">
-                      ✅ Un email de réinitialisation a été envoyé à{" "}
-                      <strong>{resetEmail}</strong>
-                    </p>
-                    <p className="text-green-600 text-xs mt-2">
-                      Vérifie ta boîte de réception et suis les instructions
-                      pour réinitialiser ton mot de passe.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode("login");
-                      setResetSent(false);
-                      setResetEmail("");
-                      setError("");
-                    }}
-                    className="w-full py-3 px-4 bg-[#D44A4A] hover:bg-[#C03A3A] text-white rounded-xl font-semibold transition-colors"
-                  >
-                    Retour à la connexion
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {error && (
-                    <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
-                      {error}
-                    </div>
-                  )}
-
-                  <p className="text-sm text-gray-600 mb-4">
-                    Entre ton adresse email et nous t’enverrons un lien pour
-                    réinitialiser ton mot de passe.
-                  </p>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      required
-                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
-                      placeholder="ton@email.com"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full py-3 px-4 bg-[#D44A4A] hover:bg-[#C03A3A] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? "Envoi..." : "Envoyer le lien de réinitialisation"}
-                  </button>
-
-                  <div className="text-center mt-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMode("login");
-                        setResetEmail("");
-                        setError("");
-                      }}
-                      className="text-sm text-[#D44A4A] hover:underline"
-                    >
-                      ← Retour à la connexion
-                    </button>
-                  </div>
-                </>
-              )}
-            </form>
-          )}
         </div>
 
         {/* Lien vers la page d'accueil */}

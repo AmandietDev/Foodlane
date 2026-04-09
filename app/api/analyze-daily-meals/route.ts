@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 /**
  * API pour analyser les repas de la journée avec IA
- * Utilise OpenAI pour générer des conseils nutritionnels personnalisés
+ * Utilise OpenAI ou Anthropic (Claude) pour générer des conseils nutritionnels personnalisés
  * Retourne 2-3 points positifs et 1-2 axes d'amélioration doux
  */
 export async function POST(request: NextRequest) {
@@ -16,10 +16,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Vérifier si OpenAI API key est configurée
+    const providerRaw = (process.env.DIETITIAN_AI_PROVIDER || "auto").toLowerCase();
     const openaiApiKey = process.env.OPENAI_API_KEY;
-    
-    if (!openaiApiKey) {
+    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+
+    const provider =
+      providerRaw === "openai" || providerRaw === "anthropic" || providerRaw === "auto"
+        ? providerRaw
+        : "auto";
+    const hasOpenAi = Boolean(openaiApiKey);
+    const hasAnthropic = Boolean(anthropicApiKey);
+
+    // auto: Claude prioritaire pour l'assistant diététicien, sinon OpenAI
+    const selectedProvider =
+      provider === "anthropic"
+        ? (hasAnthropic ? "anthropic" : hasOpenAi ? "openai" : null)
+        : provider === "openai"
+        ? (hasOpenAi ? "openai" : hasAnthropic ? "anthropic" : null)
+        : hasAnthropic
+        ? "anthropic"
+        : hasOpenAi
+        ? "openai"
+        : null;
+
+    if (!selectedProvider) {
       // Mode fallback : retourner une analyse simulée pour le développement
       return NextResponse.json({
         positives: [
@@ -30,6 +50,7 @@ export async function POST(request: NextRequest) {
           "Pense à ajouter des fruits pour compléter tes apports en vitamines",
         ],
         summary: "Ton alimentation est globalement équilibrée. Continue à varier tes repas et pense à inclure des fruits pour un équilibre optimal.",
+        provider_used: "fallback",
       });
     }
 
@@ -59,41 +80,78 @@ Réponds en JSON avec cette structure exacte :
 
 Analyse cette journée alimentaire et fournis les points positifs et les axes d'amélioration.`;
 
-    // Appel à OpenAI
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini", // Utiliser gpt-4o-mini pour réduire les coûts
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: userPrompt,
-          },
-        ],
-        max_tokens: 500,
-        temperature: 0.7, // Un peu de créativité mais pas trop
-      }),
-    });
+    let content: string | null = null;
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error("Erreur OpenAI API:", errorData);
-      throw new Error(`Erreur API OpenAI: ${response.status}`);
+    if (selectedProvider === "openai") {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt,
+            },
+            {
+              role: "user",
+              content: userPrompt,
+            },
+          ],
+          max_tokens: 500,
+          temperature: 0.6,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error("Erreur OpenAI API:", errorData);
+        throw new Error(`Erreur API OpenAI: ${response.status}`);
+      }
+
+      const data = await response.json();
+      content = data.choices?.[0]?.message?.content || null;
+    } else {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": anthropicApiKey as string,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-3-5-haiku-latest",
+          max_tokens: 800,
+          temperature: 0.6,
+          system: `${systemPrompt}\nNe réponds qu'en JSON valide, sans markdown.`,
+          messages: [
+            {
+              role: "user",
+              content: userPrompt,
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error("Erreur Anthropic API:", errorData);
+        throw new Error(`Erreur API Anthropic: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const firstTextBlock = Array.isArray(data?.content)
+        ? data.content.find((c: { type?: string; text?: string }) => c?.type === "text")
+        : null;
+      content = firstTextBlock?.text || null;
     }
 
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-
     if (!content) {
-      throw new Error("Réponse vide de l'API OpenAI");
+      throw new Error("Réponse vide du provider IA");
     }
 
     // Parser le JSON de la réponse
@@ -120,7 +178,10 @@ Analyse cette journée alimentaire et fournis les points positifs et les axes d'
       analysis.summary = "Continue dans cette direction pour maintenir un bon équilibre alimentaire.";
     }
 
-    return NextResponse.json(analysis);
+    return NextResponse.json({
+      ...analysis,
+      provider_used: selectedProvider,
+    });
   } catch (error) {
     console.error("Erreur lors de l'analyse des repas:", error);
     return NextResponse.json(

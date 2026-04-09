@@ -70,6 +70,11 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
   // Calculer isPremium en tenant compte de premium_active ET premium_end_date
   // L'utilisateur a accès si premium_active est true OU si premium_end_date n'est pas encore passée
   const calculateIsPremium = (): boolean => {
+    // Mode développement : permet de forcer l'UI premium localement
+    if (process.env.NEXT_PUBLIC_FORCE_PREMIUM === "true") {
+      return true;
+    }
+
     if (!profile) return false;
     
     // Si premium_active est true, l'utilisateur a accès

@@ -27,7 +27,7 @@ export async function GET() {
         const type = (r.type?.toLowerCase() || "").trim();
         return type.includes("sucré") || type.includes("sucree") || type.includes("sucr");
       }).slice(0, 3);
-      console.log(`[API] Exemples de recettes sucrées:`, examples.map(r => ({ nom: r.nom, type: r.type })));
+      console.log(`[API] Exemples de recettes sucrées:`, examples.map(r => ({ nom_recette: r.nom_recette, type: r.type })));
     }
     
     return NextResponse.json({ recipes }, {

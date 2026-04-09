@@ -111,7 +111,7 @@ export default function PremiumGate({
               </div>
               <div className="flex items-start gap-2 text-xs text-[var(--beige-text-light)]">
                 <span>✅</span>
-                <span>Photo du frigo → génération de recettes (bientôt)</span>
+                <span>Planificateur de menus intelligent avec liste de courses exportable</span>
               </div>
               <div className="flex items-start gap-2 text-xs text-[var(--beige-text-light)]">
                 <span>✅</span>

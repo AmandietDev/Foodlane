@@ -8,6 +8,21 @@ import type { Tip, Challenge } from "./dailyTips";
 
 const HISTORY_STORAGE_KEY = "foodlane_daily_tips_history";
 const MAX_HISTORY_DAYS = 30; // Garder l'historique sur 30 jours
+let canUseSupabaseTipsHistory: boolean | null = null;
+
+function isNonBlockingSupabaseError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: string; message?: string; details?: string };
+  const text = `${e.message || ""} ${e.details || ""}`.toLowerCase();
+  // table manquante, schema pas à jour, RLS/policy pas encore prête
+  return (
+    e.code === "42P01" ||
+    e.code === "42501" ||
+    text.includes("daily_tips_history") ||
+    text.includes("permission denied") ||
+    text.includes("row-level security")
+  );
+}
 
 export interface DailyTipsHistory {
   date: string; // YYYY-MM-DD
@@ -24,7 +39,7 @@ export async function loadTipsHistory(): Promise<DailyTipsHistory[]> {
   try {
     // Essayer d'abord Supabase
     const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
+    if (session?.user && canUseSupabaseTipsHistory !== false) {
       const { data, error } = await supabase
         .from("daily_tips_history")
         .select("date, tip_id, challenge_id, tip_category, challenge_category")
@@ -33,6 +48,7 @@ export async function loadTipsHistory(): Promise<DailyTipsHistory[]> {
         .limit(MAX_HISTORY_DAYS);
 
       if (!error && data) {
+        canUseSupabaseTipsHistory = true;
         return data.map(row => ({
           date: row.date,
           tipId: row.tip_id,
@@ -41,9 +57,17 @@ export async function loadTipsHistory(): Promise<DailyTipsHistory[]> {
           challengeCategory: row.challenge_category || undefined,
         }));
       }
+      if (error && isNonBlockingSupabaseError(error)) {
+        canUseSupabaseTipsHistory = false;
+      }
     }
   } catch (error) {
-    console.error("[TipsHistory] Erreur chargement Supabase:", error);
+    if (isNonBlockingSupabaseError(error)) {
+      canUseSupabaseTipsHistory = false;
+      console.warn("[TipsHistory] Supabase indisponible, fallback localStorage.");
+    } else {
+      console.error("[TipsHistory] Erreur chargement Supabase:", error);
+    }
   }
 
   // Fallback localStorage
@@ -90,7 +114,7 @@ export async function addToHistory(tip: Tip, challenge: Challenge): Promise<void
   try {
     // Enregistrer dans Supabase
     const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
+    if (session?.user && canUseSupabaseTipsHistory !== false) {
       const { error } = await supabase
         .from("daily_tips_history")
         .upsert({
@@ -105,13 +129,26 @@ export async function addToHistory(tip: Tip, challenge: Challenge): Promise<void
         });
 
       if (error) {
-        console.error("[TipsHistory] Erreur sauvegarde Supabase:", error);
+        if (isNonBlockingSupabaseError(error)) {
+          canUseSupabaseTipsHistory = false;
+          console.warn("[TipsHistory] Supabase indisponible, fallback localStorage.");
+        } else {
+          // Ne pas polluer l'UI de dev avec un overlay rouge : fallback localStorage suffit.
+          console.warn("[TipsHistory] Sauvegarde Supabase non disponible, fallback localStorage.");
+        }
       } else {
+        canUseSupabaseTipsHistory = true;
         console.log("[TipsHistory] Enregistré dans Supabase:", { tipId: tip.id, challengeId: challenge.id });
       }
     }
   } catch (error) {
-    console.error("[TipsHistory] Erreur lors de l'enregistrement Supabase:", error);
+    if (isNonBlockingSupabaseError(error)) {
+      canUseSupabaseTipsHistory = false;
+      console.warn("[TipsHistory] Supabase indisponible, fallback localStorage.");
+    } else {
+      // Ne pas bloquer l'expérience utilisateur : on bascule localStorage.
+      console.warn("[TipsHistory] Erreur enregistrement Supabase, fallback localStorage.");
+    }
   }
 
   // Fallback localStorage

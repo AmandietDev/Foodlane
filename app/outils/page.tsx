@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Recipe } from "../src/lib/recipes";
 import { loadFavorites, saveFavorites } from "../src/lib/favorites";
+import FavoritesRecipesHero from "../components/FavoritesRecipesHero";
 import RecipeImage from "../components/RecipeImage";
 import {
   detectDietaryBadges,
@@ -97,15 +99,23 @@ export default function OutilsPage() {
 
         {/* Bloc favoris */}
         <section className="space-y-3">
+          <FavoritesRecipesHero className="mb-1" caption={false} />
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
               Tes recettes favorites
             </h2>
             <Link
               href="/favoris"
-              className="text-xs font-medium text-[var(--accent)] hover:underline"
+              className="relative h-9 w-[4.25rem] shrink-0 rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-white shadow-sm hover:opacity-95 transition-opacity"
+              aria-label="Voir toutes les recettes favorites"
             >
-              Voir tout
+              <Image
+                src="/favorites-recipes-hero-02b30ddf.png"
+                alt=""
+                fill
+                className="object-cover object-center"
+                sizes="68px"
+              />
             </Link>
           </div>
 
@@ -128,7 +138,7 @@ export default function OutilsPage() {
                     <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
                       <RecipeImage 
                         imageUrl={recipe.image_url} 
-                        alt={recipe.nom}
+                        alt={recipe.nom_recette || "Recette"}
                         className="h-full w-full"
                       />
                     </div>
@@ -136,7 +146,7 @@ export default function OutilsPage() {
                     <div className="flex flex-1 flex-col justify-between">
                       <div>
                         <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                          {recipe.nom}
+                          {recipe.nom_recette}
                         </h3>
                         {badges && badges.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">

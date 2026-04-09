@@ -2,6 +2,11 @@
 
 import type { WeeklyMenu } from "./weeklyMenu";
 import type { Recipe } from "./recipes";
+import {
+  formatScaledIngredient,
+  parseIngredientLine,
+  scaleIngredientQuantity,
+} from "./ingredientQuantities";
 
 export interface ShoppingListItem {
   name: string;
@@ -139,7 +144,7 @@ export function generateSmartShoppingList(
           // Parser chaque ingrédient
           const ingredients = recipe.ingredients.split(";");
           ingredients.forEach((ing) => {
-            const parsed = parseIngredient(ing.trim());
+            const parsed = scaleIngredientQuantity(parseIngredientLine(ing.trim()), 1);
             if (!parsed.name) return;
 
             const normalizedName = normalizeIngredientName(parsed.name);
@@ -149,37 +154,38 @@ export function generateSmartShoppingList(
 
             if (existing) {
               // Si les deux ont des quantités, on additionne
-              if (existing.quantity !== null && parsed.quantity !== null) {
+              if (existing.quantity !== null && parsed.canonicalQuantity !== null) {
                 // Vérifier que les unités sont compatibles
-                const unitsMatch = existing.unit === parsed.unit || 
+                const unitsMatch = existing.unit === (parsed.canonicalUnit || parsed.unit) || 
                                   (!existing.unit && !parsed.unit) ||
-                                  (existing.unit && parsed.unit && 
-                                   (existing.unit.includes(parsed.unit) || parsed.unit.includes(existing.unit)));
+                                  (existing.unit && (parsed.canonicalUnit || parsed.unit) && 
+                                   (existing.unit.includes(parsed.canonicalUnit || parsed.unit || "") || (parsed.canonicalUnit || parsed.unit || "").includes(existing.unit)));
                 
                 if (unitsMatch) {
-                  existing.quantity = (existing.quantity || 0) + parsed.quantity;
+                  existing.quantity = (existing.quantity || 0) + parsed.canonicalQuantity;
                   // Arrondir les nombres entiers
                   if (existing.quantity !== null && Number.isInteger(existing.quantity)) {
                     existing.quantity = Math.round(existing.quantity);
                   }
                   // Normaliser l'unité si nécessaire
-                  if (parsed.unit && !existing.unit) {
-                    existing.unit = parsed.unit;
+                  if ((parsed.canonicalUnit || parsed.unit) && !existing.unit) {
+                    existing.unit = parsed.canonicalUnit || parsed.unit;
                   }
                 }
                 // Si unités incompatibles, on crée un nouvel item (cas rare)
               }
               // Si l'un n'a pas de quantité, on garde null (ingrédient sans quantité)
-              else if (parsed.quantity === null) {
+              else if (parsed.canonicalQuantity === null) {
                 existing.quantity = null;
                 existing.unit = null;
+                existing.name = formatScaledIngredient(parsed);
               }
             } else {
               // Nouvel ingrédient
               ingredientMap.set(normalizedName, {
                 name: parsed.name,
-                quantity: parsed.quantity,
-                unit: parsed.unit,
+                quantity: parsed.canonicalQuantity,
+                unit: parsed.canonicalUnit || parsed.unit,
                 hasAtHome: false,
               });
             }

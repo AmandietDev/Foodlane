@@ -10,9 +10,9 @@ export async function fetchRecipesFromSupabase(): Promise<Recipe[]> {
     console.log('[Recipes] Récupération des recettes depuis Supabase...');
 
     const { data, error } = await supabase
-      .from('recipes')
+      .from('recipes_v2')
       .select('*')
-      .order('nom', { ascending: true });
+      .order('nom_recette', { ascending: true });
 
     if (error) {
       console.error('[Recipes] Erreur Supabase:', error);
@@ -26,19 +26,20 @@ export async function fetchRecipesFromSupabase(): Promise<Recipe[]> {
 
     // Transformer les données Supabase en format Recipe
     const recipes: Recipe[] = data.map((row) => ({
-      id: row.id || '',
-      type: row.type || '',
-      difficulte: row.difficulte || '',
-      temps_preparation_min: row.temps_preparation_min || 0,
-      categorie_temps: row.categorie_temps || '',
-      nb_personnes: row.nb_personnes || 1,
-      nom: row.nom || '',
-      description_courte: row.description_courte || '',
-      ingredients: row.ingredients || '',
-      instructions: row.instructions || '',
-      equipements: row.equipements || '',
-      calories: row.calories || undefined,
-      image_url: row.image_url || undefined,
+      id: Number(row.id),
+      type: row.type ?? null,
+      difficulte: row.difficulte ?? null,
+      temps_preparation_min: row.temps_preparation_min ?? null,
+      categorie_temps: row.categorie_temps ?? null,
+      nombre_personnes: row.nombre_personnes ?? null,
+      nom_recette: row.nom_recette ?? null,
+      description_courte: row.description_courte ?? null,
+      ingredients: row.ingredients ?? null,
+      instructions: row.instructions ?? null,
+      equipements: row.equipements ?? null,
+      calories: row.calories ?? null,
+      image_url: row.image_url ?? null,
+      created_at: row.created_at ?? new Date().toISOString(),
     }));
 
     // Log pour vérifier la répartition par type

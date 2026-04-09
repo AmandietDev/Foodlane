@@ -16,6 +16,8 @@ import type { Recipe } from "../../../src/lib/recipes";
 interface SearchResult {
   recipe: Recipe;
   score: number;
+  coverage: number;
+  matchedIngredientsCount: number;
   reasons: string[];
 }
 
@@ -44,6 +46,78 @@ function normalizeText(text: string): string {
     .replace(/[^\w\s]/g, " ") // Remplace les caractères spéciaux par des espaces
     .replace(/\s+/g, " ") // Normalise les espaces
     .trim();
+}
+
+const INGREDIENT_UNITS = new Set([
+  "g", "kg", "mg", "ml", "l", "cl", "dl",
+  "cuillere", "cuilleres", "c", "cas", "cac",
+  "tasse", "tasses", "pincee", "pincees", "soupe", "cafe", "the",
+  "de", "d", "d'",
+]);
+
+const INGREDIENT_SYNONYMS: Record<string, string[]> = {
+  "poivron": ["poivrons", "piment doux"],
+  "tomate": ["tomates", "coulis de tomate", "concentre de tomate"],
+  "pomme de terre": ["pommes de terre", "patate", "patates"],
+  "courgette": ["courgettes"],
+  "carotte": ["carottes"],
+  "oignon": ["oignons"],
+  "ail": ["ails", "gousse d ail", "gousses d ail"],
+  "poulet": ["blanc de poulet", "escalope de poulet"],
+  "boeuf": ["bœuf", "steak hache", "steak haché"],
+  "oeuf": ["œuf", "oeufs", "œufs"],
+  "riz": ["riz basmati", "riz complet"],
+  "pates": ["pâtes", "spaghetti", "penne", "tagliatelle"],
+  "lait": ["lait demi ecreme", "lait écrémé", "lait entier"],
+};
+
+function singularizeWord(word: string): string {
+  if (word.length <= 3) return word;
+  if (word.endsWith("aux")) return `${word.slice(0, -3)}al`;
+  if (word.endsWith("x")) return word.slice(0, -1);
+  if (word.endsWith("s")) return word.slice(0, -1);
+  return word;
+}
+
+function buildIngredientVariants(raw: string): string[] {
+  const n = normalizeText(raw);
+  if (!n) return [];
+  const out = new Set<string>([n]);
+  const words = n.split(" ").filter(Boolean);
+  if (words.length) {
+    out.add(words.map(singularizeWord).join(" "));
+  }
+  for (const [k, vals] of Object.entries(INGREDIENT_SYNONYMS)) {
+    const nk = normalizeText(k);
+    if (n === nk || vals.map(normalizeText).includes(n)) {
+      out.add(nk);
+      vals.forEach((v) => out.add(normalizeText(v)));
+    }
+  }
+  return [...out].filter(Boolean);
+}
+
+function extractIngredientName(rawIngredient: string): string {
+  const normalized = normalizeText(rawIngredient);
+  if (!normalized) return "";
+  const parts = normalized.split(/\s+/);
+  let idx = 0;
+  while (idx < parts.length) {
+    const p = parts[idx];
+    if (/^\d+([.,]\d+)?$/.test(p) || INGREDIENT_UNITS.has(p)) {
+      idx++;
+      continue;
+    }
+    break;
+  }
+  return idx < parts.length ? parts.slice(idx).join(" ") : normalized;
+}
+
+function recipeIngredientNames(recipe: Recipe): string[] {
+  return (recipe.ingredients || "")
+    .split(";")
+    .map((ing) => extractIngredientName(ing.trim()))
+    .filter((ing) => ing.length > 0);
 }
 
 // Fonction pour déterminer la saison actuelle
@@ -157,15 +231,17 @@ function calculateRecipeScore(
   userAllergies: string[] = [],
   userDiets: string[] = [],
   currentSeason?: string
-): { score: number; reasons: string[] } {
+): { score: number; reasons: string[]; coverage: number; matchedIngredientsCount: number } {
   let score = 0;
   const reasons: string[] = [];
+  let coverage = 0;
+  let matchedIngredientsCount = 0;
   
   // Détecter la saison si non fournie
   const season = currentSeason || getCurrentSeason();
 
   const normalizedQuery = normalizeText(query);
-  const normalizedTitle = normalizeText(recipe.nom || "");
+  const normalizedTitle = normalizeText(recipe.nom_recette || "");
   const normalizedDescription = normalizeText(recipe.description_courte || "");
   const normalizedIngredients = normalizeText(recipe.ingredients || "");
 
@@ -211,89 +287,66 @@ function calculateRecipeScore(
     }
   }
 
-  // 3. Match ingrédients (fort, surtout si l'utilisateur a sélectionné des ingrédients)
+  // 3. Match ingrédients (fort): couverture + matching tolérant (singulier/pluriel/synonymes)
   if (selectedIngredients.length > 0) {
-    const ingredientsList = (recipe.ingredients || "")
-      .split(";")
-      .map(ing => normalizeText(ing.trim()))
-      .filter(ing => ing.length > 0);
-
-    let matchedIngredientsCount = 0;
+    const ingredientsList = recipeIngredientNames(recipe);
+    const fullTexts = [
+      normalizedIngredients,
+      ...ingredientsList,
+      normalizedTitle,
+      normalizedDescription,
+    ].filter(Boolean);
     const matchedIngredientNames: string[] = [];
+    const missingIngredientNames: string[] = [];
 
-    selectedIngredients.forEach(ingredient => {
-      const normalizedIngredient = normalizeText(ingredient);
+    selectedIngredients.forEach((ingredient) => {
+      const variants = buildIngredientVariants(ingredient);
       let found = false;
 
-      // Recherche dans le texte complet normalisé
-      if (normalizedIngredients.includes(normalizedIngredient)) {
-        found = true;
-      } else {
-        // Chercher dans chaque ingrédient individuellement
-        for (const ing of ingredientsList) {
-          // Extraire le nom de l'ingrédient (sans quantité)
-          const parts = ing.split(/\s+/);
-          let ingredientName = ing;
-          
-          // Si l'ingrédient commence par un nombre ou une unité, extraire le nom
-          if (parts.length > 1) {
-            const units = ['g', 'kg', 'ml', 'l', 'cl', 'dl', 'cuillere', 'cuilleres', 'tasse', 'tasses', 'pincee', 'pincées', 'pincees', 'soupe', 'cafe', 'the', 'd', 'de', "d'"];
-            let startIdx = 0;
-            for (let i = 0; i < parts.length; i++) {
-              const part = parts[i];
-              if (/^\d+([.,]\d+)?$/.test(part) || units.some(u => part.includes(u))) {
-                startIdx = i + 1;
-              } else {
-                break;
-              }
-            }
-            if (startIdx < parts.length) {
-              ingredientName = parts.slice(startIdx).join(" ");
-            }
-          }
-
-          const normalizedIngredientName = normalizeText(ingredientName);
-
-          // Recherche exacte
-          if (normalizedIngredientName.includes(normalizedIngredient) || normalizedIngredient.includes(normalizedIngredientName)) {
-            found = true;
-            break;
-          }
-
-          // Recherche avec pluriels
-          const termWords = normalizedIngredient.split(/\s+/);
-          for (const word of termWords) {
-            if (word.length >= 2) {
-              const wordPattern = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(s|x|aux)?(?!\\w)`, 'i');
-              if (wordPattern.test(normalizedIngredientName)) {
-                found = true;
-                break;
-              }
-            }
-          }
-
-          if (found) break;
+      for (const v of variants) {
+        if (!v || v.length < 2) continue;
+        const esc = v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const asWord = new RegExp(`\\b${esc}\\b`, "i");
+        if (fullTexts.some((t) => asWord.test(t) || t.includes(v) || v.includes(t))) {
+          found = true;
+          break;
         }
       }
 
       if (found) {
         matchedIngredientsCount++;
         matchedIngredientNames.push(ingredient);
+      } else {
+        missingIngredientNames.push(ingredient);
       }
     });
 
-    // Score par ingrédient trouvé (plafonné à 30 par ingrédient)
-    const ingredientScore = Math.min(matchedIngredientsCount * 30, selectedIngredients.length * 30);
+    coverage = selectedIngredients.length > 0 ? matchedIngredientsCount / selectedIngredients.length : 0;
+
+    // Score principal basé sur la couverture des ingrédients demandés
+    const ingredientScore = Math.round(coverage * 80);
     score += ingredientScore;
     
     if (matchedIngredientsCount > 0) {
-      reasons.push(`${matchedIngredientsCount}/${selectedIngredients.length} ingrédients`);
+      reasons.push(`${matchedIngredientsCount}/${selectedIngredients.length} ingrédients (${Math.round(coverage * 100)}%)`);
     }
 
-    // Bonus si TOUS les ingrédients sont trouvés
-    if (matchedIngredientsCount === selectedIngredients.length && selectedIngredients.length > 1) {
-      score += 20;
-      reasons.push("Tous les ingrédients");
+    if (coverage >= 0.8) {
+      score += 24;
+      reasons.push("Très forte correspondance ingrédients");
+    } else if (coverage >= 0.5) {
+      score += 12;
+      reasons.push("Bonne correspondance ingrédients");
+    }
+
+    // Léger malus si beaucoup d'ingrédients manquent (évite des suggestions trop hors sujet)
+    const missingCount = selectedIngredients.length - matchedIngredientsCount;
+    if (missingCount > 0) {
+      score -= Math.min(18, missingCount * 4);
+    }
+
+    if (missingIngredientNames.length > 0 && missingIngredientNames.length <= 2) {
+      reasons.push(`Manque: ${missingIngredientNames.join(", ")}`);
     }
   }
 
@@ -328,7 +381,7 @@ function calculateRecipeScore(
     if (hasAllergen) {
       score = -1000; // Exclusion totale
       reasons.push("Contient un allergène");
-      return { score, reasons };
+      return { score, reasons, coverage: 0, matchedIngredientsCount: 0 };
     }
   }
 
@@ -341,7 +394,7 @@ function calculateRecipeScore(
     reasons.push("Profil compatible");
   }
 
-  return { score, reasons };
+  return { score, reasons, coverage, matchedIngredientsCount };
 }
 
 export async function GET(request: NextRequest) {
@@ -477,7 +530,7 @@ export async function GET(request: NextRequest) {
     // Calculer le score pour chaque recette
     const scored: SearchResult[] = filteredRecipes
       .map(recipe => {
-        const { score, reasons } = calculateRecipeScore(
+        const { score, reasons, coverage, matchedIngredientsCount } = calculateRecipeScore(
           recipe,
           query,
           selectedIngredients,
@@ -485,7 +538,7 @@ export async function GET(request: NextRequest) {
           userDiets,
           currentSeason
         );
-        return { recipe, score, reasons };
+        return { recipe, score, coverage, matchedIngredientsCount, reasons };
       })
       .filter(item => item.score > 0) // Exclure les recettes avec score négatif (allergènes)
       .sort((a, b) => b.score - a.score); // Trier par score décroissant
@@ -512,27 +565,23 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Calculer les seuils de pertinence dynamiques
+    const hasIngredientIntent = selectedIngredients.length > 0;
     const maxScore = scored[0].score;
-    const minScore = scored[scored.length - 1].score;
-    const scoreRange = maxScore - minScore;
 
-    // Définir les seuils selon la distribution des scores
-    let highThreshold = 30; // Seuil par défaut pour "très pertinent"
-    let mediumThreshold = 10; // Seuil pour "moyennement pertinent"
+    // Catégorisation "IA": plus orientée couverture ingrédients quand l'utilisateur en a fourni
+    const highRelevance = hasIngredientIntent
+      ? scored.filter((item) => item.coverage >= 0.7 || item.matchedIngredientsCount >= Math.min(2, selectedIngredients.length))
+      : scored.filter((item) => item.score >= Math.max(35, maxScore * 0.6));
+    const mediumRelevance = hasIngredientIntent
+      ? scored.filter((item) => item.coverage >= 0.4 && item.coverage < 0.7)
+      : scored.filter((item) => item.score >= Math.max(18, maxScore * 0.35) && item.score < Math.max(35, maxScore * 0.6));
+    const lowRelevance = hasIngredientIntent
+      ? scored.filter((item) => item.coverage > 0 && item.coverage < 0.4)
+      : scored.filter((item) => item.score > 0 && item.score < Math.max(18, maxScore * 0.35));
 
-    if (scoreRange > 0) {
-      // Ajuster les seuils selon la distribution réelle
-      highThreshold = Math.max(30, maxScore * 0.6); // Au moins 60% du score max
-      mediumThreshold = Math.max(5, maxScore * 0.3); // Au moins 30% du score max
-    }
-
-    // Catégoriser les résultats par niveau de pertinence
-    const highRelevance = scored.filter(item => item.score >= highThreshold);
-    const mediumRelevance = scored.filter(item => item.score >= mediumThreshold && item.score < highThreshold);
-    const lowRelevance = scored.filter(item => item.score > 0 && item.score < mediumThreshold);
-
-    console.log(`[Search] Distribution: ${highRelevance.length} très pertinentes (score >= ${highThreshold.toFixed(1)}), ${mediumRelevance.length} moyennes (${mediumThreshold.toFixed(1)}-${highThreshold.toFixed(1)}), ${lowRelevance.length} faibles (< ${mediumThreshold.toFixed(1)})`);
+    console.log(
+      `[Search] Distribution: ${highRelevance.length} fortes, ${mediumRelevance.length} moyennes, ${lowRelevance.length} faibles`
+    );
 
     // Adapter le nombre de résultats selon la pertinence disponible
     // Principe : proposer uniquement les recettes pertinentes, sans en ajouter de moins pertinentes
@@ -543,7 +592,7 @@ export async function GET(request: NextRequest) {
     if (highRelevance.length > 0) {
       // Il y a des résultats très pertinents : proposer uniquement ceux-là
       // Si seulement 2 sont très pertinentes, on ne propose que ces 2
-      exactResults = highRelevance.map(item => item.recipe);
+      exactResults = highRelevance.slice(0, 12).map(item => item.recipe);
       console.log(`[Search] ${exactResults.length} résultats très pertinents proposés (tous, sans ajout de moins pertinents)`);
       
       // Si peu de résultats très pertinents (≤ 5), ajouter des recettes moins pertinentes mais faisables
@@ -563,7 +612,7 @@ export async function GET(request: NextRequest) {
       }
     } else if (mediumRelevance.length > 0) {
       // Pas de très pertinents, mais des moyennement pertinents : proposer uniquement ceux-là
-      exactResults = mediumRelevance.map(item => item.recipe);
+      exactResults = mediumRelevance.slice(0, 10).map(item => item.recipe);
       console.log(`[Search] ${exactResults.length} résultats moyennement pertinents proposés (tous)`);
       
       // Si peu de résultats (≤ 5), ajouter des recettes faiblement pertinentes
@@ -577,6 +626,14 @@ export async function GET(request: NextRequest) {
       exactResults = lowRelevance.slice(0, 8).map(item => item.recipe);
       console.log(`[Search] ${exactResults.length} résultats de faible pertinence proposés (limités à 8)`);
     }
+
+    // Suggestions IA: recettes plausibles quand la couverture est partielle
+    const idsInExact = new Set(exactResults.map((r) => r.id));
+    suggestions = scored
+      .filter((item) => !idsInExact.has(item.recipe.id))
+      .filter((item) => (hasIngredientIntent ? item.coverage >= 0.25 : item.score >= Math.max(10, maxScore * 0.2)))
+      .slice(0, 8)
+      .map((item) => item.recipe);
 
     // Si aucun résultat exact, utiliser les suggestions comme résultats
     const noExactMatch = exactResults.length === 0 && suggestions.length > 0;

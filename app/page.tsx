@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Recipe } from "./src/lib/recipes";
@@ -13,7 +14,6 @@ import {
 } from "./src/lib/collections";
 import RecipeImage from "./components/RecipeImage";
 import { loadPreferences } from "./src/lib/userPreferences";
-import CameraCapture from "./components/CameraCapture";
 import { 
   filterRecipesByDietaryProfile, 
   filterRecipesByEquipment, 
@@ -26,6 +26,7 @@ import { useTranslation } from "./components/TranslationProvider";
 import { useSwipeBack } from "./hooks/useSwipeBack";
 import { usePremium } from "./contexts/PremiumContext";
 import { useSupabaseSession } from "./hooks/useSupabaseSession";
+import { supabase } from "./src/lib/supabaseClient";
 
 
 export default function Home() {
@@ -39,8 +40,6 @@ export default function Home() {
   const [results, setResults] = useState<Recipe[]>([]);
   const [lessRelevantResults, setLessRelevantResults] = useState<Recipe[]>([]);
   const [showCalories, setShowCalories] = useState(true);
-  const [showCamera, setShowCamera] = useState(false);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [popularRecipes, setPopularRecipes] = useState<Recipe[]>([]);
   const [loadingPopular, setLoadingPopular] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
@@ -56,6 +55,7 @@ export default function Home() {
   const [recipeToAddToCollection, setRecipeToAddToCollection] = useState<Recipe | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [favoriteSuccessMessage, setFavoriteSuccessMessage] = useState<string | null>(null);
+  const autoImageRequestedIds = useRef<Set<number>>(new Set());
 
   // Geste de balayage pour revenir en arrière
   useSwipeBack(() => {
@@ -88,19 +88,20 @@ export default function Home() {
     }
   };
 
-  const saveRating = (recipeId: string, rating: number) => {
+  const saveRating = (recipeId: string | number, rating: number) => {
     if (typeof window === "undefined") return;
     const ratings = loadRatings();
-    if (!ratings[recipeId]) {
-      ratings[recipeId] = [];
+    const key = String(recipeId);
+    if (!ratings[key]) {
+      ratings[key] = [];
     }
-    ratings[recipeId].push(rating);
+    ratings[key].push(rating);
     localStorage.setItem("foodlane_ratings", JSON.stringify(ratings));
     setRecipeRatings(ratings);
   };
 
-  const getAverageRating = (recipeId: string): number => {
-    const ratings = recipeRatings[recipeId] || [];
+  const getAverageRating = (recipeId: string | number): number => {
+    const ratings = recipeRatings[String(recipeId)] || [];
     if (ratings.length === 0) return 0;
     const sum = ratings.reduce((acc, val) => acc + val, 0);
     return Math.round((sum / ratings.length) * 10) / 10; // Arrondi à 1 décimale
@@ -159,6 +160,12 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Dépendances vides : ne s'exécute qu'une fois au montage
 
+  useEffect(() => {
+    if (user?.id) {
+      void loadPopularRecipes();
+    }
+  }, [user?.id]);
+
   // Fonction INDÉPENDANTE pour charger les "Recettes du moment"
   // Cette fonction est complètement séparée de la génération de recettes par ingrédients
   async function loadPopularRecipes() {
@@ -166,11 +173,17 @@ export default function Home() {
     try {
       // Chargement des recettes du moment
       
-      const res = await fetch("/api/recipes", {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const headers: Record<string, string> = { "Cache-Control": "no-cache" };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const url = token ? "/api/recipes/for-me" : "/api/recipes";
+
+      const res = await fetch(url, {
         cache: "no-store",
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
+        headers,
       });
       
       if (!res.ok) {
@@ -199,7 +212,7 @@ export default function Home() {
       }
       
       // Séparer les recettes salées et sucrées
-      const normalizeType = (type: string): string => {
+      const normalizeType = (type: string | null): string => {
         return (type || "").toLowerCase().trim();
       };
       
@@ -315,15 +328,9 @@ export default function Home() {
 
   async function handleGenerateRecipes() {
     // Utiliser la liste d'ingrédients sélectionnés au lieu du champ texte
-    const ingredientsToSearch = selectedIngredients.length > 0 
+    const ingredientsToSearch = selectedIngredients.length > 0
       ? selectedIngredients.join(", ")
       : "";
-    
-    // Permettre la génération si des ingrédients sont renseignés OU si un type est sélectionné (sucré/salé)
-    if (!ingredientsToSearch && recipeTypeFilter === "all") {
-      setGenerateError("Veuillez renseigner des ingrédients ou sélectionner un type de recette (sucré/salé)");
-      return;
-    }
 
     setLoadingGenerate(true);
     setSelectedRecipe(null);
@@ -342,7 +349,10 @@ export default function Home() {
         searchParams.set("userId", user.id);
       }
 
-      const searchUrl = `/api/recipes/search?${searchParams.toString()}`;
+      const queryString = searchParams.toString();
+      const searchUrl = queryString
+        ? `/api/recipes/search?${queryString}`
+        : "/api/recipes/search";
       console.log("[Generate] Recherche via API:", searchUrl);
 
       const res = await fetch(searchUrl, {
@@ -450,19 +460,19 @@ export default function Home() {
   }, [favorites]);
 
 
-  function isFavorite(recipeId: string): boolean {
+  function isFavorite(recipeId: number): boolean {
     // Vérifier dans l'état
     return favorites.some((fav) => fav.id === recipeId);
   }
 
   async function toggleFavorite(recipe: Recipe) {
     // Vérifier que la recette est valide
-    if (!recipe || !recipe.id || !recipe.nom) {
+    if (!recipe || !recipe.id || !recipe.nom_recette) {
       console.error("[Favorites] Tentative d'ajouter une recette invalide:", recipe);
       return;
     }
 
-    console.log("[Favorites] toggleFavorite appelé pour:", recipe.nom, "ID:", recipe.id);
+    console.log("[Favorites] toggleFavorite appelé pour:", recipe.nom_recette, "ID:", recipe.id);
 
     // Charger les favoris actuels depuis Supabase
     const currentFavorites = await loadFavorites();
@@ -473,7 +483,7 @@ export default function Home() {
     if (exists) {
       // Si la recette est déjà en favoris, la retirer directement
       const newFavorites = currentFavorites.filter((fav) => fav.id !== recipe.id);
-      console.log(`[Favorites] Recette "${recipe.nom}" retirée des favoris`);
+      console.log(`[Favorites] Recette "${recipe.nom_recette}" retirée des favoris`);
       await saveFavorites(newFavorites);
       setFavorites(newFavorites);
       
@@ -490,23 +500,24 @@ export default function Home() {
       // Si la recette n'est pas en favoris, l'ajouter TOUJOURS aux favoris d'abord
       const recipeCopy: Recipe = {
         id: recipe.id,
-        type: recipe.type || "",
-        difficulte: recipe.difficulte || "",
-        temps_preparation_min: recipe.temps_preparation_min || 0,
-        categorie_temps: recipe.categorie_temps || "",
-        nb_personnes: recipe.nb_personnes || 0,
-        nom: recipe.nom,
-        description_courte: recipe.description_courte || "",
-        ingredients: recipe.ingredients || "",
-        instructions: recipe.instructions || "",
-        equipements: recipe.equipements || "",
-        calories: recipe.calories,
-        image_url: recipe.image_url,
+        type: recipe.type || null,
+        difficulte: recipe.difficulte || null,
+        temps_preparation_min: recipe.temps_preparation_min || null,
+        categorie_temps: recipe.categorie_temps || null,
+        nombre_personnes: recipe.nombre_personnes || null,
+        nom_recette: recipe.nom_recette || null,
+        description_courte: recipe.description_courte || null,
+        ingredients: recipe.ingredients || null,
+        instructions: recipe.instructions || null,
+        equipements: recipe.equipements || null,
+        calories: recipe.calories || null,
+        image_url: recipe.image_url || null,
+        created_at: recipe.created_at || new Date().toISOString(),
       };
       const newFavorites = [...currentFavorites, recipeCopy];
       await saveFavorites(newFavorites);
       setFavorites(newFavorites);
-      console.log(`[Favorites] Recette "${recipe.nom}" ajoutée aux favoris`);
+      console.log(`[Favorites] Recette "${recipe.nom_recette}" ajoutée aux favoris`);
       
       // Afficher un message de succès
       setFavoriteSuccessMessage("Recette ajoutée aux favoris avec succès");
@@ -530,11 +541,66 @@ export default function Home() {
     setCollections(updated);
   }
 
-  async function handleRemoveFromCollection(collectionId: string, recipeId: string) {
+  async function handleRemoveFromCollection(collectionId: string, recipeId: number) {
     await removeRecipeFromCollection(collectionId, recipeId);
     const updated = await loadCollections();
     setCollections(updated);
   }
+
+  async function ensureRecipeImage(recipe: Recipe): Promise<void> {
+    if (!recipe?.id) return;
+    if (recipe.image_url && recipe.image_url.trim()) return;
+    if (autoImageRequestedIds.current.has(recipe.id)) return;
+    autoImageRequestedIds.current.add(recipe.id);
+    try {
+      const res = await fetch("/api/recipes/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipeId: recipe.id,
+          nom_recette: recipe.nom_recette,
+          description: recipe.description_courte,
+          ingredients: recipe.ingredients || "",
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || !payload?.image_url) return;
+      const imageUrl = payload.image_url as string;
+
+      const patchRecipe = (r: Recipe): Recipe =>
+        r.id === recipe.id ? { ...r, image_url: imageUrl } : r;
+      setResults((prev) => prev.map(patchRecipe));
+      setLessRelevantResults((prev) => prev.map(patchRecipe));
+      setPopularRecipes((prev) => prev.map(patchRecipe));
+      setSelectedRecipe((prev) => (prev?.id === recipe.id ? { ...prev, image_url: imageUrl } : prev));
+    } catch {
+      // Silencieux : l'image sera regénérée lors d'un prochain affichage.
+    }
+  }
+
+  useEffect(() => {
+    const uniqueMissing = [
+      ...new Map(
+        [...results, ...lessRelevantResults, ...popularRecipes]
+          .filter((r) => r?.id && !r.image_url)
+          .map((r) => [r.id, r])
+      ).values(),
+    ];
+    if (uniqueMissing.length === 0) return;
+    void (async () => {
+      for (const recipe of uniqueMissing) {
+        // eslint-disable-next-line no-await-in-loop
+        await ensureRecipeImage(recipe);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results, lessRelevantResults, popularRecipes]);
+
+  useEffect(() => {
+    if (!selectedRecipe || selectedRecipe.image_url) return;
+    void ensureRecipeImage(selectedRecipe);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRecipe?.id, selectedRecipe?.image_url]);
 
 
   const getGreeting = () => {
@@ -562,17 +628,24 @@ export default function Home() {
           {userPrenom ? `${getGreeting()}, ${userPrenom} !` : getGreeting() + " !"}
         </h1>
         <p className="text-base text-[#7A3A3A] font-medium">
-          Génère des recettes à partir des aliments de ton frigo
+          Explore toutes les recettes selon tes envies (sucré, salé, ingrédients)
         </p>
       </header>
 
-      {/* Outil de génération de recettes */}
+      <Link
+        href="/tableau"
+        className="mb-4 inline-flex items-center rounded-xl border border-[#E8A0A0] bg-white px-3 py-2 text-xs font-semibold text-[#6B2E2E] hover:bg-[#FFF3F0] transition-colors"
+      >
+        ← Retour à l’accueil de génération de menus
+      </Link>
+
+      {/* Outil de parcours des recettes */}
       <section className="mb-6 rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] p-4">
         <h3 className="text-lg font-bold text-[#6B2E2E] mb-3">
-          🍳 Générer des recettes
+          🔎 Parcourir les recettes
         </h3>
         <p className="text-sm text-[#7A3A3A] mb-4">
-          Entrez un ingrédient et appuyez sur Espace pour l'ajouter
+          Ajoute des ingrédients et filtre en sucré ou salé pour explorer toutes nos recettes.
         </p>
 
         {/* Affichage des ingrédients sélectionnés */}
@@ -628,7 +701,7 @@ export default function Home() {
 
         {/* Filtre par type (sucré/salé) */}
         <div className="mb-4">
-          <p className="text-xs text-[#7A3A3A] mb-2">Type de recettes :</p>
+          <p className="text-xs text-[#7A3A3A] mb-2">Explorer par type :</p>
           <div className="flex gap-2">
             <button
               onClick={() => setRecipeTypeFilter("all")}
@@ -665,10 +738,10 @@ export default function Home() {
 
         <button
           className="w-full px-4 py-3.5 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
-          disabled={(selectedIngredients.length === 0 && recipeTypeFilter === "all") || loadingGenerate}
+          disabled={loadingGenerate}
           onClick={handleGenerateRecipes}
         >
-          {loadingGenerate ? "Génération en cours..." : "Générer des recettes"}
+          {loadingGenerate ? "Chargement des recettes..." : "Explorer les recettes"}
         </button>
         
         {generateError && (
@@ -677,71 +750,6 @@ export default function Home() {
         </div>
         )}
       </section>
-
-      {/* Bloc Photo */}
-      <section className="mb-6 rounded-2xl border border-[var(--beige-border)] bg-[var(--beige-card)] px-4 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex-1">
-            <p className="font-semibold text-sm mb-1 text-[var(--text-primary)]">📷 Photo de frigo</p>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Prends une photo de ton frigo pour identifier tes ingrédients
-            </p>
-            <p className="text-xs text-[#D44A4A] font-medium mt-1">
-              ⏳ Bientôt disponible
-            </p>
-          </div>
-          <button
-            disabled
-            className="px-4 py-2 rounded-xl bg-gray-300 text-xs font-semibold text-gray-500 cursor-not-allowed flex-shrink-0 opacity-60"
-          >
-            Prendre une photo
-          </button>
-        </div>
-      </section>
-
-      {/* Aperçu de la photo capturée */}
-      {capturedImage && (
-        <section className="mb-6 rounded-2xl border border-[var(--beige-border)] bg-[var(--beige-card)] p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Photo capturée</h3>
-            <button
-              onClick={() => setCapturedImage(null)}
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-sm p-1"
-            >
-              ✕
-            </button>
-          </div>
-          <img
-            src={capturedImage}
-            alt="Photo du frigo"
-            className="w-full rounded-xl mb-3 border border-[var(--beige-border)]"
-          />
-          <p className="text-xs text-[var(--text-secondary)] mb-3">
-            💡 La détection automatique des ingrédients sera bientôt disponible.
-          </p>
-          <button
-            onClick={() => {
-              setCapturedImage(null);
-              setShowCamera(true);
-            }}
-            className="w-full px-4 py-2.5 rounded-xl bg-[#D44A4A] text-white text-xs font-semibold hover:bg-[#C03A3A] transition-colors"
-          >
-            📷 Reprendre une photo
-          </button>
-        </section>
-      )}
-
-      {/* Composant de prise de photo */}
-      {showCamera && (
-        <CameraCapture
-          onCapture={(imageDataUrl) => {
-            setCapturedImage(imageDataUrl);
-            setShowCamera(false);
-          }}
-          onClose={() => setShowCamera(false)}
-          title="Photo de ton frigo"
-        />
-      )}
 
       {/* Section Recettes du moment - déplacée en bas */}
       {popularRecipes.length > 0 && (
@@ -756,11 +764,13 @@ export default function Home() {
                   // Charger environ 10 recettes du moment pour "Voir tout"
                   setLoadingGenerate(true);
                   try {
-                    const res = await fetch("/api/recipes", {
+                    const { data: s } = await supabase.auth.getSession();
+                    const h: Record<string, string> = { "Cache-Control": "no-cache" };
+                    if (s.session?.access_token) h.Authorization = `Bearer ${s.session.access_token}`;
+                    const recipesUrl = s.session?.access_token ? "/api/recipes/for-me" : "/api/recipes";
+                    const res = await fetch(recipesUrl, {
                       cache: "no-store",
-                      headers: {
-                        'Cache-Control': 'no-cache',
-                      },
+                      headers: h,
                     });
                     
                     if (!res.ok) {
@@ -777,7 +787,7 @@ export default function Home() {
                     }
                     
                     // Séparer les recettes salées et sucrées
-                    const normalizeType = (type: string): string => {
+                    const normalizeType = (type: string | null): string => {
                       return (type || "").toLowerCase().trim();
                     };
                     
@@ -865,7 +875,7 @@ export default function Home() {
                     {recipe.image_url ? (
                       <RecipeImage
                         imageUrl={recipe.image_url}
-                        alt={recipe.nom}
+                        alt={recipe.nom_recette || "Recette"}
                         className="w-full h-full"
                         fallbackClassName="rounded-2xl"
                         priority={false}
@@ -877,7 +887,7 @@ export default function Home() {
                       </div>
                     )}
                     {/* Badge temps en overlay en haut à gauche */}
-                    {recipe.temps_preparation_min > 0 && (
+                    {(recipe.temps_preparation_min || 0) > 0 && (
                       <div className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-white text-[10px] font-semibold flex items-center gap-1">
                         <span>⏱</span>
                         <span>{recipe.temps_preparation_min} min</span>
@@ -904,7 +914,7 @@ export default function Home() {
               </button>
             </div>
                   <h4 className="font-semibold text-sm text-[#6B2E2E] text-center leading-tight px-1 line-clamp-2">
-                    {recipe.nom}
+                    {recipe.nom_recette}
                   </h4>
                 </article>
               ))}
@@ -925,7 +935,7 @@ export default function Home() {
                 {selectedRecipe.image_url ? (
                     <RecipeImage
                       imageUrl={selectedRecipe.image_url}
-                      alt={selectedRecipe.nom}
+                      alt={selectedRecipe.nom_recette || "Recette"}
                       className="w-full h-full"
                       fallbackClassName=""
                       priority={true}
@@ -987,7 +997,7 @@ export default function Home() {
                     onClick={() => {
                       if (navigator.share && selectedRecipe) {
                         navigator.share({
-                          title: selectedRecipe.nom,
+                          title: selectedRecipe.nom_recette || "Recette",
                           text: selectedRecipe.description_courte || "",
                           url: window.location.href,
                         }).catch(() => {});
@@ -1024,7 +1034,7 @@ export default function Home() {
                 {/* Titre et type de cuisine */}
                 <div className="mb-4">
                   <h2 className="text-xl font-bold text-[#6B2E2E] mb-1">
-                    {selectedRecipe.nom}
+                    {selectedRecipe.nom_recette}
                   </h2>
                       {selectedRecipe.type && (
                     <p className="text-xs text-[#7A3A3A]">
@@ -1042,7 +1052,7 @@ export default function Home() {
                   </div>
                   {getAverageRating(selectedRecipe.id) > 0 && (
                     <span className="text-xs text-[#7A3A3A]">
-                      ({recipeRatings[selectedRecipe.id]?.length || 0} avis)
+                      ({recipeRatings[String(selectedRecipe.id)]?.length || 0} avis)
                         </span>
                       )}
                 </div>
@@ -1105,7 +1115,7 @@ export default function Home() {
                       </p>
                     </div>
                   )}
-                  {selectedRecipe.temps_preparation_min > 0 && (
+                  {(selectedRecipe.temps_preparation_min || 0) > 0 && (
                     <div className="bg-gradient-to-b from-[#D44A4A] to-[#C03A3A] rounded-xl p-2.5 text-center shadow-md">
                       <div className="flex justify-center mb-1">
                         <svg
@@ -1122,10 +1132,10 @@ export default function Home() {
                           <polyline points="12 6 12 12 16 14"></polyline>
                         </svg>
                     </div>
-                      <p className="text-[9px] font-semibold text-white">{selectedRecipe.temps_preparation_min} min</p>
+                      <p className="text-[9px] font-semibold text-white">{selectedRecipe.temps_preparation_min || 0} min</p>
                   </div>
                   )}
-                  {selectedRecipe.nb_personnes > 0 && (
+                  {(selectedRecipe.nombre_personnes || 0) > 0 && (
                     <div className="bg-gradient-to-b from-[#D44A4A] to-[#C03A3A] rounded-xl p-2.5 text-center shadow-md">
                       <div className="flex justify-center mb-1">
                         <svg
@@ -1144,7 +1154,7 @@ export default function Home() {
                           <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
                 </div>
-                      <p className="text-[9px] font-semibold text-white">{selectedRecipe.nb_personnes} pers</p>
+                      <p className="text-[9px] font-semibold text-white">{selectedRecipe.nombre_personnes} pers</p>
                   </div>
                 )}
                 </div>
@@ -1153,7 +1163,7 @@ export default function Home() {
                 <div className="mb-6">
                   <h3 className="text-base font-bold text-[#6B2E2E] mb-3">Ingredients</h3>
                   <ul className="space-y-2.5">
-                    {selectedRecipe.ingredients
+                    {(selectedRecipe.ingredients || "")
                       .split(";")
                       .filter((item) => item.trim().length > 0)
                       .map((item, idx) => {
@@ -1172,7 +1182,7 @@ export default function Home() {
                 <div className="mb-6">
                   <h3 className="text-base font-bold text-[#6B2E2E] mb-3">Directions</h3>
                   <ol className="space-y-2.5">
-                    {selectedRecipe.instructions
+                    {(selectedRecipe.instructions || "")
                       .split(";")
                       .filter((item) => item.trim().length > 0)
                       .map((item, idx) => {
@@ -1271,7 +1281,7 @@ export default function Home() {
                       {recipe.image_url ? (
                           <RecipeImage
                             imageUrl={recipe.image_url}
-                            alt={recipe.nom}
+                            alt={recipe.nom_recette || "Recette"}
                             className="w-full h-full"
                             fallbackClassName="rounded-2xl"
                             priority={false}
@@ -1325,7 +1335,7 @@ export default function Home() {
                     
                     {/* Nom de la recette en dessous */}
                     <h4 className="font-semibold text-sm text-[#6B2E2E] text-center leading-tight px-1 line-clamp-2">
-                      {recipe.nom}
+                      {recipe.nom_recette}
                     </h4>
                     </article>
                   ))}
@@ -1355,7 +1365,7 @@ export default function Home() {
                           {recipe.image_url ? (
                             <RecipeImage
                               imageUrl={recipe.image_url}
-                              alt={recipe.nom}
+                              alt={recipe.nom_recette || "Recette"}
                               className="w-full h-full"
                               fallbackClassName="rounded-2xl"
                               priority={false}
@@ -1409,7 +1419,7 @@ export default function Home() {
                         
                         {/* Nom de la recette en dessous */}
                         <h4 className="font-semibold text-sm text-[#6B2E2E] text-center leading-tight px-1 line-clamp-2">
-                          {recipe.nom}
+                          {recipe.nom_recette}
                         </h4>
                       </article>
                     ))}
@@ -1435,7 +1445,7 @@ export default function Home() {
               </button>
             </div>
             
-            <p className="text-sm text-[#7A3A3A] mb-6">{selectedRecipe.nom}</p>
+            <p className="text-sm text-[#7A3A3A] mb-6">{selectedRecipe.nom_recette}</p>
             
             {/* Sélection de note avec étoiles */}
             <div className="mb-6">
@@ -1503,7 +1513,7 @@ export default function Home() {
                 ✕
               </button>
             </div>
-            <p className="text-sm text-[#7A3A3A] mb-4">{recipeToAddToCollection.nom}</p>
+            <p className="text-sm text-[#7A3A3A] mb-4">{recipeToAddToCollection.nom_recette}</p>
             <div className="space-y-2 mb-4">
               {collections.length === 0 ? (
                 <p className="text-sm text-[#7A3A3A] text-center mb-4 py-4">

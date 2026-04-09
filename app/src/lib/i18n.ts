@@ -14,10 +14,10 @@ interface Translations {
 const translations: Translations = {
   // Navigation
   "nav.cuisine": {
-    fr: "Recettes",
-    en: "Recipes",
-    es: "Recetas",
-    de: "Rezepte",
+    fr: "Menus",
+    en: "Meal plans",
+    es: "Menús",
+    de: "Speisepläne",
   },
   "nav.ressources": {
     fr: "Mon carnet",

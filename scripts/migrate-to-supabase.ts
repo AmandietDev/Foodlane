@@ -16,7 +16,7 @@ import type { Recipe } from '../app/src/lib/recipes';
  * Prérequis:
  * - Avoir configuré NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY
  * - Avoir configuré SHEET_RECIPES_CSV_URL (temporairement pour la migration)
- * - Avoir créé la table recipes dans Supabase
+ * - Avoir créé la table recipes_v2 dans Supabase
  */
 
 // Créer le client Supabase pour le script
@@ -86,7 +86,7 @@ async function migrateRecipes() {
         const tempsPrep = (row['Temps de préparation (min)'] || '').trim();
         const categorieTemps = (row['Catégorie temps (sélection)'] || '').trim();
         const nbPersonnes = (row['Nombre de personnes'] || '').trim();
-        const nom = (row['Nom de la recette'] || '').trim();
+        const nomRecette = (row['Nom de la recette'] || '').trim();
         const description = (row['Description courte'] || '').trim();
         const ingredients = (row['Ingrédients + quantités (séparés par ;)'] || '').trim();
         const instructions = (row['Instructions (étapes séparées par ;)'] || '').trim();
@@ -95,19 +95,20 @@ async function migrateRecipes() {
         const imageUrl = (row['image_url'] || '').trim();
 
         return {
-          id: (row['ID'] && row['ID']!.toString().trim()) || `R_${index + 1}`,
-          type,
-          difficulte,
-          temps_preparation_min: tempsPrep ? Number(tempsPrep) : 0,
-          categorie_temps: categorieTemps,
-          nb_personnes: nbPersonnes ? Number(nbPersonnes) : 0,
-          nom,
-          description_courte: description,
-          ingredients,
-          instructions,
-          equipements,
-          calories: calories ? Number(calories) : undefined,
-          image_url: imageUrl,
+          id: Number((row['ID'] && row['ID']!.toString().trim()) || index + 1),
+          type: type || null,
+          difficulte: difficulte || null,
+          temps_preparation_min: tempsPrep ? Number(tempsPrep) : null,
+          categorie_temps: categorieTemps || null,
+          nombre_personnes: nbPersonnes ? Number(nbPersonnes) : null,
+          nom_recette: nomRecette || null,
+          description_courte: description || null,
+          ingredients: ingredients || null,
+          instructions: instructions || null,
+          equipements: equipements || null,
+          calories: calories ? Number(calories) : null,
+          image_url: imageUrl || null,
+          created_at: new Date().toISOString(),
         };
       });
 
@@ -116,7 +117,7 @@ async function migrateRecipes() {
     // 4. Vérifier si des recettes existent déjà dans Supabase
     console.log('🔍 Étape 4: Vérification des recettes existantes...');
     const { data: existingRecipes, error: checkError } = await supabase
-      .from('recipes')
+      .from('recipes_v2')
       .select('id');
 
     if (checkError) {
@@ -136,14 +137,15 @@ async function migrateRecipes() {
       difficulte: recipe.difficulte,
       temps_preparation_min: recipe.temps_preparation_min,
       categorie_temps: recipe.categorie_temps,
-      nb_personnes: recipe.nb_personnes,
-      nom: recipe.nom,
+      nombre_personnes: recipe.nombre_personnes,
+      nom_recette: recipe.nom_recette,
       description_courte: recipe.description_courte,
       ingredients: recipe.ingredients,
       instructions: recipe.instructions,
       equipements: recipe.equipements,
-      calories: recipe.calories || null,
-      image_url: recipe.image_url || null,
+      calories: recipe.calories,
+      image_url: recipe.image_url,
+      created_at: recipe.created_at,
     }));
 
     // Insérer par batch de 100 pour éviter les limites
@@ -157,7 +159,7 @@ async function migrateRecipes() {
       
       // Utiliser upsert pour éviter les doublons
       const { data, error } = await supabase
-        .from('recipes')
+        .from('recipes_v2')
         .upsert(batch, { onConflict: 'id' });
 
       if (error) {

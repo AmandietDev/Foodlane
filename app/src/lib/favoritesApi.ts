@@ -39,7 +39,7 @@ export async function getUserFavorites(): Promise<Recipe[]> {
   const recipeIds = savedRecipes.map((sr) => sr.recipe_id);
   
   const { data: recipes, error: recipesError } = await supabase
-    .from("recipes")
+    .from("recipes_v2")
     .select("*")
     .in("id", recipeIds);
 
@@ -51,20 +51,21 @@ export async function getUserFavorites(): Promise<Recipe[]> {
   }
 
   // Mapper les données Supabase vers le format Recipe
-  return (recipes || []).map((r: any) => ({
-    id: r.id?.toString() || "",
-    type: r.type || "",
-    difficulte: r.difficulte || "",
-    temps_preparation_min: r.temps_preparation_min || 0,
-    categorie_temps: r.categorie_temps || "",
-    nb_personnes: r.nb_personnes || 0,
-    nom: r.nom || "",
-    description_courte: r.description_courte || "",
-    ingredients: r.ingredients || "",
-    instructions: r.instructions || "",
-    equipements: r.equipements || "",
-    calories: r.calories,
-    image_url: r.image_url,
+  return (recipes || []).map((r: Record<string, unknown>) => ({
+    id: Number(r["id"]),
+    type: (r["type"] as string | null) ?? null,
+    difficulte: (r["difficulte"] as string | null) ?? null,
+    temps_preparation_min: (r["temps_preparation_min"] as number | null) ?? null,
+    categorie_temps: (r["categorie_temps"] as string | null) ?? null,
+    nombre_personnes: (r["nombre_personnes"] as number | null) ?? null,
+    nom_recette: (r["nom_recette"] as string | null) ?? null,
+    description_courte: (r["description_courte"] as string | null) ?? null,
+    ingredients: (r["ingredients"] as string | null) ?? null,
+    instructions: (r["instructions"] as string | null) ?? null,
+    equipements: (r["equipements"] as string | null) ?? null,
+    calories: (r["calories"] as number | null) ?? null,
+    image_url: (r["image_url"] as string | null) ?? null,
+    created_at: (r["created_at"] as string | null) ?? new Date().toISOString(),
   }));
 }
 
@@ -73,7 +74,7 @@ export async function getUserFavorites(): Promise<Recipe[]> {
  * @param recipeId - ID de la recette à ajouter
  * @throws Error si l'utilisateur n'est pas connecté ou en cas d'erreur Supabase
  */
-export async function addFavorite(recipeId: string): Promise<void> {
+export async function addFavorite(recipeId: number): Promise<void> {
   // Vérifier que l'utilisateur est connecté
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
@@ -107,7 +108,7 @@ export async function addFavorite(recipeId: string): Promise<void> {
  * @param recipeId - ID de la recette à retirer
  * @throws Error si l'utilisateur n'est pas connecté ou en cas d'erreur Supabase
  */
-export async function removeFavorite(recipeId: string): Promise<void> {
+export async function removeFavorite(recipeId: number): Promise<void> {
   // Vérifier que l'utilisateur est connecté
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
@@ -136,7 +137,7 @@ export async function removeFavorite(recipeId: string): Promise<void> {
 export interface UserCollection {
   id: string;
   name: string;
-  recipeIds: string[];
+  recipeIds: number[];
   createdAt: number;
 }
 
@@ -190,7 +191,7 @@ export async function getUserCollections(): Promise<UserCollection[]> {
       return {
         id: collection.id,
         name: collection.name,
-        recipeIds: collectionRecipes?.map((cr) => cr.recipe_id) || [],
+        recipeIds: (collectionRecipes || []).map((cr) => Number(cr.recipe_id)).filter((id) => Number.isFinite(id)),
         createdAt: new Date(collection.created_at).getTime(),
       };
     })
@@ -242,7 +243,7 @@ export async function createCollection(name: string): Promise<string> {
  * @param recipeId - ID de la recette à ajouter
  * @throws Error si l'utilisateur n'est pas connecté ou en cas d'erreur Supabase
  */
-export async function addRecipeToCollection(collectionId: string, recipeId: string): Promise<void> {
+export async function addRecipeToCollection(collectionId: string, recipeId: number): Promise<void> {
   // Vérifier que l'utilisateur est connecté
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
@@ -289,7 +290,7 @@ export async function addRecipeToCollection(collectionId: string, recipeId: stri
  * @param recipeId - ID de la recette à retirer
  * @throws Error si l'utilisateur n'est pas connecté ou en cas d'erreur Supabase
  */
-export async function removeRecipeFromCollection(collectionId: string, recipeId: string): Promise<void> {
+export async function removeRecipeFromCollection(collectionId: string, recipeId: number): Promise<void> {
   // Vérifier que l'utilisateur est connecté
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   

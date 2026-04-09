@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Recipe } from "../src/lib/recipes";
 import { loadFavorites, saveFavorites } from "../src/lib/favorites";
+import FavoritesRecipesHero from "../components/FavoritesRecipesHero";
 import RecipeImage from "../components/RecipeImage";
 import { detectDietaryBadges, DIETARY_BADGE_ICONS } from "../src/lib/dietaryProfiles";
 
@@ -84,7 +85,7 @@ export default function RessourcesPage() {
     saveData();
   }, [favorites]);
 
-  function isFavorite(recipeId: string): boolean {
+  function isFavorite(recipeId: number): boolean {
     return favorites.some((fav) => fav.id === recipeId);
   }
 
@@ -171,6 +172,7 @@ export default function RessourcesPage() {
 
       {/* Recettes favorites */}
       <section className="mb-6 rounded-2xl border border-[var(--beige-border)] bg-[var(--beige-card)] px-4 py-4">
+        <FavoritesRecipesHero className="mb-3 -mx-1" heightClass="h-32" caption={false} />
         <div className="flex items-center justify-between gap-2 mb-3">
           <div>
             <h2 className="text-base font-semibold text-[var(--foreground)]">Recettes favorites</h2>
@@ -199,7 +201,7 @@ export default function RessourcesPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
-                    <p className="text-sm font-semibold mb-1 text-[var(--foreground)]">{recipe.nom}</p>
+                    <p className="text-sm font-semibold mb-1 text-[var(--foreground)]">{recipe.nom_recette}</p>
                     <div className="flex flex-wrap gap-1 mb-1">
                       {detectDietaryBadges(recipe).slice(0, 2).map((badge) => (
                         <span
@@ -220,7 +222,7 @@ export default function RessourcesPage() {
                     <p className="text-[11px] text-[var(--beige-text-light)]">
                       {recipe.difficulte || "Difficulté ?"} •{" "}
                       {recipe.temps_preparation_min || "?"} min •{" "}
-                      {recipe.nb_personnes || "?"} pers
+                      {recipe.nombre_personnes || "?"} pers
                     </p>
                   </div>
                   <button
@@ -360,7 +362,7 @@ export default function RessourcesPage() {
           <div className="w-full max-w-md bg-[#FAF6F0] border border-[#D4C4B8] rounded-3xl px-4 pt-4 pb-6 overflow-y-auto max-h-[90vh]">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="flex-1">
-                <h3 className="text-sm font-semibold mb-2">{selectedRecipe.nom}</h3>
+                <h3 className="text-sm font-semibold mb-2">{selectedRecipe.nom_recette}</h3>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {selectedRecipe.type && (
                     <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${
@@ -396,7 +398,7 @@ export default function RessourcesPage() {
               <div className="mb-3">
                 <RecipeImage
                   imageUrl={selectedRecipe.image_url}
-                  alt={selectedRecipe.nom}
+                  alt={selectedRecipe.nom_recette || "Recette"}
                   className="w-full h-40 rounded-2xl border border-[#D4C4B8]"
                   fallbackClassName="rounded-2xl"
                 />

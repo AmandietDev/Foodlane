@@ -13,16 +13,18 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [loadingTimeout, setLoadingTimeout] = useState(false);
 
   // Pages qui ne nécessitent pas de connexion
-  const publicPages = ["/compte", "/login"];
+  const publicPages = ["/compte", "/login", "/forgot-password", "/reset-password"];
 
   // IMPORTANT: Tous les hooks doivent être appelés avant tout return conditionnel
   
-  // Timeout de sécurité : si le chargement prend plus de 3 secondes, considérer comme non connecté
+  // Aligné sur getSessionResilient (~12 s) : éviter d’abandonner avant la fin de l’appel Supabase
+  const SESSION_CHECK_MAX_MS = 15000;
+
   useEffect(() => {
     if (loading) {
       const timer = setTimeout(() => {
         setLoadingTimeout(true);
-      }, 3000);
+      }, SESSION_CHECK_MAX_MS);
       return () => clearTimeout(timer);
     } else {
       setLoadingTimeout(false);
@@ -42,7 +44,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  // Afficher un écran de chargement pendant la vérification (max 3 secondes)
+  // Écran de chargement pendant la vérification de session
   if (loading && !loadingTimeout) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">

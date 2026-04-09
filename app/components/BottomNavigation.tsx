@@ -12,15 +12,21 @@ export default function BottomNavigation() {
   const pathname = usePathname();
 
   const isActive = (path: string) => pathname === path;
+  const isPlanHome =
+    pathname === "/tableau" ||
+    pathname.startsWith("/menus/") ||
+    pathname === "/planifier" ||
+    pathname === "/preferences" ||
+    pathname === "/onboarding";
 
   return (
     <div className="fixed inset-x-0 bottom-0 flex flex-col">
       {/* Barre d'onglets */}
       <nav className="h-14 bg-[#FFF0F0] border-t border-[#E8A0A0] flex items-center justify-around text-xs shadow-lg">
         <Link 
-          href="/" 
+          href="/tableau" 
           className={`flex flex-col items-center gap-1 py-1 px-2 transition-all ${
-            isActive("/") ? "text-[#6B2E2E]" : "text-[#8A4A4A] hover:text-[#6B2E2E]"
+            isPlanHome ? "text-[#6B2E2E]" : "text-[#8A4A4A] hover:text-[#6B2E2E]"
           }`}
         >
           <Image
@@ -41,7 +47,7 @@ export default function BottomNavigation() {
         >
           <Image
             src="/moncarnet.png"
-            alt="Mes recettes"
+            alt="Mon carnet"
             width={24}
             height={24}
             className="object-contain"

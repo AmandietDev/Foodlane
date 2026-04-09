@@ -1,19 +1,20 @@
 import Papa from "papaparse";
 
 export type Recipe = {
-  id: string;
-  type: string; // Type (sucré/salé)
-  difficulte: string; // Difficulté (Facile/Moyen/Difficile)
-  temps_preparation_min: number;
-  categorie_temps: string; // Catégorie temps (sélection)
-  nb_personnes: number;
-  nom: string;
-  description_courte: string;
-  ingredients: string; // Ingrédients + quantités (séparés par ;)
-  instructions: string; // Instructions (étapes séparées par ;)
-  equipements: string; // Équipements nécessaires (séparés par ;)
-  calories?: number; // Calories pour une portion
-  image_url?: string;
+  id: number;
+  type: string | null;
+  difficulte: string | null;
+  temps_preparation_min: number | null;
+  categorie_temps: string | null;
+  nombre_personnes: number | null;
+  nom_recette: string | null;
+  description_courte: string | null;
+  ingredients: string | null;
+  instructions: string | null;
+  equipements: string | null;
+  calories: number | null;
+  image_url: string | null;
+  created_at: string;
 };
 
 /**
@@ -63,7 +64,7 @@ export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
   // Vérifier que c'est bien une URL valide
   try {
     new URL(url);
-  } catch (e) {
+  } catch {
     console.error("[Recipes] URL invalide:", url);
     throw new Error(`URL invalide pour SHEET_RECIPES_CSV_URL: "${url}". Vérifiez votre fichier .env.local`);
   }
@@ -138,7 +139,7 @@ export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
         const tempsPrep = (row["Temps de préparation (min)"] || "").trim();
         const categorieTemps = (row["Catégorie temps (sélection)"] || "").trim();
         const nbPersonnes = (row["Nombre de personnes"] || "").trim();
-        const nom = (row["Nom de la recette"] || "").trim();
+        const nomRecette = (row["Nom de la recette"] || "").trim();
         const description = (row["Description courte"] || "").trim();
         const ingredients = (row["Ingrédients + quantités (séparés par ;)"] || "").trim();
         const instructions = (row["Instructions (étapes séparées par ;)"] || "").trim();
@@ -147,21 +148,20 @@ export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
         const imageUrl = (row["image_url"] || "").trim();
         
         return {
-          id:
-            (row["ID"] && row["ID"]!.toString().trim()) ||
-            `R_${index + 1}`,
-          type,
-          difficulte,
-          temps_preparation_min: tempsPrep ? Number(tempsPrep) : 0,
-          categorie_temps: categorieTemps,
-          nb_personnes: nbPersonnes ? Number(nbPersonnes) : 0,
-          nom,
-          description_courte: description,
-          ingredients,
-          instructions,
-          equipements,
-          calories: calories ? Number(calories) : undefined,
-          image_url: imageUrl,
+          id: Number((row["ID"] && row["ID"]!.toString().trim()) || index + 1),
+          type: type || null,
+          difficulte: difficulte || null,
+          temps_preparation_min: tempsPrep ? Number(tempsPrep) : null,
+          categorie_temps: categorieTemps || null,
+          nombre_personnes: nbPersonnes ? Number(nbPersonnes) : null,
+          nom_recette: nomRecette || null,
+          description_courte: description || null,
+          ingredients: ingredients || null,
+          instructions: instructions || null,
+          equipements: equipements || null,
+          calories: calories ? Number(calories) : null,
+          image_url: imageUrl || null,
+          created_at: new Date().toISOString(),
         };
       });
     

@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { supabase } from "../src/lib/supabaseClient";
 import type { Recipe } from "../src/lib/recipes";
 import { loadFavorites, saveFavorites } from "../src/lib/favorites";
 import RecipeImage from "../components/RecipeImage";
+import AestheticIllustration from "../components/AestheticIllustration";
 import { detectDietaryBadges, DIETARY_BADGE_ICONS } from "../src/lib/dietaryProfiles";
 import LoadingSpinner from "../components/LoadingSpinner";
 import EmptyState from "../components/EmptyState";
@@ -20,6 +22,7 @@ import {
   deleteCollection,
   updateCollection,
 } from "../src/lib/collections";
+import { plannerFetch } from "../src/lib/plannerClient";
 import { getCurrentWeekMenu, formatDateDisplay } from "../src/lib/weeklyMenu";
 import {
   generateSmartShoppingList,
@@ -49,6 +52,9 @@ export default function FavorisPage() {
   const [showAllCollections, setShowAllCollections] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [favoriteSuccessMessage, setFavoriteSuccessMessage] = useState<string | null>(null);
+  const [savedMenus, setSavedMenus] = useState<
+    { id: string; title: string; week_start_date: string; created_at: string }[]
+  >([]);
   
   // États pour l'outil de création de menu
   const [showMenuCreator, setShowMenuCreator] = useState(false);
@@ -165,6 +171,17 @@ export default function FavorisPage() {
     };
   }, [selectedCollection?.id]); // Recharger seulement si la collection sélectionnée change
 
+  useEffect(() => {
+    if (isCheckingAuth) return;
+    (async () => {
+      const res = await plannerFetch("/menus?saved_only=1");
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(j.menus)) {
+        setSavedMenus(j.menus);
+      }
+    })();
+  }, [isCheckingAuth]);
+
   // Recharger les favoris et collections quand on revient sur cette page
   useEffect(() => {
     if (pathname === "/favoris" || pathname === "/ressources") {
@@ -212,7 +229,7 @@ export default function FavorisPage() {
   // La sauvegarde se fait directement dans les fonctions qui modifient les collections
   // Cela évite les conflits et les boucles infinies
 
-  function isFavorite(recipeId: string): boolean {
+  function isFavorite(recipeId: number): boolean {
     return favorites.some((fav) => fav.id === recipeId);
   }
 
@@ -313,7 +330,7 @@ export default function FavorisPage() {
     // Filtre par recherche texte
     if (menuCreatorSearch.trim() !== "") {
       const searchLower = menuCreatorSearch.toLowerCase();
-      const nomMatch = recipe.nom?.toLowerCase().includes(searchLower);
+      const nomMatch = recipe.nom_recette?.toLowerCase().includes(searchLower);
       const descMatch = recipe.description_courte?.toLowerCase().includes(searchLower);
       const ingMatch = recipe.ingredients?.toLowerCase().includes(searchLower);
       if (!nomMatch && !descMatch && !ingMatch) {
@@ -366,7 +383,7 @@ export default function FavorisPage() {
         try {
           console.log("[FavorisPage] Ajout automatique de la recette à la nouvelle collection:", {
             recipeId: recipeToAdd.id,
-            recipeName: recipeToAdd.nom,
+            recipeName: recipeToAdd.nom_recette,
             collectionId: savedCollection.id,
             collectionName: savedCollection.name
           });
@@ -401,7 +418,7 @@ export default function FavorisPage() {
     }
   }
 
-  async function handleRemoveFromCollection(collectionId: string, recipeId: string) {
+  async function handleRemoveFromCollection(collectionId: string, recipeId: number) {
     await removeRecipeFromCollection(collectionId, recipeId);
     const updated = await loadCollections();
     setCollections(updated);
@@ -450,15 +467,14 @@ export default function FavorisPage() {
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-[#D44A4A]">MON CARNET</h1>
         </div>
-        
       </header>
 
       {/* Widget Menu et Liste de courses */}
       {!selectedCollection && (
         <section className="mb-6">
-          <div className="bg-[var(--beige-card)] border border-[var(--beige-border)] rounded-2xl p-4">
+          <div className="bg-white border border-[#E8A0A0] rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-[#6B2E2E]">Menu de la semaine</h2>
+              <h2 className="text-base font-semibold text-[#6B2E2E]">Mon menu de la semaine</h2>
               <Link
                 href="/menu-semaine"
                 className="text-sm text-[#D44A4A] font-semibold hover:text-[#C03A3A]"
@@ -468,10 +484,18 @@ export default function FavorisPage() {
             </div>
 
             {!hasMenu ? (
-              <div className="text-center py-6">
-                <div className="text-4xl mb-3">📅</div>
-                <p className="text-sm text-[#7A3A3A] mb-4">
-                  Crée ton menu de la semaine
+              <div className="rounded-xl border border-[#F2D2D2] bg-[#FFF6F6] p-4 text-center">
+                <div className="relative mb-3 h-28 w-full overflow-hidden rounded-xl bg-white">
+                  <Image
+                    src="/menu-generation-collage.png"
+                    alt=""
+                    fill
+                    className="object-cover object-center"
+                    sizes="(max-width: 768px) 100vw, 420px"
+                  />
+                </div>
+                <p className="text-sm text-[#6B2E2E] font-medium mb-3">
+                  Tu n&apos;as pas encore de menu enregistré cette semaine.
                 </p>
                 <button
                   onClick={() => {
@@ -479,9 +503,9 @@ export default function FavorisPage() {
                     setSelectedRecipeFromMenuCreator(null); // Réinitialiser
                     loadMenuCreatorRecipes();
                   }}
-                  className="inline-block px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
+                  className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
                 >
-                  Créer un menu
+                  Créer mon menu
                 </button>
               </div>
             ) : (
@@ -578,6 +602,36 @@ export default function FavorisPage() {
         </section>
       )}
 
+      {!selectedCollection && (
+        <section className="mb-6">
+          <div className="bg-white border border-[#E8A0A0] rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-[#6B2E2E]">Mes menus enregistrés</h2>
+              <Link href="/tableau" className="text-sm text-[#D44A4A] font-semibold hover:text-[#C03A3A]">
+                Voir tous →
+              </Link>
+            </div>
+            {savedMenus.length === 0 ? (
+              <p className="text-sm text-[#7A3A3A]">Aucun menu enregistré pour le moment.</p>
+            ) : (
+              <ul className="space-y-2">
+                {savedMenus.slice(0, 3).map((m) => (
+                  <li key={m.id}>
+                    <Link
+                      href={`/menus/${m.id}`}
+                      className="flex items-center justify-between rounded-xl border border-[#E8D5D5] px-3 py-2 bg-[#FFF8F8]"
+                    >
+                      <span className="text-sm font-medium text-[#4a2c2c]">{m.title}</span>
+                      <span className="text-xs text-[#7A3A3A]">{m.week_start_date}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Section Collections - style inspiré de l'image */}
       {!selectedCollection && (
         <section className="mb-6">
@@ -592,14 +646,43 @@ export default function FavorisPage() {
           </div>
           
           {collections.length === 0 ? (
-            <div className="text-center py-8 bg-white rounded-2xl border border-[var(--beige-border)]">
-              <div className="text-4xl mb-3">📁</div>
-              <p className="text-sm text-[#7A3A3A] mb-4">
+            <div className="text-center p-5 bg-white rounded-2xl border border-[#E8A0A0] shadow-sm">
+              <div className="relative mb-3 h-28 w-full overflow-hidden rounded-xl bg-white">
+                <Image
+                  src="/recipes-explore-banner-229d46d1.png"
+                  alt=""
+                  fill
+                  className="object-cover object-center"
+                  sizes="(max-width: 768px) 100vw, 420px"
+                />
+              </div>
+              <div className="mb-2 flex justify-center">
+                <div className="rounded-2xl border border-[#F4CDCD] bg-white p-2.5 shadow-sm">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="text-[#9C4A4A]"
+                    aria-hidden
+                  >
+                    <path
+                      d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3l1.6 2h8.4A2.5 2.5 0 0 1 21 9.5v8A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5v-10z"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-sm text-[#6B2E2E] font-medium mb-3">
                 Crée ta première collection pour organiser tes recettes
               </p>
               <button
                 onClick={() => setShowCreateCollection(true)}
-                className="px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A]"
+                className="px-5 py-2.5 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
               >
                 Créer une collection
               </button>
@@ -688,7 +771,7 @@ export default function FavorisPage() {
         </section>
       )}
 
-      {/* Section Toutes les recettes sauvegardées */}
+      {/* Section Toutes les recettes favorites */}
       {!selectedCollection && favorites.length > 0 && (
         <section className="mb-6">
           <div className="flex items-center justify-between mb-4">
@@ -750,14 +833,50 @@ export default function FavorisPage() {
 
       {/* Grille de recettes */}
       {displayRecipes.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="text-6xl mb-4">📚</div>
+        <div className="text-center p-6 rounded-2xl border border-[#E8A0A0] bg-white shadow-sm">
+          <div className="relative mb-3 h-28 w-full overflow-hidden rounded-xl bg-white">
+            <Image
+              src="/favorites-recipes-hero-02b30ddf.png"
+              alt=""
+              fill
+              className="object-cover object-center"
+              sizes="(max-width: 768px) 100vw, 420px"
+            />
+          </div>
+          <div className="mb-3 flex justify-center">
+            <div className="rounded-2xl border border-[#F4CDCD] bg-white p-2.5 shadow-sm">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="text-[#9C4A4A]"
+                aria-hidden
+              >
+                <path
+                  d="M6 4.5h8a2 2 0 0 1 2 2v11H8a2 2 0 0 0-2 2V4.5z"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M8 17.5h9.5a1.5 1.5 0 0 0 1.5-1.5v-9"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+          </div>
           <h3 className="text-lg font-semibold text-[#6B2E2E] mb-2">
             {selectedCollection
               ? "Aucune recette dans cette collection"
-              : "Aucune recette sauvegardée"}
+              : "Aucune recette favorite"}
           </h3>
-          <p className="text-sm text-[#7A3A3A] mb-4">
+          <p className="text-sm text-[#7A3A3A] mb-4 max-w-xs mx-auto">
             {selectedCollection
               ? "Ajoute des recettes à cette collection depuis les favoris"
               : "Ajoute des recettes à tes favoris pour les retrouver ici"}
@@ -765,7 +884,7 @@ export default function FavorisPage() {
           {!selectedCollection && (
             <button
               onClick={() => router.push("/")}
-              className="px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A]"
+              className="px-5 py-2.5 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
             >
               Découvrir des recettes
             </button>
@@ -784,7 +903,7 @@ export default function FavorisPage() {
                 {recipe.image_url ? (
                   <RecipeImage
                     imageUrl={recipe.image_url}
-                    alt={recipe.nom}
+                    alt={recipe.nom_recette || "Recette"}
                     className="w-full h-full"
                     priority={false}
                     sizes="(max-width: 768px) 50vw, 33vw"
@@ -839,7 +958,7 @@ export default function FavorisPage() {
                 )}
               </div>
               <h4 className="font-semibold text-sm text-[#6B2E2E] text-center leading-tight px-1 line-clamp-2">
-                {recipe.nom}
+                {recipe.nom_recette}
               </h4>
             </article>
           ))}
@@ -972,7 +1091,7 @@ export default function FavorisPage() {
                             {recipe.image_url ? (
                               <RecipeImage
                                 imageUrl={recipe.image_url}
-                                alt={recipe.nom}
+                                alt={recipe.nom_recette || "Recette"}
                                 className="w-full h-full"
                                 fallbackClassName="rounded-lg"
                                 priority={false}
@@ -986,7 +1105,7 @@ export default function FavorisPage() {
                           </div>
                           {/* Nom de la recette */}
                           <div className="flex-1 min-w-0">
-                            <span className="font-semibold text-[#6B2E2E] block truncate">{recipe.nom}</span>
+                            <span className="font-semibold text-[#6B2E2E] block truncate">{recipe.nom_recette}</span>
                           </div>
                           {/* Indicateur de sélection */}
                           {isInCollection && (
@@ -1094,7 +1213,7 @@ export default function FavorisPage() {
                             {recipe.image_url ? (
                               <RecipeImage
                                 imageUrl={recipe.image_url}
-                                alt={recipe.nom}
+                                alt={recipe.nom_recette || "Recette"}
                                 className="w-full h-full"
                                 fallbackClassName="rounded-lg"
                                 priority={false}
@@ -1108,7 +1227,7 @@ export default function FavorisPage() {
                           </div>
                           {/* Nom de la recette */}
                           <div className="flex-1 min-w-0">
-                            <span className="font-semibold text-[#6B2E2E] block truncate">{recipe.nom}</span>
+                            <span className="font-semibold text-[#6B2E2E] block truncate">{recipe.nom_recette}</span>
                           </div>
                           {/* Indicateur de sélection */}
                           {isInCollection && (
@@ -1153,7 +1272,7 @@ export default function FavorisPage() {
             <h3 className="text-lg font-bold text-[#6B2E2E] mb-4">
               Ajouter à une collection
             </h3>
-            <p className="text-sm text-[#7A3A3A] mb-4">{recipeToAdd.nom}</p>
+            <p className="text-sm text-[#7A3A3A] mb-4">{recipeToAdd.nom_recette}</p>
             <div className="space-y-2 mb-4">
               {collections.map((collection) => {
                 const isInCollection = collection.recipeIds.includes(recipeToAdd.id);
@@ -1241,7 +1360,7 @@ export default function FavorisPage() {
           <div className="w-full h-full max-w-md bg-[#FFF0F0] border-l border-r border-[#E8A0A0] overflow-y-auto px-4 pt-4 pb-8 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-[#6B2E2E]">
-                {selectedRecipe.nom}
+                {selectedRecipe.nom_recette}
               </h3>
               <button
                 className="text-xs text-[#7A3A3A] hover:text-[#6B2E2E]"
@@ -1263,7 +1382,7 @@ export default function FavorisPage() {
                   <div className="relative w-full h-64">
                     <RecipeImage
                       imageUrl={selectedRecipe.image_url}
-                      alt={selectedRecipe.nom}
+                      alt={selectedRecipe.nom_recette || "Recette"}
                       className="w-full h-full"
                       priority={true}
                       sizes="100vw"
@@ -1312,7 +1431,7 @@ export default function FavorisPage() {
               )}
 
               <h2 className="text-2xl font-bold text-[#6B2E2E] mb-3 leading-tight">
-                {selectedRecipe.nom}
+                {selectedRecipe.nom_recette}
               </h2>
 
               <div className="grid grid-cols-4 gap-3 mb-4 pb-4 border-b border-[#E8A0A0]">
@@ -1324,12 +1443,12 @@ export default function FavorisPage() {
                     <p className="text-[10px] text-[#7A3A3A] font-semibold">{selectedRecipe.temps_preparation_min} min</p>
                   </div>
                 )}
-                {selectedRecipe.nb_personnes > 0 && (
+                {(selectedRecipe.nombre_personnes || 0) > 0 && (
                   <div className="text-center">
                     <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] flex items-center justify-center mx-auto mb-2 shadow-md">
                       <span className="text-white text-lg">👥</span>
                     </div>
-                    <p className="text-[10px] text-[#7A3A3A] font-semibold">{selectedRecipe.nb_personnes} pers</p>
+                    <p className="text-[10px] text-[#7A3A3A] font-semibold">{selectedRecipe.nombre_personnes} pers</p>
                   </div>
                 )}
                 {selectedRecipe.calories && (
@@ -1415,7 +1534,7 @@ export default function FavorisPage() {
                         }
                         // Sauvegarder la recette à ajouter au menu
                         localStorage.setItem("foodlane_recipe_to_add", JSON.stringify(selectedRecipe));
-                        console.log("[FavorisPage] Recette sauvegardée dans localStorage:", selectedRecipe.nom);
+                        console.log("[FavorisPage] Recette sauvegardée dans localStorage:", selectedRecipe.nom_recette);
                         // Rediriger vers la page du menu
                         window.location.href = "/menu-semaine";
                       } catch (error) {
@@ -1445,7 +1564,7 @@ export default function FavorisPage() {
                   <button
                     className="w-full px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 font-semibold hover:border-red-300 transition-colors"
                     onClick={() => {
-                      if (confirm(`Retirer "${selectedRecipe.nom}" de la collection "${selectedCollection.name}" ?`)) {
+                      if (confirm(`Retirer "${selectedRecipe.nom_recette}" de la collection "${selectedCollection.name}" ?`)) {
                         handleRemoveFromCollection(selectedCollection.id, selectedRecipe.id);
                         setSelectedRecipe(null);
                       }
@@ -1590,7 +1709,7 @@ export default function FavorisPage() {
                         {recipe.image_url ? (
                           <RecipeImage
                             imageUrl={recipe.image_url}
-                            alt={recipe.nom}
+                            alt={recipe.nom_recette || "Recette"}
                             className="w-full h-full"
                             fallbackClassName="rounded-2xl"
                             priority={false}
@@ -1632,7 +1751,7 @@ export default function FavorisPage() {
                       
                       {/* Nom et infos */}
                       <h4 className="font-semibold text-sm text-[#6B2E2E] text-center leading-tight px-1 line-clamp-2 mb-1">
-                        {recipe.nom}
+                        {recipe.nom_recette}
                       </h4>
                       <div className="flex items-center justify-center gap-2 text-xs text-[#7A3A3A]">
                         <span>{recipe.temps_preparation_min} min</span>

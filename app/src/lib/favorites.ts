@@ -195,7 +195,7 @@ export async function addFavorite(recipe: Recipe): Promise<void> {
  * Si l'utilisateur est connecté, utilise l'API Supabase directement
  * Sinon, utilise localStorage
  */
-export async function removeFavorite(recipeId: string): Promise<void> {
+export async function removeFavorite(recipeId: number): Promise<void> {
   if (typeof window === "undefined") {
     return;
   }
@@ -228,7 +228,7 @@ export async function removeFavorite(recipeId: string): Promise<void> {
 /**
  * Vérifie si une recette est en favoris
  */
-export async function isFavorite(recipeId: string): Promise<boolean> {
+export async function isFavorite(recipeId: number): Promise<boolean> {
   const favorites = await loadFavorites();
   return favorites.some((f) => f.id === recipeId);
 }

@@ -13,22 +13,42 @@ Application web de suivi nutritionnel avec reconnaissance photo par IA, inspiré
 
 ### Variables d'environnement
 
-Pour utiliser la reconnaissance photo avec IA et charger les recettes depuis Google Sheets, configurez les variables d'environnement suivantes :
+Pour utiliser les fonctionnalités IA et charger les recettes depuis Google Sheets, configurez les variables d'environnement suivantes :
 
 ```bash
 OPENAI_API_KEY=votre_clé_api_openai
+ANTHROPIC_API_KEY=votre_clé_api_anthropic
+DIETITIAN_AI_PROVIDER=auto
 SHEET_RECIPES_CSV_URL=https://docs.google.com/spreadsheets/d/1egJ5SxzoiSLWnLsqgs7g5guQ97R24VZIZ5uLvwTjqFk/export?format=csv&gid=0
 ```
 
-Sans la clé OpenAI, l'application fonctionnera en mode démo avec des données simulées.
+Sans clé IA disponible, les routes concernées fonctionnent en mode fallback (réponse de démonstration).
 Sans l'URL du Google Sheet, les recettes ne pourront pas être chargées.
 
 Créez un fichier `.env.local` à la racine du projet :
 
 ```env
 OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+DIETITIAN_AI_PROVIDER=auto
 SHEET_RECIPES_CSV_URL=https://docs.google.com/spreadsheets/d/1egJ5SxzoiSLWnLsqgs7g5guQ97R24VZIZ5uLvwTjqFk/export?format=csv&gid=0
 ```
+
+#### Répartition IA recommandée dans ce projet
+
+- **Génération de menu hebdo** (`/api/planner/generate`) : OpenAI automatiquement si `OPENAI_API_KEY` est présent.
+- **Assistant diététicien texte** (`/api/analyze-daily-meals`) :
+  - `DIETITIAN_AI_PROVIDER=openai` : force OpenAI.
+  - `DIETITIAN_AI_PROVIDER=anthropic` : force Claude.
+  - `DIETITIAN_AI_PROVIDER=auto` : essaie Claude d'abord, puis OpenAI.
+- **Analyse photo de repas** (`/api/analyze-meal`) : OpenAI (vision).
+
+#### Checklist de mise en route (local)
+
+1. Ajouter les clés IA dans `.env.local`.
+2. Redémarrer le serveur (`npm run dev`).
+3. Vérifier la génération de menu depuis `/planifier` (utilisation IA auto si clé OpenAI).
+4. Vérifier l'assistant diététicien avec `DIETITIAN_AI_PROVIDER` (`openai`, `anthropic` ou `auto`).
 
 **⚠️ Important** : Dans le fichier `.env.local`, chaque variable doit être sur une seule ligne, sans guillemets autour de la valeur, et sans espaces autour du signe `=`. Format correct :
 

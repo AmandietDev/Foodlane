@@ -6,7 +6,7 @@ export interface Collection {
   id: string;
   name: string;
   imageUrl?: string;
-  recipeIds: string[];
+  recipeIds: number[];
   createdAt: number;
 }
 
@@ -233,7 +233,7 @@ export async function saveCollections(collections: Collection[]): Promise<void> 
 /**
  * Met à jour les recettes d'une collection dans Supabase
  */
-async function updateCollectionRecipes(collectionId: string, recipeIds: string[]): Promise<void> {
+async function updateCollectionRecipes(collectionId: string, recipeIds: number[]): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
@@ -247,8 +247,9 @@ async function updateCollectionRecipes(collectionId: string, recipeIds: string[]
     const currentIds = currentRecipes?.map((r) => r.recipe_id) || [];
 
     // Identifier les recettes à ajouter et à supprimer
-    const toAdd = recipeIds.filter((id) => !currentIds.includes(id));
-    const toRemove = currentIds.filter((id) => !recipeIds.includes(id));
+    const numericCurrentIds = currentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id));
+    const toAdd = recipeIds.filter((id) => !numericCurrentIds.includes(id));
+    const toRemove = numericCurrentIds.filter((id) => !recipeIds.includes(id));
 
     // Ajouter les nouvelles recettes
     if (toAdd.length > 0) {
@@ -342,7 +343,7 @@ export async function createCollection(name: string, imageUrl?: string): Promise
  */
 export async function addRecipeToCollection(
   collectionId: string,
-  recipeId: string
+  recipeId: number
 ): Promise<void> {
   if (typeof window === "undefined") {
     return;
@@ -388,7 +389,7 @@ export async function addRecipeToCollection(
  */
 export async function removeRecipeFromCollection(
   collectionId: string,
-  recipeId: string
+  recipeId: number
 ): Promise<void> {
   if (typeof window === "undefined") {
     return;

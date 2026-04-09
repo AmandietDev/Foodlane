@@ -203,9 +203,9 @@ export default function WeeklyMenuPage() {
       const term = recipeSearchTerm.toLowerCase();
       filtered = filtered.filter(
         (recipe) =>
-          recipe.nom.toLowerCase().includes(term) ||
+          (recipe.nom_recette || "").toLowerCase().includes(term) ||
           recipe.description_courte?.toLowerCase().includes(term) ||
-          recipe.ingredients.toLowerCase().includes(term)
+          (recipe.ingredients || "").toLowerCase().includes(term)
       );
     }
 
@@ -230,7 +230,7 @@ export default function WeeklyMenuPage() {
       const tempsMax = parseInt(recipeFilters.tempsMax);
       if (!isNaN(tempsMax)) {
         filtered = filtered.filter((recipe) => {
-          return recipe.temps_preparation_min <= tempsMax;
+          return (recipe.temps_preparation_min || 0) <= tempsMax;
         });
       }
     }
@@ -288,7 +288,7 @@ export default function WeeklyMenuPage() {
         if (meal) {
           // Ajouter la recette à la liste des recettes du repas (éviter les doublons)
           const existingRecipes = meal.recipes || [];
-          const recipeExists = existingRecipes.some(r => r.id === recipeToAddToMenu.id);
+          const recipeExists = existingRecipes.some(r => String(r.id) === String(recipeToAddToMenu.id));
           if (!recipeExists) {
             updatedMeals[mealType] = {
               ...meal,
@@ -622,7 +622,7 @@ export default function WeeklyMenuPage() {
                                 }}
                                 className="text-xs text-[var(--text-primary)] hover:text-[#D44A4A] text-left flex-1 truncate"
                               >
-                                {recipe.nom}
+                                {recipe.nom_recette}
                               </button>
                               <button
                                 onClick={() => {
@@ -690,16 +690,39 @@ export default function WeeklyMenuPage() {
           >
             💬 Demander l'avis de ma diététicienne
           </button>
-          <button
-            onClick={handleGenerateShoppingList}
-            className={`w-full px-4 py-3 rounded-2xl font-semibold text-sm ${
-              isPremium
-                ? "bg-[#D44A4A] hover:bg-[#C03A3A] text-white"
-                : "bg-[#FFD9D9] border border-[#E8A0A0] text-[var(--text-primary)] opacity-60"
-            }`}
-          >
-            {isPremium ? "🛒 Générer ma liste de courses" : "🛒 Générer ma liste de courses (Premium)"}
-          </button>
+
+          {/* Liste de courses — Premium */}
+          {isPremium ? (
+            <button
+              onClick={handleGenerateShoppingList}
+              className="w-full px-4 py-3 rounded-2xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm"
+            >
+              🛒 Générer ma liste de courses
+            </button>
+          ) : (
+            <div className="rounded-2xl border border-[#E8A0A0] bg-[#FFF5F5] p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-[#FFD9D9] flex items-center justify-center flex-shrink-0">
+                  <span className="text-lg">🛒</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-[var(--text-primary)]">Voir ma liste de courses</p>
+                  <span className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full bg-[#D44A4A] text-white text-[10px] font-bold">
+                    🔒 Plan Premium
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mb-3">
+                Génère automatiquement ta liste de courses à partir de ton menu de la semaine.
+              </p>
+              <button
+                onClick={() => router.push("/premium")}
+                className="w-full px-4 py-2.5 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors"
+              >
+                Passer au plan Premium
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -795,7 +818,7 @@ export default function WeeklyMenuPage() {
                   onClick={() => handleSelectRecipe(recipe)}
                   className="w-full text-left p-3 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] hover:border-[#D44A4A] transition-colors"
                 >
-                  <p className="font-semibold text-sm text-[var(--text-primary)]">{recipe.nom}</p>
+                  <p className="font-semibold text-sm text-[var(--text-primary)]">{recipe.nom_recette}</p>
                   {recipe.description_courte && (
                     <p className="text-xs text-[var(--text-secondary)] mt-1">{recipe.description_courte}</p>
                   )}
@@ -812,7 +835,7 @@ export default function WeeklyMenuPage() {
         <div className="fixed inset-0 bg-[#6B2E2E]/70 z-50 flex items-center justify-center">
           <div className="w-full h-full max-w-md bg-[#FFF0F0] border-l border-r border-[#E8A0A0] overflow-y-auto px-4 pt-4 pb-8">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">{selectedRecipe.nom}</h3>
+              <h3 className="text-sm font-semibold">{selectedRecipe.nom_recette}</h3>
               <button
                 className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 onClick={() => setSelectedRecipe(null)}
@@ -859,14 +882,14 @@ export default function WeeklyMenuPage() {
                         {selectedRecipe.difficulte}
                       </span>
                     )}
-                    {selectedRecipe.temps_preparation_min > 0 && (
+                    {(selectedRecipe.temps_preparation_min || 0) > 0 && (
                       <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#FFC4C4] text-[var(--text-primary)] border border-[#E8A0A0]">
-                        ⏱ {selectedRecipe.temps_preparation_min} min
+                        ⏱ {selectedRecipe.temps_preparation_min || 0} min
                       </span>
                     )}
-                    {selectedRecipe.nb_personnes > 0 && (
+                    {(selectedRecipe.nombre_personnes || 0) > 0 && (
                       <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#FFC4C4] text-[var(--text-primary)] border border-[#E8A0A0]">
-                        👥 {selectedRecipe.nb_personnes} pers
+                        👥 {selectedRecipe.nombre_personnes} pers
                       </span>
                     )}
                     {selectedRecipe.calories && showCalories && (
@@ -882,7 +905,7 @@ export default function WeeklyMenuPage() {
                 <div className="mb-3">
                   <RecipeImage
                     imageUrl={selectedRecipe.image_url}
-                    alt={selectedRecipe.nom}
+                    alt={selectedRecipe.nom_recette || "Recette"}
                     className="w-full h-40 rounded-2xl border border-[#B07A6E]"
                     fallbackClassName="rounded-2xl"
                   />
@@ -896,7 +919,7 @@ export default function WeeklyMenuPage() {
               <div>
                 <h4 className="font-semibold mb-1">Ingrédients</h4>
                 <ul className="list-disc pl-5 space-y-1">
-                  {selectedRecipe.ingredients
+                  {(selectedRecipe.ingredients || "")
                     .split(";")
                     .filter((item) => item.trim().length > 0)
                     .map((item, idx) => {
@@ -913,7 +936,7 @@ export default function WeeklyMenuPage() {
               <div>
                 <h4 className="font-semibold mb-1">Étapes</h4>
                 <ol className="list-decimal pl-5 space-y-1">
-                  {selectedRecipe.instructions
+                  {(selectedRecipe.instructions || "")
                     .split(";")
                     .filter((item) => item.trim().length > 0)
                     .map((item, idx) => {
@@ -955,7 +978,7 @@ export default function WeeklyMenuPage() {
         <div className="fixed inset-0 bg-[#6B2E2E]/70 z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-[#FFF0F0] rounded-2xl p-4 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-sm">Ajouter "{recipeToAddToMenu.nom}" au menu</h3>
+              <h3 className="font-semibold text-sm">Ajouter "{recipeToAddToMenu.nom_recette}" au menu</h3>
               <button
                 onClick={() => {
                   setShowMealSelectionModal(false);

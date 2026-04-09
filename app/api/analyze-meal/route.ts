@@ -33,13 +33,6 @@ export async function POST(request: NextRequest) {
           { name: "Citron", confidence: 0.75 },
           { name: "Huile d'olive", confidence: 0.70 },
         ],
-        estimatedCalories: 369,
-        nutrients: {
-          fats: 30,
-          proteins: 13,
-          carbs: 5,
-          fibers: 5,
-        },
         mealName: "Salade de crevettes à l'avocat",
         advice: {
           rating: "VERY_GOOD",
@@ -65,23 +58,21 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: "system",
-            content: `Tu es un expert en nutrition et diététique. Analyse les photos de repas et fournis :
-1. Une liste détaillée des ingrédients visibles avec leur niveau de confiance
-2. Une estimation des calories
-3. La répartition des macronutriments (lipides, protéines, glucides, fibres en grammes)
-4. Un nom pour le repas
-5. Une évaluation nutritionnelle avec conseils pour améliorer/équilibrer le repas
+            content: `Tu es un expert en nutrition et diététique. Analyse les photos de repas. Règles importantes : ne jamais mentionner de calories ni d'objectifs caloriques dans ton message ou tes suggestions.
 
-Réponds en JSON avec cette structure :
+Fournis :
+1. Une liste détaillée des ingrédients/aliments visibles (noms courts, en français, ex: "pâtes", "lardons", "parmesan", "crème fraîche") avec leur niveau de confiance (0.0-1.0)
+2. Un nom court pour le repas (ex: "Pâtes carbonara")
+3. Une évaluation qualitative (sans calories) : équilibre du repas, points forts, une amélioration simple
+
+Réponds UNIQUEMENT en JSON valide, sans texte autour :
 {
-  "ingredients": [{"name": "nom", "confidence": 0.0-1.0}],
-  "estimatedCalories": nombre,
-  "nutrients": {"fats": g, "proteins": g, "carbs": g, "fibers": g},
+  "ingredients": [{"name": "nom français court", "confidence": 0.0-1.0}],
   "mealName": "nom du repas",
   "advice": {
     "rating": "VERY_GOOD" | "GOOD" | "NEEDS_IMPROVEMENT",
-    "message": "évaluation générale",
-    "suggestions": ["suggestion 1", "suggestion 2"]
+    "message": "évaluation bienveillante sans calories",
+    "suggestions": ["suggestion 1 sans calories", "suggestion 2"]
   }
 }`,
           },

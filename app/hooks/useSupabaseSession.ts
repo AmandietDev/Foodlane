@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { supabase } from "../src/lib/supabaseClient";
+import { supabase, getSessionResilient, isSupabaseConfigured } from "../src/lib/supabaseClient";
 import type { User } from "@supabase/supabase-js";
 
 export interface UserProfile {
@@ -38,9 +38,7 @@ export function useSupabaseSession(): SessionState {
 
     async function loadSession() {
       try {
-        // Vérifier que Supabase est configuré
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        if (!supabaseUrl) {
+        if (!isSupabaseConfigured) {
           console.warn("[useSupabaseSession] Supabase non configuré, mode déconnecté");
           if (!mounted) return;
           setState({
@@ -52,39 +50,16 @@ export function useSupabaseSession(): SessionState {
           return;
         }
 
-        // Récupérer la session avec un timeout de 2 secondes (réduit pour être plus réactif)
-        let sessionResult;
-        try {
-          sessionResult = await Promise.race([
-            supabase.auth.getSession(),
-            new Promise<{ data: { session: null }, error: { message: string } }>((_, reject) => 
-              setTimeout(() => reject(new Error("Timeout Supabase - pas de réponse en 2 secondes")), 2000)
-            )
-          ]);
-        } catch (timeoutError) {
-          // Timeout ou erreur réseau
+        const { session, error: sessionNetError } = await getSessionResilient(12000);
+
+        if (sessionNetError) {
           if (!mounted) return;
-          console.warn("[useSupabaseSession] Timeout ou erreur réseau, mode déconnecté:", timeoutError);
+          console.warn("[useSupabaseSession] Session inaccessible:", sessionNetError.message);
           setState({
             user: null,
             profile: null,
             loading: false,
-            error: null,
-          });
-          return;
-        }
-
-        const { data: { session }, error: sessionError } = sessionResult;
-
-        if (sessionError) {
-          console.error("[useSupabaseSession] Erreur getSession:", sessionError);
-          // Ne pas throw, juste logger et continuer en mode déconnecté
-          if (!mounted) return;
-          setState({
-            user: null,
-            profile: null,
-            loading: false,
-            error: null,
+            error: sessionNetError,
           });
           return;
         }

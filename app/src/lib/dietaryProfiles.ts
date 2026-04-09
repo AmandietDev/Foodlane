@@ -139,7 +139,7 @@ export const COMMON_ALLERGENS = [
 /**
  * Filtre les recettes selon les régimes et allergies de l'utilisateur
  */
-export function filterRecipesByDietaryProfile<T extends { ingredients: string }>(
+export function filterRecipesByDietaryProfile<T extends { ingredients: string | null }>(
   recipes: T[],
   dietaryProfiles: DietaryProfile[],
   allergies: string[]
@@ -173,7 +173,7 @@ export function filterRecipesByDietaryProfile<T extends { ingredients: string }>
 
   // Filtrer les recettes
   return recipes.filter((recipe) => {
-    const ingredientsText = recipe.ingredients.toLowerCase();
+    const ingredientsText = (recipe.ingredients || "").toLowerCase();
 
     // Vérifier qu'aucun ingrédient exclu n'est présent
     for (const exclusion of normalizedExclusions) {
@@ -191,7 +191,7 @@ export function filterRecipesByDietaryProfile<T extends { ingredients: string }>
 /**
  * Filtre les recettes selon les équipements disponibles de l'utilisateur
  */
-export function filterRecipesByEquipment<T extends { equipements: string }>(
+export function filterRecipesByEquipment<T extends { equipements: string | null }>(
   recipes: T[],
   availableEquipment: string[]
 ): T[] {
@@ -252,7 +252,7 @@ function normalizeText(text: string): string {
 /**
  * Détecte automatiquement les badges diététiques d'une recette en analysant ses ingrédients
  */
-export function detectDietaryBadges(recipe: { ingredients: string }): DietaryProfile[] {
+export function detectDietaryBadges(recipe: { ingredients: string | null }): DietaryProfile[] {
   if (!recipe.ingredients || recipe.ingredients.trim().length === 0) {
     return [];
   }

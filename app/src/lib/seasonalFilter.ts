@@ -85,8 +85,8 @@ export function getCurrentSeason(): Season {
 }
 
 // Vérifier si une recette contient des ingrédients de saison
-export function isRecipeSeasonal(recipe: { ingredients: string }, season: Season): boolean {
-  const ingredientsLower = recipe.ingredients.toLowerCase();
+export function isRecipeSeasonal(recipe: { ingredients: string | null }, season: Season): boolean {
+  const ingredientsLower = (recipe.ingredients || "").toLowerCase();
   const seasonalIngredients = SEASONAL_INGREDIENTS[season];
 
   // Vérifier si au moins un ingrédient de saison est présent
@@ -96,7 +96,7 @@ export function isRecipeSeasonal(recipe: { ingredients: string }, season: Season
 }
 
 // Filtrer les recettes selon la saison actuelle
-export function filterRecipesBySeason<T extends { ingredients: string }>(
+export function filterRecipesBySeason<T extends { ingredients: string | null }>(
   recipes: T[],
   season?: Season
 ): T[] {

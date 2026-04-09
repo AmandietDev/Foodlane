@@ -1,17 +1,20 @@
 import Papa from "papaparse";
 
 export type Recipe = {
-  id: string;
-  type: string; // sucré / salé
-  difficulte: string; // Facile / Moyen / Difficile
-  temps_preparation_min: number;
-  categorie_temps: string;
-  nb_personnes: number;
-  nom: string;
-  description_courte: string;
-  ingredients: string; // "Ingrédients + quantités (séparés par ;)"
-  instructions: string; // "Instructions (étapes séparées par ;)"
-  equipements: string; // "Équipements nécessaires (séparés par ;)"
+  id: number;
+  type: string | null;
+  difficulte: string | null;
+  temps_preparation_min: number | null;
+  categorie_temps: string | null;
+  nombre_personnes: number | null;
+  nom_recette: string | null;
+  description_courte: string | null;
+  ingredients: string | null;
+  instructions: string | null;
+  equipements: string | null;
+  calories: number | null;
+  image_url: string | null;
+  created_at: string;
 };
 
 export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
@@ -36,27 +39,30 @@ export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
     skipEmptyLines: true,
   });
 
-  const rows = parsed.data as any[];
+  const rows = parsed.data as Array<Record<string, string | number | undefined>>;
 
   // On filtre les lignes vides (sans nom de recette)
   const recipes: Recipe[] = rows
     .filter((row) => row["Nom de la recette"])
     .map((row) => ({
-      id: row["ID"]?.toString() ?? "",
-      type: row["Type (sucré/salé)"] || "",
-      difficulte: row["Difficulté (Facile/Moyen/Difficile)"] || "",
+      id: Number(row["ID"] || 0),
+      type: row["Type (sucré/salé)"] || null,
+      difficulte: row["Difficulté (Facile/Moyen/Difficile)"] || null,
       temps_preparation_min: row["Temps de préparation (min)"]
         ? Number(row["Temps de préparation (min)"])
-        : 0,
-      categorie_temps: row["Catégorie temps (sélection)"] || "",
-      nb_personnes: row["Nombre de personnes"]
+        : null,
+      categorie_temps: row["Catégorie temps (sélection)"] || null,
+      nombre_personnes: row["Nombre de personnes"]
         ? Number(row["Nombre de personnes"])
-        : 0,
-      nom: row["Nom de la recette"] || "",
-      description_courte: row["Description courte"] || "",
-      ingredients: row["Ingrédients + quantités (séparés par ;)"] || "",
-      instructions: row["Instructions (étapes séparées par ;)"] || "",
-      equipements: row["Équipements nécessaires (séparés par ;)"] || "",
+        : null,
+      nom_recette: row["Nom de la recette"] || null,
+      description_courte: row["Description courte"] || null,
+      ingredients: row["Ingrédients + quantités (séparés par ;)"] || null,
+      instructions: row["Instructions (étapes séparées par ;)"] || null,
+      equipements: row["Équipements nécessaires (séparés par ;)"] || null,
+      calories: row["Calories (pour une portion)"] ? Number(row["Calories (pour une portion)"]) : null,
+      image_url: row["image_url"] || null,
+      created_at: new Date().toISOString(),
     }));
 
   return recipes;
