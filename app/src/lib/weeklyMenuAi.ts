@@ -99,6 +99,7 @@ export async function buildWeeklyPlanWithAi(
     type: r.type,
     temps_preparation_min: r.temps_preparation_min,
     difficulte: r.difficulte,
+    saison: r.saison ?? null,
     ingredients: (r.ingredients || "").slice(0, 200),
     ...(recentlyUsed?.has(r.id) ? { recently_used: true } : {}),
   }));
@@ -150,8 +151,11 @@ ANTI-RÉPÉTITION (IMPORTANT) :
 - Évite-les impérativement. Utilise uniquement des recettes sans ce marqueur sauf si aucune alternative n'existe.
 
 SAISON (IMPORTANT) :
-- Nous sommes en ${seasonLabel}. Privilégier fortement les recettes avec des ingrédients de saison.
-- Éviter les fruits et légumes hors saison quand des alternatives saisonnières existent dans le catalogue.
+- Nous sommes en ${seasonLabel}.
+- Chaque recette du catalogue possède un champ "saison" indiquant sa pertinence saisonnière.
+- Privilégie fortement les recettes dont "saison" correspond à "${currentSeason}" ou à "toute l'année".
+- Évite les recettes dont "saison" ne correspond pas à la saison actuelle, sauf si aucune alternative n'existe.
+- Les recettes sans champ "saison" peuvent être utilisées mais restent moins prioritaires que celles bien étiquetées.
 
 PETIT-DÉJEUNER :
 - Préférence de l'utilisateur : ${breakfastPrefFr}.

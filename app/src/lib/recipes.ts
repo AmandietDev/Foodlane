@@ -9,6 +9,7 @@ export type Recipe = {
   nombre_personnes: number | null;
   nom_recette: string | null;
   description_courte: string | null;
+  saison?: string | null;
   ingredients: string | null;
   instructions: string | null;
   equipements: string | null;

@@ -50,6 +50,7 @@ export async function fetchRecipesFromSupabase(): Promise<Recipe[]> {
       nombre_personnes: row.nombre_personnes ?? null,
       nom_recette: row.nom_recette ?? null,
       description_courte: row.description_courte ?? null,
+      saison: row.saison ?? null,
       ingredients: row.ingredients ?? null,
       instructions: row.instructions ?? null,
       equipements: row.equipements ?? null,

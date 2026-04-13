@@ -60,6 +60,7 @@ export async function scoreRecipesForUserProfile(
     type: r.type,
     difficulte: r.difficulte,
     temps_preparation_min: r.temps_preparation_min,
+    saison: r.saison ?? null,
     ingredients: (r.ingredients || "").slice(0, 300),
     equipements: (r.equipements || "").slice(0, 150),
   }));

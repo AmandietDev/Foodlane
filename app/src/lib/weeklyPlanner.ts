@@ -5,7 +5,7 @@ import {
   normalizeGroceryUnit,
   type GroceryCategorySlug,
 } from "./groceryFormat";
-import { getCurrentSeason, isRecipeSeasonal, type Season } from "./seasonalFilter";
+import { getCurrentSeason, scoreRecipeSeasonRelevance, type Season } from "./seasonalFilter";
 import { sortMealTypesForDisplay } from "./mealOrder";
 import {
   EQUIPMENT_KEY_SYNONYMS,
@@ -220,8 +220,9 @@ export function scoreRecipeForPlanner(
 ): number {
   let score = 50;
   score += skillMatchesDifficulty(prefs.cooking_skill_level, recipe.difficulte || "");
-  if (prefs.seasonal_preference && isRecipeSeasonal(recipe, season)) {
-    score += 25;
+  if (prefs.seasonal_preference) {
+    // Score 0-35 : utilise la colonne DB `saison` en priorité, ingrédients en fallback
+    score += scoreRecipeSeasonRelevance(recipe, season);
   }
   const ing = normalize(recipe.ingredients || "");
   for (const obj of prefs.objectives) {
