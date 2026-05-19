@@ -329,12 +329,12 @@ export default function PremiumPage() {
         </p>
 
         {pricingCtx?.showFounderPricing && (
-          <div className="mt-5 rounded-2xl border border-amber-300/80 bg-gradient-to-r from-amber-50 to-orange-50 p-4 text-left text-amber-950 shadow-sm dark:border-amber-700/60 dark:from-amber-950/40 dark:to-orange-950/30 dark:text-amber-50">
-            <p className="text-sm font-bold">Offre limitée — tarif à vie</p>
-            <p className="mt-1 text-xs leading-relaxed opacity-95">
+          <div className="mt-5 rounded-2xl border border-[#E8A0A0] bg-[#FFF8F6] p-4 text-left shadow-sm">
+            <p className="text-sm font-bold text-[#4a2c2c]">Offre limitée — tarif à vie</p>
+            <p className="mt-1 text-xs leading-relaxed text-[#6B2E2E]">
               Tarif à vie pour les{" "}
-              <strong>{pricingCtx.foundersLimit}</strong> premiers abonnements payants —{" "}
-              <strong>{pricingCtx.founderSlotsRemaining}</strong> place
+              <strong className="text-[#4a2c2c]">{pricingCtx.foundersLimit}</strong> premiers abonnements payants —{" "}
+              <strong className="text-[#4a2c2c]">{pricingCtx.founderSlotsRemaining}</strong> place
               {pricingCtx.founderSlotsRemaining > 1 ? "s" : ""} restante
               {pricingCtx.founderSlotsRemaining > 1 ? "s" : ""}. Ensuite, affichage automatique des tarifs
               standards uniquement (sans changer le prix des membres déjà inscrits).
@@ -517,12 +517,37 @@ export default function PremiumPage() {
               Tarif à vie
             </p>
           )}
-          <ul className="mt-6 flex flex-1 flex-col gap-2.5 text-sm text-white/95">
-            <li>Menus illimités</li>
-            <li>Liste de courses avancée + exports illimités</li>
-            <li>Tous les filtres recettes et favoris illimités</li>
-            <li>Assistant diététicien (texte) illimité</li>
-            <li>Sans publicité</li>
+          <ul className="mt-6 flex flex-1 flex-col gap-3 text-sm text-white/95">
+            <li className="flex gap-2">
+              <span className="shrink-0 text-amber-100" aria-hidden>
+                ✓
+              </span>
+              <span>Menus illimités</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 text-amber-100" aria-hidden>
+                ✓
+              </span>
+              <span>Liste de courses avancée + exports illimités</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 text-amber-100" aria-hidden>
+                ✓
+              </span>
+              <span>Tous les filtres recettes et favoris illimités</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 text-amber-100" aria-hidden>
+                ✓
+              </span>
+              <span>Assistant diététicien (texte) illimité</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 text-amber-100" aria-hidden>
+                ✓
+              </span>
+              <span>Sans publicité</span>
+            </li>
           </ul>
           <div className="mt-8 space-y-2">
             {isPremium ? (

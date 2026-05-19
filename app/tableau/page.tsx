@@ -8,6 +8,7 @@ import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { plannerFetch } from "../src/lib/plannerClient";
 import FavoritesRecipesHero from "../components/FavoritesRecipesHero";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { FreeTierAdSlot } from "../components/ads/FreeTierAdSlot";
 
 type MenuRow = {
   id: string;
@@ -105,6 +106,8 @@ export default function TableauPage() {
             Génère ton menu de la semaine.
           </p>
         </header>
+
+        <FreeTierAdSlot placement="tableau_inline" oncePerSession className="max-w-xl mx-auto" />
 
         <section className="rounded-3xl border border-[#E8A0A0] overflow-hidden shadow-sm bg-[#FFF1F1]">
           <div className="relative h-48 w-full bg-white">

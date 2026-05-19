@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vercel:*)",
+      "Bash(curl -s \"https://foodlane.fr/api/debug-env\")",
+      "Read(//c/Users/amand/.claude/projects/c--Users-amand-OneDrive---Universit--de-Tours-Documents-foodlane-app/**)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\amand\\.claude\\projects\\c--Users-amand-OneDrive---Universit--de-Tours-Documents-foodlane-app\\memory"
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { ThemeProviderWrapper } from "./providers/ThemeProviderWrapper";
 import { TranslationProvider } from "./components/TranslationProvider";
@@ -18,9 +19,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const refgrowProjectId = process.env.NEXT_PUBLIC_REFGRROW_PROJECT_ID?.trim();
+
   return (
     <html lang="fr">
       <body>
+        {refgrowProjectId ? (
+          <Script
+            src="https://scripts.refgrowcdn.com/latest.js"
+            data-project-id={refgrowProjectId}
+            strategy="afterInteractive"
+          />
+        ) : null}
         <SplashScreen />
         <ThemeProviderWrapper>
           <TranslationProvider>

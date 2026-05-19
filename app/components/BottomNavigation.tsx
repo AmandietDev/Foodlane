@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "./TranslationProvider";
 import { usePremium } from "../contexts/PremiumContext";
+import { FreeTierAdSlot } from "./ads/FreeTierAdSlot";
 
 const HIDDEN_PATH_PREFIXES = ["/login", "/forgot-password", "/reset-password"];
 
@@ -72,17 +73,7 @@ export default function BottomNavigation() {
         : "text-[#7A3A3A] hover:bg-[#FFF6F6] border border-transparent"
     }`;
 
-  const adBar = !isPremium && (
-    <div className="h-10 bg-[var(--beige-card-alt)] border-t border-[var(--beige-border)] flex items-center justify-between px-4 text-xs md:hidden">
-      <span className="text-[var(--beige-text-light)] truncate pr-2">Espace publicité</span>
-      <Link
-        href="/premium"
-        className="shrink-0 px-3 py-1 rounded-lg bg-[var(--beige-accent)] text-white text-xs font-semibold hover:bg-[var(--beige-accent-hover)] transition-colors"
-      >
-        Arrêter les pubs
-      </Link>
-    </div>
-  );
+  const adBar = <FreeTierAdSlot placement="mobile_bottom" />;
 
   const desktopPremiumHint = !isPremium && (
     <div className="hidden md:block mt-auto p-3 border-t border-[#E8A0A0] bg-[var(--surface-muted)]">
