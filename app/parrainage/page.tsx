@@ -1,32 +1,20 @@
-"use client";
-
-import Script from "next/script";
 import Link from "next/link";
-import { useSupabaseSession } from "../hooks/useSupabaseSession";
-import LoadingSpinner from "../components/LoadingSpinner";
-
-const PROJECT_ID = process.env.NEXT_PUBLIC_REFGRROW_PROJECT_ID?.trim() || "";
+import { getSessionUserFromCookies } from "../src/lib/supabaseServer";
+import { isEmailAllowedAffiliateDashboard } from "../src/lib/affiliateDashboardAllowlist";
+import ParrainageRefgrowWidget from "./ParrainageRefgrowWidget";
 
 /**
- * Tableau de bord affiliés Refgrow (mode pré-authentifié : email session Foodlane).
- * Le script latest.js (cookies ref) est déjà chargé dans le layout racine.
+ * Tableau de bord affilié Refgrow (pré-auth) : uniquement pour les emails listés
+ * dans AFFILIATE_DASHBOARD_EMAILS (Vercel / .env.local). Les influenceurs invités
+ * dans Refgrow utilisent surtout le portail https://foodlane.refgrow.com.
  */
-export default function ParrainagePage() {
-  const { user, loading } = useSupabaseSession();
-  const email = user?.email?.trim() || "";
+export default async function ParrainagePage() {
+  const user = await getSessionUserFromCookies();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FFF8F6]">
-        <LoadingSpinner message="Chargement…" />
-      </div>
-    );
-  }
-
-  if (!user || !email) {
+  if (!user) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-[#FFF8F6] px-4">
-        <p className="text-sm text-[#6B2E2E]">Connexion requise pour le programme parrainage.</p>
+        <p className="text-sm text-[#6B2E2E]">Connexion requise.</p>
         <Link href="/login?next=/parrainage" className="text-sm font-semibold text-[#D44A4A] underline">
           Se connecter
         </Link>
@@ -34,7 +22,26 @@ export default function ParrainagePage() {
     );
   }
 
-  if (!PROJECT_ID) {
+  if (!isEmailAllowedAffiliateDashboard(user.email)) {
+    return (
+      <main className="min-h-screen bg-[#FFF8F6] px-4 py-10 pb-28">
+        <div className="mx-auto max-w-lg rounded-2xl border border-[#E8D5D5] bg-white p-6 text-center text-[#6B2E2E]">
+          <p className="font-semibold">Accès non disponible</p>
+          <p className="mt-2 text-sm text-[#8A4A4A]">
+            Cette section est réservée. Le suivi des campagnes partenaires est géré avec Foodlane&nbsp;; les
+            utilisateurs de l&apos;app n&apos;y ont pas accès ici.
+          </p>
+          <Link href="/menu" className="mt-4 inline-block text-sm font-semibold text-[#D44A4A] underline">
+            Retour
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  const projectId = process.env.NEXT_PUBLIC_REFGRROW_PROJECT_ID?.trim() || "";
+
+  if (!projectId) {
     return (
       <main className="min-h-screen bg-[#FFF8F6] px-4 py-10 pb-28">
         <div className="mx-auto max-w-lg rounded-2xl border border-[#E8A0A0] bg-white p-6 text-center text-[#6B2E2E]">
@@ -57,14 +64,15 @@ export default function ParrainagePage() {
           <Link href="/menu" className="text-sm font-medium text-[#8A4A4A] hover:text-[#6B2E2E]">
             ← Retour
           </Link>
-          <h1 className="mt-3 text-2xl font-bold text-[#4a2c2c]">Programme parrainage</h1>
+          <h1 className="mt-3 text-2xl font-bold text-[#4a2c2c]">Programme partenaires (interne)</h1>
           <p className="mt-2 text-sm text-[#6B2E2E]">
-            Ton espace affilié Refgrow (lié à ton compte <strong className="font-medium">{email}</strong>). Les
-            liens de parrainage utilisent le paramètre <code className="rounded bg-[#FFE8E8] px-1">ref</code> dans
-            l’URL ; le cookie de suivi est posé par Refgrow sur 30 jours.
+            Espace Refgrow lié au compte <strong className="font-medium">{user.email}</strong>. Les liens
+            utilisent le paramètre <code className="rounded bg-[#FFE8E8] px-1">ref</code> dans l&apos;URL ; le
+            cookie de suivi est posé par Refgrow (30 jours). Les influenceurs peuvent aussi utiliser le portail
+            public.
           </p>
           <p className="mt-2 text-sm text-[#6B2E2E]">
-            Portail public alternatif :{" "}
+            Portail affiliés :{" "}
             <a
               href="https://foodlane.refgrow.com"
               target="_blank"
@@ -76,14 +84,7 @@ export default function ParrainagePage() {
           </p>
         </div>
 
-        <div
-          id="refgrow"
-          className="min-h-[420px] w-full overflow-hidden rounded-2xl border border-[#E8A0A0] bg-white shadow-sm"
-          data-project-id={PROJECT_ID}
-          data-project-email={email}
-        />
-
-        <Script src="https://scripts.refgrowcdn.com/page.js" strategy="afterInteractive" />
+        <ParrainageRefgrowWidget email={user.email} projectId={projectId} />
       </div>
     </main>
   );

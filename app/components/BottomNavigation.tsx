@@ -5,7 +5,6 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "./TranslationProvider";
 import { usePremium } from "../contexts/PremiumContext";
-import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { FreeTierAdSlot } from "./ads/FreeTierAdSlot";
 
 const HIDDEN_PATH_PREFIXES = ["/login", "/forgot-password", "/reset-password"];
@@ -55,7 +54,6 @@ function parametresTabActive(pathname: string | null): boolean {
 
 export default function BottomNavigation() {
   const { isPremium, canAccessDietAssistant } = usePremium();
-  const { user } = useSupabaseSession();
   const { t } = useTranslation();
   const pathname = usePathname();
 
@@ -129,15 +127,6 @@ export default function BottomNavigation() {
             <Image src="/menu.png?v=2" alt="" width={22} height={22} className="object-contain shrink-0" unoptimized />
             <span>{t("nav.parametres")}</span>
           </Link>
-          {user && process.env.NEXT_PUBLIC_REFGRROW_PROJECT_ID?.trim() ? (
-            <Link
-              href="/parrainage"
-              className={`${linkClassDesktop(pathname === "/parrainage")} border-dashed border-[#E8A0A0]/80`}
-            >
-              <span aria-hidden>🔗</span>
-              <span>Parrainage</span>
-            </Link>
-          ) : null}
         </nav>
         {desktopPremiumHint}
       </aside>
@@ -178,13 +167,6 @@ export default function BottomNavigation() {
             <span className="text-center max-w-[4.5rem]">{t("nav.parametres")}</span>
           </Link>
         </nav>
-        {user && process.env.NEXT_PUBLIC_REFGRROW_PROJECT_ID?.trim() ? (
-          <div className="border-t border-[#E8D5D5] bg-[#FFF8F6] py-1 text-center">
-            <Link href="/parrainage" className="text-[10px] font-semibold text-[#D44A4A]">
-              Programme parrainage
-            </Link>
-          </div>
-        ) : null}
         {adBar}
       </div>
     </>
