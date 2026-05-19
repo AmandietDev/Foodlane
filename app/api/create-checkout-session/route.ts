@@ -41,8 +41,11 @@ export async function POST(request: NextRequest) {
     }
 
     const authUserId = await getUserIdFromRequest(request);
-    if (authUserId && authUserId !== userId) {
-      return NextResponse.json({ error: "Non autorisé (session et userId incohérents)." }, { status: 403 });
+    if (!authUserId || authUserId !== userId) {
+      return NextResponse.json(
+        { error: "Non authentifié ou compte incohérent. Reconnecte-toi puis réessaie." },
+        { status: 401 }
+      );
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {

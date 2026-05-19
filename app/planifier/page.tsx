@@ -560,6 +560,7 @@ function SlotCard({
   onPickRecipe,
   onDuplicateBatch,
   onDelete,
+  onViewRecipe,
   batchColor,
   batchOriginDayLabel,
 }: {
@@ -571,6 +572,8 @@ function SlotCard({
   onPickRecipe: () => void;
   onDuplicateBatch: () => void;
   onDelete: () => void;
+  /** Ouvre la fiche recette (URL /recette/[id]). */
+  onViewRecipe: () => void;
   /** Couleur attribuée au batch_group_id (undefined si pas de batch). */
   batchColor?: (typeof BATCH_COLORS)[number];
   /** Label court du jour d'origine du batch (ex: "Lun") — défini uniquement pour les reprises. */
@@ -678,7 +681,23 @@ function SlotCard({
             />
           </div>
         ) : (
-          <>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={onViewRecipe}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onViewRecipe();
+              }
+            }}
+            title="Voir la fiche recette"
+            style={{
+              cursor: "pointer",
+              borderRadius: 10,
+              outline: "none",
+            }}
+          >
             <p
               style={{
                 fontSize: 13,
@@ -711,7 +730,10 @@ function SlotCard({
                 </span>
               )}
             </div>
-          </>
+            <p style={{ margin: "8px 0 0", fontSize: 11, color: "#6366f1", fontWeight: 600 }}>
+              Voir la fiche recette →
+            </p>
+          </div>
         )}
       </div>
 
@@ -1540,6 +1562,12 @@ export default function PlanifierPage() {
                                 onDelete={() => {
                                   if (window.confirm("Supprimer ce repas ?")) {
                                     deleteSlot(day.day_index, mealType);
+                                  }
+                                }}
+                                onViewRecipe={() => {
+                                  const rid = meal.recipe_id;
+                                  if (Number.isFinite(rid) && rid > 0) {
+                                    router.push(`/recette/${rid}`);
                                   }
                                 }}
                                 batchColor={

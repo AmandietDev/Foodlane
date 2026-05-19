@@ -14,6 +14,7 @@ import {
 // ✅ Client Supabase
 import { supabase, isSupabaseConfigured, getSessionResilient } from "../src/lib/supabaseClient";
 import { refgrowTrackSignup } from "../src/lib/refgrowClient";
+import { getSafeNextRedirectFromWindow } from "../src/lib/safeNextRedirect";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
 
@@ -61,7 +62,7 @@ export default function LoginPage() {
         }
 
         if (session) {
-          router.push("/tableau");
+          router.push(getSafeNextRedirectFromWindow("/tableau"));
           return;
         }
 
@@ -139,8 +140,8 @@ export default function LoginPage() {
         return;
       }
 
-      // Succès : tableau de bord (menus hebdo)
-      router.push("/tableau");
+      // Succès : destination demandée (ex. ?next=/parrainage) ou tableau
+      router.push(getSafeNextRedirectFromWindow("/tableau"));
     } catch (err) {
       console.error(err);
       setError("Une erreur est survenue pendant la connexion");

@@ -490,11 +490,21 @@ export default function MenuDetailPage() {
             className="w-full max-w-lg rounded-2xl bg-[#FFF0F0] border border-[#E8A0A0] shadow-xl max-h-[88vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-[#E8D5D5] flex items-center justify-between">
+            <div className="p-4 border-b border-[#E8D5D5] flex items-center justify-between gap-2 flex-wrap">
               <h3 className="font-semibold text-[#4a2c2c]">{selectedRecipe.nom_recette}</h3>
-              <button className="text-sm text-[#7a5a5a]" onClick={() => setSelectedRecipe(null)}>
-                Fermer ✕
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedRecipe.id > 0 ? (
+                  <Link
+                    href={`/recette/${selectedRecipe.id}`}
+                    className="text-xs font-semibold text-[#6366f1] hover:underline"
+                  >
+                    Fiche complète →
+                  </Link>
+                ) : null}
+                <button type="button" className="text-sm text-[#7a5a5a]" onClick={() => setSelectedRecipe(null)}>
+                  Fermer ✕
+                </button>
+              </div>
             </div>
             {selectedRecipe.image_url ? (
               <div className="h-56 w-full">

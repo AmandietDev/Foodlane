@@ -95,45 +95,59 @@ export default function RecettesPage() {
     async function loadPersonalizedRecipes() {
       setLoading(true);
       setError(null);
+      let forMeOk = false;
+
       try {
-        // Dataset complet (pour ne jamais "perdre" des recettes lors d'une recherche texte)
+        const auth = await plannerAuthHeaders();
+
+        const forMeRes = await fetch("/api/recipes/for-me", {
+          headers: {
+            "Content-Type": "application/json",
+            ...auth,
+          },
+        });
+        const forMeJson = await forMeRes.json().catch(() => ({}));
+
+        if (forMeRes.ok) {
+          forMeOk = true;
+          const loaded = Array.isArray(forMeJson.recipes)
+            ? (forMeJson.recipes as RecipeWithPersonalization[])
+            : [];
+          if (!cancelled) {
+            setRecipes(loaded);
+            setLoading(false);
+          }
+        } else if (forMeRes.status === 403) {
+          if (!cancelled) setLoading(false);
+        } else {
+          throw new Error(
+            typeof forMeJson.error === "string" ? forMeJson.error : "Impossible de charger les recettes personnalisées."
+          );
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Erreur de chargement.");
+          setLoading(false);
+        }
+      }
+
+      try {
         const allRes = await fetch("/api/recipes");
         const allJson = await allRes.json().catch(() => ({}));
         const allLoaded =
           allRes.ok && Array.isArray(allJson.recipes)
             ? (allJson.recipes as RecipeWithPersonalization[])
             : [];
-        if (!cancelled) setAllRecipes(allLoaded);
+        if (cancelled) return;
+        setAllRecipes(allLoaded);
 
-        const auth = await plannerAuthHeaders();
-        const res = await fetch("/api/recipes/for-me", {
-          headers: {
-            "Content-Type": "application/json",
-            ...auth,
-          },
-        });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(j.error || "Impossible de charger les recettes personnalisées.");
+        if (!forMeOk && allLoaded.length > 0) {
+          setRecipes(allLoaded);
+        } else if (forMeOk && allLoaded.length > 0) {
+          setRecipes((prev) => (prev.length === 0 ? allLoaded : prev));
         }
-        let loaded = Array.isArray(j.recipes) ? (j.recipes as RecipeWithPersonalization[]) : [];
-
-        // Fallback: sans filtres, on doit au moins proposer des recettes.
-        if (loaded.length === 0) {
-          const fallbackRes = await fetch("/api/recipes");
-          const fallbackJson = await fallbackRes.json().catch(() => ({}));
-          if (fallbackRes.ok && Array.isArray(fallbackJson.recipes)) {
-            loaded = fallbackJson.recipes as RecipeWithPersonalization[];
-          }
-        }
-
-        if (!cancelled) {
-          setRecipes(loaded);
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Erreur de chargement.");
-        }
+      } catch {
+        /* liste complète optionnelle pour les filtres */
       } finally {
         if (!cancelled) setLoading(false);
       }

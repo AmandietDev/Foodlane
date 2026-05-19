@@ -12,17 +12,115 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 type CookieLike = { name: string; value: string };
 
-function getAccessTokenFromSupabaseCookies(allCookies: CookieLike[]): string | null {
-  const authCookie = allCookies.find(
-    (c) => c.name.includes("auth-token") || c.name.includes("access-token"),
-  );
-  if (!authCookie) return null;
+/** Décode la valeur de cookie session Supabase (JSON ou préfixe base64-). */
+function decodeSupabaseSessionCookieValue(raw: string): string {
+  const v = raw.trim();
+  if (v.startsWith("base64-")) {
+    const b64 = v.slice("base64-".length);
+    try {
+      return Buffer.from(b64, "base64url").toString("utf8");
+    } catch {
+      try {
+        return Buffer.from(b64, "base64").toString("utf8");
+      } catch {
+        return v;
+      }
+    }
+  }
   try {
-    const cookieValue = JSON.parse(decodeURIComponent(authCookie.value));
-    return cookieValue?.access_token ?? null;
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
+function parseSessionAccessToken(jsonStr: string): string | null {
+  try {
+    const parsed = JSON.parse(jsonStr) as { access_token?: string };
+    return typeof parsed.access_token === "string" ? parsed.access_token : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Lit le jeton d'accès Supabase depuis les cookies (cookie unique ou morceaux .0, .1, …).
+ * @see https://github.com/supabase/ssr — cookies fragmentés si session volumineuse.
+ */
+export function getAccessTokenFromSupabaseCookies(allCookies: CookieLike[]): string | null {
+  const authRelated = allCookies.filter(
+    (c) => c.name.includes("auth-token") || c.name.includes("access-token"),
+  );
+  if (!authRelated.length) return null;
+
+  const baseNames = new Set<string>();
+  for (const c of authRelated) {
+    if (!c.name.startsWith("sb-") || !c.name.includes("-auth-token")) continue;
+    const m = c.name.match(/^(sb-.+-auth-token)(?:\.\d+)?$/);
+    if (m) baseNames.add(m[1]);
+  }
+
+  for (const base of baseNames) {
+    const single = authRelated.find((c) => c.name === base);
+    if (single) {
+      const decoded = decodeSupabaseSessionCookieValue(single.value);
+      const token = parseSessionAccessToken(decoded);
+      if (token) return token;
+    }
+
+    let assembled = "";
+    let idx = 0;
+    while (true) {
+      const chunk = authRelated.find((c) => c.name === `${base}.${idx}`);
+      if (!chunk) break;
+      assembled += chunk.value;
+      idx += 1;
+    }
+    if (idx > 0) {
+      const decoded = decodeSupabaseSessionCookieValue(assembled);
+      const token = parseSessionAccessToken(decoded);
+      if (token) return token;
+    }
+  }
+
+  for (const c of authRelated) {
+    if (/auth-token|access-token/.test(c.name) && !/^sb-[^-]+-auth-token/.test(c.name)) {
+      try {
+        const decoded = decodeSupabaseSessionCookieValue(c.value);
+        const token = parseSessionAccessToken(decoded);
+        if (token) return token;
+      } catch {
+        /* continue */
+      }
+    }
+  }
+
+  return null;
+}
+
+async function getUserIdFromAuthOnly(request: NextRequest): Promise<string | null> {
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser(token);
+    if (user?.id) return user.id;
+  }
+
+  const cookieToken = getAccessTokenFromSupabaseCookies(request.cookies.getAll());
+  if (cookieToken) {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser(cookieToken);
+    if (user?.id) return user.id;
+  }
+
+  return null;
 }
 
 /**
@@ -43,43 +141,30 @@ export async function getSessionUserFromCookies(): Promise<{ id: string; email: 
 }
 
 /**
- * Récupère l'ID utilisateur depuis la requête
- * Essaie plusieurs méthodes : body userId, header Authorization, ou cookies Supabase
+ * Récupère l'ID utilisateur depuis la requête.
+ * Priorité : Authorization Bearer → cookies Supabase.
+ * Un `userId` dans le corps JSON ne compte que s'il correspond à l'utilisateur authentifié
+ * (évite qu'un client usurpe un autre compte).
  */
 export async function getUserIdFromRequest(request: NextRequest): Promise<string | null> {
-  // Méthode 1 : Depuis le body (si fourni explicitement)
+  const authId = await getUserIdFromAuthOnly(request);
+
+  let bodyUserId: string | null = null;
   try {
     const body = await request.clone().json().catch(() => null);
-    if (body?.userId) {
-      return body.userId;
+    if (body?.userId && typeof body.userId === "string") {
+      bodyUserId = body.userId.trim();
     }
   } catch {
-    // Ignorer si pas de body JSON
+    /* ignore */
   }
 
-  // Méthode 2 : Depuis le header Authorization
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (user) {
-      return user.id;
+  if (bodyUserId) {
+    if (authId) {
+      return authId === bodyUserId ? authId : null;
     }
+    return null;
   }
 
-  // Méthode 3 : Depuis les cookies Supabase
-  const token = getAccessTokenFromSupabaseCookies(request.cookies.getAll());
-  if (token) {
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser(token);
-    if (user) {
-      return user.id;
-    }
-  }
-
-  return null;
+  return authId;
 }
-
