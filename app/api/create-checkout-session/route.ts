@@ -129,6 +129,8 @@ export async function POST(request: NextRequest) {
       payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
+      /** Champ « Ajouter un code promo » sur la page Checkout (coupons Stripe). */
+      allow_promotion_codes: true,
       success_url: `${origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/premium?canceled=1`,
       metadata: meta,

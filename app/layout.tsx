@@ -8,6 +8,7 @@ import BottomNavigation from "./components/BottomNavigation";
 import AuthGuard from "./components/AuthGuard";
 import SplashScreen from "./components/SplashScreen";
 import EnvChecker from "./components/EnvChecker";
+import RefgrowReferralHint from "./components/RefgrowReferralHint";
 
 export const metadata: Metadata = {
   title: "Foodlane",
@@ -31,6 +32,7 @@ export default function RootLayout({
             strategy="afterInteractive"
           />
         ) : null}
+        {refgrowProjectId ? <RefgrowReferralHint /> : null}
         <SplashScreen />
         <ThemeProviderWrapper>
           <TranslationProvider>
