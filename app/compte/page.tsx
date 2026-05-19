@@ -14,6 +14,7 @@ import { supabase, isSupabaseConfigured } from "../src/lib/supabaseClient";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { usePremium } from "../contexts/PremiumContext";
 import { getSubscriptionAccountMessage } from "../src/lib/subscriptionDisplay";
+import { refgrowTrackSignup } from "../src/lib/refgrowClient";
 import ErrorMessage from "../components/ErrorMessage";
 
 export default function AccountPage() {
@@ -312,6 +313,8 @@ export default function AccountPage() {
           cguAcceptedDate: new Date().toISOString(),
         };
         savePreferences(preferencesWithCgu);
+
+        refgrowTrackSignup(emailValue);
 
         // Si Supabase demande confirmation par email, data.session peut être null
         if (!data.session) {

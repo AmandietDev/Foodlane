@@ -13,6 +13,7 @@ import {
 
 // ✅ Client Supabase
 import { supabase, isSupabaseConfigured, getSessionResilient } from "../src/lib/supabaseClient";
+import { refgrowTrackSignup } from "../src/lib/refgrowClient";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
 
@@ -251,6 +252,8 @@ export default function LoginPage() {
       };
 
       savePreferences(defaultPreferences);
+
+      refgrowTrackSignup(emailValue);
 
       // Si Supabase demande confirmation par email, data.session peut être null
       if (!data.session) {

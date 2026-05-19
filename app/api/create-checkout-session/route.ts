@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import Stripe from "stripe";
 import {
   parseInterval,
@@ -105,12 +106,18 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_APP_URL ||
       "http://localhost:3000";
 
+    const cookieStore = await cookies();
+    const refgrowRefCode = cookieStore.get("refgrow_ref_code")?.value?.trim();
+
     const meta = {
       userId,
       email,
       tier,
       interval,
       price_kind: kind,
+      ...(refgrowRefCode
+        ? { referral_code: refgrowRefCode.slice(0, 500) }
+        : {}),
     };
 
     console.log(
