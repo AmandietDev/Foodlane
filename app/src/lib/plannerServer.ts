@@ -15,6 +15,7 @@ export type UserPreferencesRow = {
   cooking_skill_level?: string | null;
   custom_goal?: string | null;
   household_size: number;
+  recipe_scaling_portions?: number | null;
   adults_count: number;
   children_count: number;
   planning_days: number;
@@ -32,7 +33,10 @@ function isCookingTimeKey(s: string): s is CookingTimeKey {
 }
 
 function isMealStructureKey(s: string): s is MealStructureKey {
-  return ["entree_plat_dessert", "entree_plat", "plat_dessert", "plat_seul"].includes(s);
+  // Seul "plat_seul" est désormais une valeur valide côté UI. Les anciennes
+  // valeurs en base sont silencieusement converties (cf. ligne 84) vers le
+  // défaut. Aucune migration destructive nécessaire.
+  return s === "plat_seul";
 }
 
 const MEAL_TYPES: PlannerMealType[] = ["breakfast", "lunch", "dinner", "snack"];
@@ -110,10 +114,20 @@ export function rowToPlannerPreferences(
       ? bpRaw
       : DEFAULT_PLANNER_PREFERENCES.breakfast_preference;
 
+  const h = Math.max(1, row.household_size || 1);
+  let rsp: number | null =
+    row.recipe_scaling_portions == null ? null : Number(row.recipe_scaling_portions);
+  if (h === 5) {
+    if (rsp !== 4 && rsp !== 5 && rsp !== 6) rsp = null;
+  } else {
+    rsp = null;
+  }
+
   return {
     cooking_time_preference: cooking,
     cooking_skill_level,
-    household_size: Math.max(1, row.household_size || 1),
+    household_size: h,
+    recipe_scaling_portions: rsp,
     adults_count: Math.max(0, row.adults_count ?? 1),
     children_count: Math.max(0, row.children_count ?? 0),
     planning_days: Math.min(14, Math.max(1, row.planning_days || 7)),

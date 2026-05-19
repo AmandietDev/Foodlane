@@ -25,6 +25,9 @@ import {
   type ShoppingListItem,
 } from "../src/lib/shoppingList";
 import { loadPreferences } from "../src/lib/userPreferences";
+import { usePremium } from "../contexts/PremiumContext";
+import { getLocale } from "../src/lib/i18n";
+import { sessionAuthHeaders } from "../src/lib/plannerClient";
 import RecipeImage from "../components/RecipeImage";
 import {
   detectDietaryBadges,
@@ -47,7 +50,6 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 export default function WeeklyMenuPage() {
   const router = useRouter();
   const [menu, setMenu] = useState<WeeklyMenu | null>(null);
-  const [isPremium, setIsPremium] = useState(false);
   const [showCalories, setShowCalories] = useState(true);
   const [viewMode, setViewMode] = useState<"edit" | "view">("edit");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export default function WeeklyMenuPage() {
   const [capturedAdviceImage, setCapturedAdviceImage] = useState<string | null>(null);
   // Vérifier la session avec le hook réutilisable
   const { user, loading: sessionLoading } = useSupabaseSession();
+  const { isPremium } = usePremium();
 
   useEffect(() => {
     if (!sessionLoading && !user) {
@@ -91,9 +94,8 @@ export default function WeeklyMenuPage() {
 
   useEffect(() => {
     if (sessionLoading || !user) return; // Attendre la vérification d'authentification
-    
+
     const preferences = loadPreferences();
-    setIsPremium(preferences.abonnementType === "premium");
     setShowCalories(preferences.afficherCalories);
 
     // Charger le menu actuel ou créer un nouveau
@@ -107,7 +109,7 @@ export default function WeeklyMenuPage() {
       setMenu(newMenu);
       setViewMode("edit");
     }
-  }, []);
+  }, [sessionLoading, user]);
 
   // Vérifier si une recette a été passée depuis une autre page
   // Ce useEffect doit s'exécuter APRÈS que le menu soit chargé
@@ -365,7 +367,7 @@ export default function WeeklyMenuPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ imageBase64: imageDataUrl }),
+        body: JSON.stringify({ imageBase64: imageDataUrl, locale: getLocale() }),
       });
 
       if (!response.ok) {
@@ -391,15 +393,22 @@ export default function WeeklyMenuPage() {
     setShowMealAnalysis(true);
 
     try {
+      const auth = await sessionAuthHeaders();
       const response = await fetch("/api/analyze-meal", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
+          ...auth,
         },
-        body: JSON.stringify({ imageBase64: imageDataUrl }),
+        body: JSON.stringify({ imageBase64: imageDataUrl, locale: getLocale() }),
       });
 
       if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        if (response.status === 403 && err.error === "quota_exceeded" && typeof err.message === "string") {
+          throw new Error(err.message);
+        }
         throw new Error("Erreur lors de l'analyse");
       }
 

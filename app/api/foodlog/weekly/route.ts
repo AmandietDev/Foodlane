@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
 import { requirePremium } from "../../../src/lib/premiumGuard";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
+import { mealParsedComponents } from "../../../src/lib/foodlogParsedComponents";
 
 /**
  * GET /api/foodlog/weekly?week_start=YYYY-MM-DD
@@ -22,7 +21,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Récupérer l'utilisateur depuis la requête
     const userId = await getUserIdFromRequest(request);
 
     if (!userId) {
@@ -32,32 +30,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Vérifier que l'utilisateur est Premium
     try {
       await requirePremium(request, userId);
     } catch (error) {
-      // requirePremium throw une NextResponse, on la retourne directement
       return error as NextResponse;
     }
 
-    const supabase = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: "Serveur non configuré (Supabase admin)" },
+        { status: 503 }
+      );
+    }
 
-    // Calculer la fin de semaine (7 jours après week_start)
+    const db = supabaseAdmin;
+
     const startDate = new Date(weekStart);
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + 6);
     const endDateStr = endDate.toISOString().split("T")[0];
 
-    // Vérifier si des insights existent déjà
-    const { data: existingInsights } = await supabase
-      .from("weekly_insights")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("week_start", weekStart)
-      .single();
-
-    // Récupérer tous les repas de la semaine
-    const { data: meals, error: mealsError } = await supabase
+    const { data: meals, error: mealsError } = await db
       .from("food_log_entries")
       .select("*")
       .eq("user_id", userId)
@@ -69,7 +62,6 @@ export async function GET(request: NextRequest) {
       console.error("[FoodLog] Erreur récupération repas:", mealsError);
     }
 
-    // Si pas assez de données, retourner un message
     if (!meals || meals.length < 3) {
       return NextResponse.json({
         user_id: userId,
@@ -81,21 +73,21 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Analyser les patterns
-    const patterns: Record<string, any> = {};
-    
-    // Compter les composants manquants
-    const missingFibers = meals.filter(m => 
-      m.parsed.components.veggie.length === 0 && m.parsed.components.fruit.length === 0
-    ).length;
-    const missingProteins = meals.filter(m => 
-      m.parsed.components.protein.length === 0
-    ).length;
-    const missingVeggies = meals.filter(m => 
-      m.parsed.components.veggie.length === 0
-    ).length;
-    
-    // Compter les repas sautés (moins de 2 repas structurés par jour)
+    const patterns: Record<string, string> = {};
+
+    const missingFibers = meals.filter(m => {
+      const c = mealParsedComponents(m.parsed);
+      return c.veggie.length === 0 && c.fruit.length === 0;
+    }).length;
+    const missingProteins = meals.filter(m => {
+      const c = mealParsedComponents(m.parsed);
+      return c.protein.length === 0;
+    }).length;
+    const missingVeggies = meals.filter(m => {
+      const c = mealParsedComponents(m.parsed);
+      return c.veggie.length === 0;
+    }).length;
+
     const mealsByDate: Record<string, number> = {};
     meals.forEach(m => {
       if (m.meal_type !== "snack") {
@@ -103,16 +95,13 @@ export async function GET(request: NextRequest) {
       }
     });
     const skippedMealsDays = Object.values(mealsByDate).filter(count => count < 2).length;
-    
-    // Détecter les collations déséquilibrées
-    const snacks = meals.filter(m => m.meal_type === "snack");
-    const unbalancedSnacks = snacks.filter(s => 
-      s.parsed.components.treat.length > 0 && 
-      s.parsed.components.fruit.length === 0 &&
-      s.parsed.components.veggie.length === 0
-    ).length;
 
-    // Construire les patterns
+    const snacks = meals.filter(m => m.meal_type === "snack");
+    const unbalancedSnacks = snacks.filter(s => {
+      const c = mealParsedComponents(s.parsed);
+      return c.treat.length > 0 && c.fruit.length === 0 && c.veggie.length === 0;
+    }).length;
+
     if (missingVeggies > meals.length * 0.5) {
       patterns.low_vegetables = `Tu manques de légumes dans ${Math.round(missingVeggies / meals.length * 100)}% de tes repas cette semaine`;
     }
@@ -129,12 +118,10 @@ export async function GET(request: NextRequest) {
       patterns.unbalanced_snacks = `Tes collations sont souvent déséquilibrées (${unbalancedSnacks} sur ${snacks.length})`;
     }
 
-    // Si aucun pattern détecté, message positif
     if (Object.keys(patterns).length === 0) {
       patterns.positive = "Cette semaine, tu as bien varié tes repas et maintenu un bon équilibre !";
     }
 
-    // Générer une action hebdomadaire
     let oneAction = "";
     if (patterns.low_vegetables) {
       oneAction = "Cette semaine, ajoute des légumes à au moins 2 repas par jour";
@@ -155,8 +142,7 @@ export async function GET(request: NextRequest) {
       one_action: oneAction,
     };
 
-    // Sauvegarder les insights
-    await supabase
+    await db
       .from("weekly_insights")
       .upsert(insights, { onConflict: "user_id,week_start" });
 
@@ -172,4 +158,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

@@ -95,8 +95,8 @@ export default function TableauPage() {
     "";
 
   return (
-    <div className="min-h-screen bg-[#FFF8F6] pb-28 pt-6 px-4">
-      <div className="max-w-lg mx-auto space-y-6">
+    <div className="min-h-screen bg-[#FFF8F6] pb-28 pt-6 px-4 md:pt-10 md:px-8">
+      <div className="max-w-lg md:max-w-3xl lg:max-w-4xl mx-auto space-y-6 md:space-y-8">
         <header className="space-y-1">
           <h1 className="text-[2rem] leading-tight font-bold text-[#4a2c2c]">
             Bonjour{firstName ? `, ${firstName}` : ""} !
@@ -187,7 +187,7 @@ export default function TableauPage() {
         </div>
 
         <Link
-          href="/"
+          href="/recettes"
           className="block rounded-2xl border border-[#E8A0A0] overflow-hidden shadow-sm hover:shadow-md transition-shadow text-left"
           aria-label="Parcourir les recettes — explorer par ingrédients, sucré ou salé"
         >
@@ -212,7 +212,7 @@ export default function TableauPage() {
                 Parcourir les recettes
               </h3>
               <p className="text-sm text-white mt-1.5 leading-snug max-w-[300px] drop-shadow-sm">
-                Explore par ingrédients, sucré ou salé
+                Explore par ingrédients, sucré, salé ou sans filtre. Ajoute en favori ou à une collection depuis la liste.
               </p>
             </div>
           </div>

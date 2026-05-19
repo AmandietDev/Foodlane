@@ -1,11 +1,17 @@
-import type { PlannerPreferences } from "./weeklyPlanner";
+import { getEffectiveRecipePortions, type PlannerPreferences } from "./weeklyPlanner";
+import { getCurrentSeason, getSeasonName } from "./seasonalFilter";
 
 /** Texte structuré pour les prompts IA (menus + scoring recettes) */
 export function buildUserProfileForAi(prefs: PlannerPreferences): string {
   const lines: string[] = [];
+  const portions = getEffectiveRecipePortions(prefs);
+  const season = getCurrentSeason();
+  lines.push(`Saison calendaire actuelle (repère menus / catalogue): ${getSeasonName(season)}`);
   lines.push(`Temps de cuisine (préférence): ${prefs.cooking_time_preference}`);
   lines.push(`Niveau en cuisine: ${prefs.cooking_skill_level}`);
-  lines.push(`Personnes: ${prefs.household_size} (adultes ${prefs.adults_count}, enfants ${prefs.children_count})`);
+  lines.push(
+    `Foyer: ${prefs.household_size} personne(s) inscrite(s) (adultes ${prefs.adults_count}, enfants ${prefs.children_count}) ; portions pour ajuster les quantités des recettes et la liste de courses: ${portions}`
+  );
   lines.push(`Jours planifiés: ${prefs.planning_days}`);
   lines.push(`Repas concernés: ${prefs.meal_types.join(", ")}`);
   lines.push(`Structure repas: ${prefs.meal_structure}`);

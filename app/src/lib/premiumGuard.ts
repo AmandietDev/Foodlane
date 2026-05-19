@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { UserProfile } from "./profile";
+import { hasPaidSubscriptionAccess } from "./profile";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -16,32 +17,7 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
  * @returns true si Premium, false sinon
  */
 export function isPremium(profile: UserProfile | null): boolean {
-  if (!profile) return false;
-  
-  // Si premium_active est true
-  if (profile.premium_active) {
-    // Vérifier aussi si premium_end_date n'est pas passée
-    if (profile.premium_end_date) {
-      const endDate = new Date(profile.premium_end_date);
-      const now = new Date();
-      if (endDate < now) {
-        return false;
-      }
-    }
-    return true;
-  }
-  
-  // Si premium_active est false mais premium_end_date n'est pas encore passée,
-  // l'utilisateur a encore accès (période payée en cours)
-  if (profile.premium_end_date) {
-    const endDate = new Date(profile.premium_end_date);
-    const now = new Date();
-    if (endDate >= now) {
-      return true;
-    }
-  }
-  
-  return false;
+  return hasPaidSubscriptionAccess(profile);
 }
 
 /**
@@ -61,7 +37,7 @@ async function getProfileServer(userId: string): Promise<UserProfile | null> {
     const { data, error } = await supabaseAdmin
       .from("profiles")
       .select(
-        "id, email, premium_active, premium_plan, premium_start_date, premium_end_date, stripe_customer_id, stripe_subscription_id, full_name"
+        "id, email, premium_active, premium_plan, subscription_tier, subscription_status, cancel_at_period_end, current_period_end, subscription_cancelled_at, premium_start_date, premium_end_date, premium_started_at, premium_ended_at, stripe_customer_id, stripe_subscription_id, is_founder, is_beta_tester, billing_cycle, stripe_price_id, full_name"
       )
       .eq("id", userId)
       .maybeSingle();
@@ -73,12 +49,21 @@ async function getProfileServer(userId: string): Promise<UserProfile | null> {
     // Extraire le prénom
     const prenom = data.full_name?.split(" ")[0] || null;
 
-    // Vérifier premium_end_date
+    const row = data as Record<string, unknown>;
+    const periodEndRaw =
+      (typeof row.current_period_end === "string" && row.current_period_end) ||
+      data.premium_end_date ||
+      null;
+
     let premiumActive = data.premium_active || false;
-    const premiumEndDate = data.premium_end_date ? new Date(data.premium_end_date) : null;
+    const premiumEndDate = periodEndRaw ? new Date(periodEndRaw) : null;
     const now = new Date();
-    
-    if (premiumEndDate && premiumEndDate < now) {
+
+    const isBeta = Boolean(row.is_beta_tester) && row.subscription_status === "active";
+
+    if (isBeta) {
+      premiumActive = true;
+    } else if (premiumEndDate && premiumEndDate < now) {
       premiumActive = false;
     } else if (premiumEndDate && premiumEndDate >= now) {
       premiumActive = true;
@@ -89,12 +74,23 @@ async function getProfileServer(userId: string): Promise<UserProfile | null> {
       email: data.email || "",
       premium_active: premiumActive,
       premium_plan: (data.premium_plan as "monthly" | "yearly" | null) || null,
+      subscription_tier: (row.subscription_tier as string | null | undefined) ?? null,
+      subscription_status: (row.subscription_status as string | null | undefined) ?? null,
+      cancel_at_period_end: Boolean(row.cancel_at_period_end),
+      current_period_end: (row.current_period_end as string | null | undefined) ?? null,
+      subscription_cancelled_at: (row.subscription_cancelled_at as string | null | undefined) ?? null,
       premium_start_date: data.premium_start_date || null,
       premium_end_date: data.premium_end_date || null,
+      premium_started_at: (row.premium_started_at as string | null | undefined) ?? null,
+      premium_ended_at: (row.premium_ended_at as string | null | undefined) ?? null,
       stripe_customer_id: data.stripe_customer_id || null,
       stripe_subscription_id: data.stripe_subscription_id || null,
       full_name: data.full_name || null,
       prenom,
+      is_founder: Boolean(row.is_founder),
+      is_beta_tester: Boolean(row.is_beta_tester),
+      billing_cycle: (row.billing_cycle as string | null | undefined) ?? null,
+      stripe_price_id: (row.stripe_price_id as string | null | undefined) ?? null,
     };
   } catch (error) {
     console.error("[premiumGuard] Erreur récupération profil:", error);
@@ -200,5 +196,26 @@ export async function requirePremium(
   }
 
   return { userId, profile };
+}
+
+/**
+ * Comme `requirePremium`, mais réservé au palier **Premium Plus** (ex. analyse photo).
+ */
+export async function requirePremiumPlus(
+  request: NextRequest,
+  userIdOptionnel?: string
+): Promise<{ userId: string; profile: UserProfile }> {
+  const base = await requirePremium(request, userIdOptionnel);
+  if (base.profile.subscription_tier !== "premium_plus") {
+    throw NextResponse.json(
+      {
+        error: "premium_plus_required",
+        message:
+          "L’analyse photo est réservée à l’offre Premium Plus. Passe à Premium Plus pour débloquer.",
+      },
+      { status: 403 }
+    );
+  }
+  return base;
 }
 

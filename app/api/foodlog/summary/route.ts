@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { analyzeDaily, MealEntry } from "../../../src/lib/dailyAnalyzer";
 import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
 import { requirePremium } from "../../../src/lib/premiumGuard";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
 
 /**
  * GET /api/foodlog/summary?date=YYYY-MM-DD
@@ -41,10 +39,17 @@ export async function GET(request: NextRequest) {
       return error as NextResponse;
     }
 
-    const supabase = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: "Serveur non configuré (Supabase admin)" },
+        { status: 503 }
+      );
+    }
+
+    const db = supabaseAdmin;
 
     // Vérifier si un summary existe déjà
-    const { data: existingSummary, error: fetchError } = await supabase
+    const { data: existingSummary, error: fetchError } = await db
       .from("daily_summaries")
       .select("*")
       .eq("user_id", userId)
@@ -54,7 +59,7 @@ export async function GET(request: NextRequest) {
     // Si le summary existe et qu'il y a des repas, le retourner
     if (existingSummary && !fetchError) {
       // Vérifier si des repas ont été ajoutés depuis la dernière mise à jour
-      const { data: meals } = await supabase
+      const { data: meals } = await db
         .from("food_log_entries")
         .select("*")
         .eq("user_id", userId)
@@ -78,7 +83,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Sinon, calculer le summary
-    const { data: meals, error: mealsError } = await supabase
+    const { data: meals, error: mealsError } = await db
       .from("food_log_entries")
       .select("*")
       .eq("user_id", userId)
@@ -90,7 +95,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Récupérer le profil utilisateur pour le contexte
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from("profiles")
       .select("allergies, diets, objective, behavioral_preferences")
       .eq("id", userId)
@@ -110,10 +115,22 @@ export async function GET(request: NextRequest) {
         ],
         missing_components: ["données insuffisantes"],
         plan_for_tomorrow: {
-          breakfast: ["Tartines complètes + fromage blanc + fruit", "Œufs + pain complet + tomate"],
-          lunch: ["Salade composée + protéine + féculent", "Légumes + viande/poisson + riz ou pâtes"],
-          dinner: ["Légumes + protéine + féculents", "Plat complet équilibré"],
-          snack: ["Fruit frais", "Yaourt + fruits"]
+          breakfast: [
+            "Dès que tu notes un repas, j’affine tes conseils. En attendant : demain matin, pose bol + cuillère + 1 fruit visible sur la table pour ne pas sauter le petit-déjeuner.",
+            "Express 3 min : flocons d’avoine + boisson (lait ou végétale) + cannelle au micro-ondes couvert — moins de friction le matin.",
+          ],
+          lunch: [
+            "Sans historique, vise un déjeuner « clé en main » : barquette de crudités (150 g) + thon naturel 1 petite boîte + riz précuit complet (½ sachet), assaisonnement citron-moutarde.",
+            "Si tu manges dehors : choisis une formule où tu vois des légumes + une protéine identifiable (évite la formule 100 % frites + soda).",
+          ],
+          dinner: [
+            "Demain soir, règle simple : 200 g de légumes cuits (surgelés mélangés OK) + 120 g de protéine + 80 g de féculent cuit au centre de l’assiette.",
+            "Après le repas, range les restes tout de suite dans des boîtes : tu réduis les « petits grignotages » devant l’écran.",
+          ],
+          snack: [
+            "Collation utile : thé non sucré + 2 abricots secs + 4 noisettes pour un creux de fin d’après-midi sans pic de sucre rapide.",
+            "Hydratation : une gourde 750 mL sur le bureau ; vise de la finir avant 18 h pour mieux lire la faim au dîner.",
+          ],
         },
         meta: {
           components_found: [],
@@ -122,7 +139,7 @@ export async function GET(request: NextRequest) {
       };
 
       // Sauvegarder le summary vide
-      await supabase
+      await db
         .from("daily_summaries")
         .upsert(emptySummary, { onConflict: "user_id,date" });
 
@@ -160,7 +177,7 @@ export async function GET(request: NextRequest) {
       meta: summary.meta,
     };
 
-    const { data: savedSummary, error: saveError } = await supabase
+    const { data: savedSummary, error: saveError } = await db
       .from("daily_summaries")
       .upsert(summaryToSave, { onConflict: "user_id,date" })
       .select()

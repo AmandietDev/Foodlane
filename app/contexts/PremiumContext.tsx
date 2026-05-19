@@ -5,16 +5,42 @@
  * Source de vérité pour isPremium dans toute l'application
  */
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  ReactNode,
+} from "react";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
-import { getProfile, type UserProfile } from "../src/lib/profile";
+import { getProfile, type UserProfile, hasPaidSubscriptionAccess, abonnementTypeFromProfile } from "../src/lib/profile";
 import { loadPreferences, savePreferences } from "../src/lib/userPreferences";
+import { supabase, isSupabaseConfigured } from "../src/lib/supabaseClient";
+import { emitSubscriptionStateChanged } from "../src/lib/subscriptionSyncEvents";
+
+export type SubscriptionDisplayTier = "free" | "premium" | "premium_plus";
 
 interface PremiumContextType {
   isPremium: boolean;
+  /** Abonnement actif au palier Premium Plus (photo repas, etc.). */
+  isPremiumPlus: boolean;
+  /** Palier affiché / localStorage (free, premium, premium_plus) — dérivé du profil Supabase. */
+  subscriptionTier: SubscriptionDisplayTier;
+  /**
+   * Déverrouille l’assistant diététique (/equilibre) sans abonnement.
+   * À activer uniquement en local via `.env.local` : NEXT_PUBLIC_DIET_ASSISTANT_DEV_ACCESS=true
+   */
+  dietAssistantDevAccess: boolean;
+  /** Accès à la page assistant : Premium payant OU flag dev ci-dessus. */
+  canAccessDietAssistant: boolean;
   profile: UserProfile | null;
   loading: boolean;
   refreshProfile: () => Promise<void>;
+  /** Statut Stripe brut (active, canceled, past_due, …) si connu. */
+  subscriptionStatus: string | null;
 }
 
 const PremiumContext = createContext<PremiumContextType | undefined>(undefined);
@@ -23,6 +49,7 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
   const { user } = useSupabaseSession();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const visibilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshProfile = useCallback(async () => {
     if (!user) {
@@ -38,16 +65,46 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
       // Synchroniser avec localStorage pour compatibilité
       if (userProfile) {
         const preferences = loadPreferences();
-        const newAbonnementType = userProfile.premium_active ? "premium" : "free";
-        
-        // Mettre à jour seulement si différent pour éviter des boucles
-        if (preferences.abonnementType !== newAbonnementType) {
+        const paidAccess = hasPaidSubscriptionAccess(userProfile);
+        const newAbonnementType = abonnementTypeFromProfile(userProfile, paidAccess);
+
+        const shouldSync =
+          preferences.abonnementType !== newAbonnementType ||
+          (paidAccess &&
+            (preferences.premiumExpirationDate !==
+              (userProfile.current_period_end || userProfile.premium_end_date || undefined) ||
+              preferences.premiumStartDate !== (userProfile.premium_start_date || undefined)));
+
+        if (shouldSync) {
           savePreferences({
             ...preferences,
             abonnementType: newAbonnementType,
-            premiumStartDate: userProfile.premium_start_date || undefined,
-            premiumExpirationDate: userProfile.premium_end_date || undefined,
+            premiumStartDate: paidAccess ? userProfile.premium_start_date || undefined : undefined,
+            premiumExpirationDate: paidAccess
+              ? userProfile.current_period_end || userProfile.premium_end_date || undefined
+              : undefined,
           });
+        }
+      }
+
+      emitSubscriptionStateChanged();
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        try {
+          const r = await fetch("/api/billing/sync-beta-access", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (r.ok) {
+            const j = (await r.json().catch(() => ({}))) as { applied?: boolean };
+            if (j.applied) {
+              const updated = await getProfile(user.id);
+              if (updated) setProfile(updated);
+            }
+          }
+        } catch (e) {
+          console.warn("[PremiumProvider] sync-beta-access:", e);
         }
       }
     } catch (error) {
@@ -67,52 +124,87 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
     }
   }, [user, refreshProfile]);
 
+  /** Mise à jour quasi temps réel quand Supabase notifie un changement sur `profiles`. */
+  useEffect(() => {
+    if (!user?.id || !isSupabaseConfigured) return;
+
+    const channel = supabase
+      .channel(`profiles-subscription-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${user.id}`,
+        },
+        () => {
+          void refreshProfile();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id, refreshProfile]);
+
+  /** Retour sur l’app / onglet (ex. après portail Stripe) : recharger le profil. */
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible" || !user) return;
+      if (visibilityTimerRef.current) clearTimeout(visibilityTimerRef.current);
+      visibilityTimerRef.current = setTimeout(() => {
+        visibilityTimerRef.current = null;
+        void refreshProfile();
+      }, 800);
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (visibilityTimerRef.current) clearTimeout(visibilityTimerRef.current);
+    };
+  }, [user, refreshProfile]);
+
   // Calculer isPremium en tenant compte de premium_active ET premium_end_date
   // L'utilisateur a accès si premium_active est true OU si premium_end_date n'est pas encore passée
   const calculateIsPremium = (): boolean => {
-    // Mode développement : permet de forcer l'UI premium localement
     if (process.env.NEXT_PUBLIC_FORCE_PREMIUM === "true") {
       return true;
     }
-
-    if (!profile) return false;
-    
-    // Si premium_active est true, l'utilisateur a accès
-    if (profile.premium_active) {
-      // Vérifier aussi si premium_end_date n'est pas passée
-      if (profile.premium_end_date) {
-        const endDate = new Date(profile.premium_end_date);
-        const now = new Date();
-        // Si la date de fin est passée, l'utilisateur n'a plus accès
-        if (endDate < now) {
-          return false;
-        }
-      }
-      return true;
-    }
-    
-    // Si premium_active est false mais premium_end_date n'est pas encore passée,
-    // l'utilisateur a encore accès (période payée en cours)
-    if (profile.premium_end_date) {
-      const endDate = new Date(profile.premium_end_date);
-      const now = new Date();
-      if (endDate >= now) {
-        return true;
-      }
-    }
-    
-    return false;
+    return hasPaidSubscriptionAccess(profile);
   };
 
   const isPremium = calculateIsPremium();
+
+  const subscriptionTier: SubscriptionDisplayTier = useMemo(() => {
+    if (!profile) return "free";
+    return abonnementTypeFromProfile(profile, hasPaidSubscriptionAccess(profile));
+  }, [profile]);
+
+  const subscriptionStatus = profile?.subscription_status ?? null;
+
+  const dietAssistantDevAccess =
+    process.env.NEXT_PUBLIC_DIET_ASSISTANT_DEV_ACCESS === "true";
+
+  const canAccessDietAssistant = isPremium || dietAssistantDevAccess;
+
+  const isPremiumPlus =
+    isPremium && profile?.subscription_tier === "premium_plus";
 
   return (
     <PremiumContext.Provider
       value={{
         isPremium,
+        isPremiumPlus,
+        subscriptionTier,
+        dietAssistantDevAccess,
+        canAccessDietAssistant,
         profile,
         loading,
         refreshProfile,
+        subscriptionStatus,
       }}
     >
       {children}

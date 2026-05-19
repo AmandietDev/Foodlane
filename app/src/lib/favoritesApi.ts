@@ -5,6 +5,7 @@
 
 import { supabase } from "./supabaseClient";
 import type { Recipe } from "./recipes";
+import { deriveRecipeFeatures } from "./recipeFeatures";
 
 /**
  * Récupère toutes les recettes favorites de l'utilisateur connecté
@@ -50,23 +51,74 @@ export async function getUserFavorites(): Promise<Recipe[]> {
     return recipeIds.map((id) => ({ id } as Recipe));
   }
 
-  // Mapper les données Supabase vers le format Recipe
-  return (recipes || []).map((r: Record<string, unknown>) => ({
-    id: Number(r["id"]),
-    type: (r["type"] as string | null) ?? null,
-    difficulte: (r["difficulte"] as string | null) ?? null,
-    temps_preparation_min: (r["temps_preparation_min"] as number | null) ?? null,
-    categorie_temps: (r["categorie_temps"] as string | null) ?? null,
-    nombre_personnes: (r["nombre_personnes"] as number | null) ?? null,
-    nom_recette: (r["nom_recette"] as string | null) ?? null,
-    description_courte: (r["description_courte"] as string | null) ?? null,
-    ingredients: (r["ingredients"] as string | null) ?? null,
-    instructions: (r["instructions"] as string | null) ?? null,
-    equipements: (r["equipements"] as string | null) ?? null,
-    calories: (r["calories"] as number | null) ?? null,
-    image_url: (r["image_url"] as string | null) ?? null,
-    created_at: (r["created_at"] as string | null) ?? new Date().toISOString(),
-  }));
+  // Mapper les données Supabase vers le format Recipe.
+  // Lecture défensive : nouveaux noms recipes_v2 en priorité, anciens en fallback.
+  return (recipes || []).map((r: Record<string, unknown>) => {
+    const ingredientsRaw =
+      (r["ingredients_quantites"] as string | null) ??
+      (r["ingredients"] as string | null) ??
+      null;
+    const equipementsRaw =
+      (r["equipements_necessaires"] as string | null) ??
+      (r["equipements"] as string | null) ??
+      null;
+    const caloriesRaw =
+      (r["calories_par_portion"] as number | null) ??
+      (r["calories"] as number | null) ??
+      null;
+
+    const derived = deriveRecipeFeatures({
+      nom_recette: (r["nom_recette"] as string | null) ?? null,
+      type: (r["type"] as string | null) ?? null,
+      ingredients: ingredientsRaw,
+      instructions: (r["instructions"] as string | null) ?? null,
+      family: (r["family"] as string | null) ?? null,
+      cooking_method: (r["cooking_method"] as string | null) ?? null,
+      texture: (r["texture"] as string | null) ?? null,
+      meal_subtype: (r["meal_subtype"] as string | null) ?? null,
+    });
+
+    return {
+      id: Number(r["id"]),
+      type: (r["type"] as string | null) ?? null,
+      difficulte: (r["difficulte"] as string | null) ?? null,
+      temps_preparation_min: (r["temps_preparation_min"] as number | null) ?? null,
+      categorie_temps: (r["categorie_temps"] as string | null) ?? null,
+      nombre_personnes: (r["nombre_personnes"] as number | null) ?? null,
+      nom_recette: (r["nom_recette"] as string | null) ?? null,
+      description_courte: (r["description_courte"] as string | null) ?? null,
+      saison: (r["saison"] as string | null) ?? null,
+
+      // Colonnes structurées recipes_v2
+      meal_slot: (r["meal_slot"] as string | null) ?? null,
+      dish_type: (r["dish_type"] as string | null) ?? null,
+      main_protein: (r["main_protein"] as string | null) ?? null,
+      main_carb: (r["main_carb"] as string | null) ?? null,
+      main_vegetables: (r["main_vegetables"] as string | null) ?? null,
+      allergens: (r["allergens"] as string | null) ?? null,
+      igredient_tags: (r["igredient_tags"] as string | null) ?? null,
+      diet_tags: (r["diet_tags"] as string | null) ?? null,
+
+      family: ((r["family"] as string | null) ?? derived.family) ?? null,
+      cooking_method:
+        ((r["cooking_method"] as string | null) ?? derived.cooking_method) ?? null,
+      texture: ((r["texture"] as string | null) ?? derived.texture) ?? null,
+      meal_subtype:
+        ((r["meal_subtype"] as string | null) ?? derived.meal_subtype) ?? null,
+
+      ingredients: ingredientsRaw,
+      ingredients_quantites: (r["ingredients_quantites"] as string | null) ?? null,
+      instructions: (r["instructions"] as string | null) ?? null,
+      equipements: equipementsRaw,
+      equipements_necessaires:
+        (r["equipements_necessaires"] as string | null) ?? null,
+      calories: caloriesRaw,
+      calories_par_portion: (r["calories_par_portion"] as number | null) ?? null,
+
+      image_url: (r["image_url"] as string | null) ?? null,
+      created_at: (r["created_at"] as string | null) ?? new Date().toISOString(),
+    };
+  });
 }
 
 /**

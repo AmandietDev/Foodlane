@@ -6,6 +6,8 @@ import { scoreRecipesForUserProfile } from "../../../src/lib/recipePersonalizati
 import { DEFAULT_PLANNER_PREFERENCES } from "../../../src/lib/weeklyPlanner";
 import { rowToPlannerPreferences, type UserPreferencesRow } from "../../../src/lib/plannerServer";
 import type { PlannerPreferences } from "../../../src/lib/weeklyPlanner";
+import { FREE_RECIPES_FOR_ME_AI_PER_WEEK } from "../../../src/lib/freemiumLimits";
+import { tryConsumeFreemiumQuota, weekPeriodKey } from "../../../src/lib/usageQuotasServer";
 
 export const dynamic = "force-dynamic";
 
@@ -40,11 +42,30 @@ export async function GET(request: NextRequest) {
   }
 
   const recipes = await fetchRecipes();
-  const { scored, usedAi } = await scoreRecipesForUserProfile(
-    recipes,
-    prefs,
-    process.env.OPENAI_API_KEY
-  );
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    const aiQuota = await tryConsumeFreemiumQuota(
+      userId,
+      "recipes_for_me_ai",
+      weekPeriodKey(),
+      FREE_RECIPES_FOR_ME_AI_PER_WEEK
+    );
+    if (!aiQuota.allowed) {
+      return NextResponse.json(
+        {
+          error: "quota_exceeded",
+          metric: "recipes_for_me_ai",
+          limit: aiQuota.limit,
+          count: aiQuota.count,
+          message:
+            "Tu as atteint la limite d’affinage IA « recettes pour moi » pour cette semaine sur le plan gratuit.",
+        },
+        { status: 403 }
+      );
+    }
+  }
+
+  const { scored, usedAi } = await scoreRecipesForUserProfile(recipes, prefs, openaiKey);
 
   const out = scored.map((s) => ({
     ...s.recipe,

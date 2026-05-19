@@ -8,7 +8,6 @@ import {
   COOKING_TIME_OPTIONS,
   DIETARY_FILTER_OPTIONS,
   EQUIPMENT_OPTIONS,
-  MEAL_STRUCTURE_OPTIONS,
   MEAL_TYPE_OPTIONS,
   OBJECTIVE_OPTIONS,
 } from "../src/lib/plannerConstants";
@@ -16,6 +15,8 @@ import {
 type Props = {
   initial: PlannerPreferences;
   submitLabel: string;
+  /** Même charte que l’onglet Foyer du menu (cartes beige). */
+  visualVariant?: "default" | "foyer";
   onSubmit: (payload: {
     preferences: PlannerPreferences;
     equipment_keys: string[];
@@ -24,14 +25,23 @@ type Props = {
   }) => Promise<void>;
 };
 
-export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: Props) {
+export default function PlannerProfileForm({
+  initial,
+  submitLabel,
+  onSubmit,
+  visualVariant = "default",
+}: Props) {
   const [cooking_time_preference, setCooking] = useState(initial.cooking_time_preference);
   const [household_size, setHousehold] = useState(initial.household_size);
+  const [recipe_scaling_portions, setRecipeScalingPortions] = useState<number | null>(
+    initial.recipe_scaling_portions ?? null
+  );
   const [adults_count, setAdults] = useState(initial.adults_count);
   const [children_count, setChildren] = useState(initial.children_count);
   const [planning_days, setPlanningDays] = useState(initial.planning_days);
   const [meal_types, setMealTypes] = useState<string[]>(initial.meal_types);
-  const [meal_structure, setMealStructure] = useState(initial.meal_structure);
+  // Structure de repas figée à la valeur initiale (toujours "plat_seul" en pratique).
+  const [meal_structure] = useState(initial.meal_structure);
   const [objectives, setObjectives] = useState<string[]>(initial.objectives);
   const [customGoalText, setCustomGoalText] = useState(
     () => initial.custom_goal?.trim() || ""
@@ -104,6 +114,8 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         cooking_time_preference,
         cooking_skill_level,
         household_size: Math.max(1, household_size),
+        recipe_scaling_portions:
+          Math.max(1, household_size) === 5 ? recipe_scaling_portions : null,
         adults_count: Math.max(0, adults_count),
         children_count: Math.max(0, children_count),
         planning_days: Math.min(14, Math.max(1, planning_days)),
@@ -132,8 +144,32 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
 
   const chip =
     "rounded-full px-3 py-1.5 text-sm border transition-colors cursor-pointer select-none";
-  const chipOn = "bg-[#6B2E2E] text-white border-[#6B2E2E]";
-  const chipOff = "bg-white text-[#5c3d3d] border-[#E8A0A0] hover:border-[#6B2E2E]";
+  const chipOn =
+    visualVariant === "foyer"
+      ? "bg-[var(--beige-accent)] text-white border-[var(--beige-accent)]"
+      : "bg-[#6B2E2E] text-white border-[#6B2E2E]";
+  const chipOff =
+    visualVariant === "foyer"
+      ? "bg-white text-[#2A2523] border-[var(--beige-border)] hover:border-[var(--beige-accent)]"
+      : "bg-white text-[#5c3d3d] border-[#E8A0A0] hover:border-[#6B2E2E]";
+
+  const sectionClass =
+    visualVariant === "foyer"
+      ? "rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4 space-y-3"
+      : "rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3";
+
+  const titleClass =
+    visualVariant === "foyer"
+      ? "text-lg font-semibold text-[var(--foreground)]"
+      : "text-lg font-semibold text-[#4a2c2c]";
+
+  const mutedClass =
+    visualVariant === "foyer" ? "text-sm text-[var(--text-secondary)]" : "text-sm text-[#7a5a5a]";
+
+  const inputClass =
+    visualVariant === "foyer"
+      ? "w-full rounded-lg border border-[var(--beige-border)] bg-white px-3 py-2 text-[var(--foreground)]"
+      : "w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 max-w-2xl mx-auto pb-24">
@@ -143,9 +179,9 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         </div>
       )}
 
-      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3">
-        <h2 className="text-lg font-semibold text-[#4a2c2c]">Équipements disponibles</h2>
-        <p className="text-sm text-[#7a5a5a]">On n’affichera pas de recettes impossibles à réaliser.</p>
+      <section className={sectionClass}>
+        <h2 className={titleClass}>Équipements disponibles</h2>
+        <p className={mutedClass}>On n’affichera pas de recettes impossibles à réaliser.</p>
         <div className="flex flex-wrap gap-2">
           {EQUIPMENT_OPTIONS.map((eq) => (
             <button
@@ -160,14 +196,20 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3">
-        <h2 className="text-lg font-semibold text-[#4a2c2c]">Temps de cuisine souhaité</h2>
+      <section className={sectionClass}>
+        <h2 className={titleClass}>Temps de cuisine souhaité</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {COOKING_TIME_OPTIONS.map((o) => (
             <label
               key={o.key}
               className={`flex items-center gap-2 rounded-xl border px-3 py-2 cursor-pointer ${
-                cooking_time_preference === o.key ? "border-[#6B2E2E] bg-[#FFF5F5]" : "border-[#E8D5D5]"
+                cooking_time_preference === o.key
+                  ? visualVariant === "foyer"
+                    ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
+                    : "border-[#6B2E2E] bg-[#FFF5F5]"
+                  : visualVariant === "foyer"
+                    ? "border-[var(--beige-border)] bg-white"
+                    : "border-[#E8D5D5]"
               }`}
             >
               <input
@@ -182,8 +224,8 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3">
-        <h2 className="text-lg font-semibold text-[#4a2c2c]">Niveau en cuisine</h2>
+      <section className={sectionClass}>
+        <h2 className={titleClass}>Niveau en cuisine</h2>
         <div className="flex flex-wrap gap-2">
           {COOKING_SKILL_OPTIONS.map((o) => (
             <button
@@ -198,9 +240,9 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3">
-        <h2 className="text-lg font-semibold text-[#4a2c2c]">Objectifs d’utilisation</h2>
-        <p className="text-sm text-[#7a5a5a]">
+      <section className={sectionClass}>
+        <h2 className={titleClass}>Objectifs d’utilisation</h2>
+        <p className={mutedClass}>
           « Autre » est exclusif : il désélectionne les autres options (et inversement).
         </p>
         <div className="flex flex-wrap gap-2">
@@ -217,11 +259,11 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         </div>
         {objectives.includes("autre") && (
           <div>
-            <label className="block text-sm font-medium text-[#5c3d3d] mb-1">
+            <label className={`block text-sm font-medium mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)]" : "text-[#5c3d3d]"}`}>
               Décris ton objectif en quelques mots…
             </label>
             <textarea
-              className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm min-h-[80px]"
+              className={`${inputClass} min-h-[80px]`}
               placeholder="Ex. : mieux gérer mes repas post-grossesse…"
               maxLength={150}
               value={customGoalText}
@@ -232,8 +274,8 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         )}
       </section>
 
-      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3">
-        <h2 className="text-lg font-semibold text-[#4a2c2c]">Contraintes alimentaires</h2>
+      <section className={sectionClass}>
+        <h2 className={titleClass}>Contraintes alimentaires</h2>
         <div className="flex flex-wrap gap-2">
           {DIETARY_FILTER_OPTIONS.map((o) => (
             <button
@@ -247,11 +289,11 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
           ))}
         </div>
         <div>
-          <label className="block text-sm font-medium text-[#5c3d3d] mb-1">
+          <label className={`block text-sm font-medium mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)]" : "text-[#5c3d3d]"}`}>
             Autres (texte libre : cuisines préférées, contraintes spécifiques…)
           </label>
           <input
-            className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm"
+            className={inputClass}
             value={world_cuisines}
             onChange={(e) => setWorld(e.target.value)}
             placeholder="ex: cuisine italienne, pas de coriandre, végétarien le week-end"
@@ -259,76 +301,111 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3">
-        <h2 className="text-lg font-semibold text-[#4a2c2c]">Allergies &amp; exclusions</h2>
-        <p className="text-sm text-[#7a5a5a]">
+      <section className={sectionClass}>
+        <h2 className={titleClass}>Allergies &amp; exclusions</h2>
+        <p className={mutedClass}>
           Liste libre (séparateurs : virgule ou point-virgule). Appliqué comme contrainte stricte.
         </p>
         <textarea
-          className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm min-h-[72px]"
+          className={`${inputClass} min-h-[72px]`}
           placeholder="Allergies : ex. céleri, moutarde"
           value={allergiesText}
           onChange={(e) => setAllergiesText(e.target.value)}
         />
         <textarea
-          className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm min-h-[72px]"
+          className={`${inputClass} min-h-[72px]`}
           placeholder="Aliments à éviter / détestés"
           value={excludedText}
           onChange={(e) => setExcludedText(e.target.value)}
         />
       </section>
 
-      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-4">
-        <h2 className="text-lg font-semibold text-[#4a2c2c]">Composition du foyer</h2>
+      <section className={sectionClass}>
+        <h2 className={titleClass}>Composition du foyer</h2>
         <div className="grid grid-cols-3 gap-3">
           <label className="text-sm">
-            <span className="block text-[#7a5a5a] mb-1">Personnes</span>
+            <span className={`block mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)] font-medium" : "text-[#7a5a5a]"}`}>
+              Personnes
+            </span>
             <input
               type="number"
               min={1}
-              className="w-full rounded-xl border border-[#E8D5D5] px-2 py-2"
+              className={inputClass}
               value={household_size}
-              onChange={(e) => setHousehold(Number(e.target.value))}
+              onChange={(e) => {
+                const n = Math.max(1, Number(e.target.value) || 1);
+                setHousehold(n);
+                if (n !== 5) setRecipeScalingPortions(null);
+              }}
             />
           </label>
           <label className="text-sm">
-            <span className="block text-[#7a5a5a] mb-1">Adultes</span>
+            <span className={`block mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)] font-medium" : "text-[#7a5a5a]"}`}>
+              Adultes
+            </span>
             <input
               type="number"
               min={0}
-              className="w-full rounded-xl border border-[#E8D5D5] px-2 py-2"
+              className={inputClass}
               value={adults_count}
               onChange={(e) => setAdults(Number(e.target.value))}
             />
           </label>
           <label className="text-sm">
-            <span className="block text-[#7a5a5a] mb-1">Enfants</span>
+            <span className={`block mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)] font-medium" : "text-[#7a5a5a]"}`}>
+              Enfants
+            </span>
             <input
               type="number"
               min={0}
-              className="w-full rounded-xl border border-[#E8D5D5] px-2 py-2"
+              className={inputClass}
               value={children_count}
               onChange={(e) => setChildren(Number(e.target.value))}
             />
           </label>
         </div>
+        {household_size === 5 && (
+          <div>
+            <span className={`block text-sm mb-2 ${visualVariant === "foyer" ? "text-[var(--foreground)] font-medium" : "text-[#7a5a5a]"}`}>
+              Portions pour les recettes et la liste de courses (foyer de 5)
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {([4, 5, 6] as const).map((n) => {
+                const active = (recipe_scaling_portions ?? 5) === n;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`${chip} ${active ? chipOn : chipOff}`}
+                    onClick={() => setRecipeScalingPortions(n === 5 ? null : n)}
+                  >
+                    {n} pers.
+                  </button>
+                );
+              })}
+            </div>
+            <p className={`text-xs mt-1 ${mutedClass}`}>
+              Par défaut 5 portions ; choisis 4 ou 6 si tu préfères cuisiner ou acheter pour un autre nombre.
+            </p>
+          </div>
+        )}
       </section>
 
-      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-4">
-        <h2 className="text-lg font-semibold text-[#4a2c2c]">Organisation des repas</h2>
+      <section className={sectionClass}>
+        <h2 className={titleClass}>Organisation des repas</h2>
         <div>
-          <span className="block text-sm text-[#7a5a5a] mb-2">Jours à planifier (1–14)</span>
+          <span className={`block text-sm mb-2 ${mutedClass}`}>Jours à planifier (1–14)</span>
           <input
             type="number"
             min={1}
             max={14}
-            className="w-28 rounded-xl border border-[#E8D5D5] px-2 py-2"
+            className={`w-28 ${inputClass}`}
             value={planning_days}
             onChange={(e) => setPlanningDays(Number(e.target.value))}
           />
         </div>
         <div>
-          <span className="block text-sm text-[#7a5a5a] mb-2">Repas concernés</span>
+          <span className={`block text-sm mb-2 ${mutedClass}`}>Repas concernés</span>
           <div className="flex flex-wrap gap-2">
             {MEAL_TYPE_OPTIONS.map((m) => (
               <button
@@ -342,20 +419,7 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
             ))}
           </div>
         </div>
-        <div>
-          <label className="block text-sm text-[#7a5a5a] mb-2">Structure des repas (info pour évolutions)</label>
-          <select
-            className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm"
-            value={meal_structure}
-            onChange={(e) => setMealStructure(e.target.value as typeof meal_structure)}
-          >
-            {MEAL_STRUCTURE_OPTIONS.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Structure des repas : volontairement masquée. Toujours "plat_seul". */}
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
@@ -367,7 +431,7 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
 
         {meal_types.includes("breakfast") && (
           <div>
-            <span className="block text-sm text-[#7a5a5a] mb-2">Petit-déjeuner préféré</span>
+            <span className={`block text-sm mb-2 ${mutedClass}`}>Petit-déjeuner préféré</span>
             <div className="flex flex-wrap gap-2">
               {BREAKFAST_PREFERENCE_OPTIONS.map((o) => (
                 <button
@@ -384,29 +448,14 @@ export default function PlannerProfileForm({ initial, submitLabel, onSubmit }: P
         )}
       </section>
 
-      <section className="rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3">
-        <h2 className="text-lg font-semibold text-[#4a2c2c]">Allergies & exclusions</h2>
-        <p className="text-sm text-[#7a5a5a]">
-          Liste libre (séparateurs : virgule ou point-virgule). Appliqué comme contrainte stricte.
-        </p>
-        <textarea
-          className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm min-h-[72px]"
-          placeholder="Allergies : ex. céleri, moutarde"
-          value={allergiesText}
-          onChange={(e) => setAllergiesText(e.target.value)}
-        />
-        <textarea
-          className="w-full rounded-xl border border-[#E8D5D5] px-3 py-2 text-sm min-h-[72px]"
-          placeholder="Aliments à éviter / détestés"
-          value={excludedText}
-          onChange={(e) => setExcludedText(e.target.value)}
-        />
-      </section>
-
       <button
         type="submit"
         disabled={saving}
-        className="w-full rounded-2xl bg-[#6B2E2E] text-white font-semibold py-3.5 shadow-md disabled:opacity-60"
+        className={`w-full rounded-2xl text-white font-semibold py-3.5 shadow-md disabled:opacity-60 ${
+          visualVariant === "foyer"
+            ? "bg-[var(--beige-accent)] hover:bg-[var(--beige-accent-hover)]"
+            : "bg-[#6B2E2E]"
+        }`}
       >
         {saving ? "Enregistrement…" : submitLabel}
       </button>

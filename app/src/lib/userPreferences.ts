@@ -17,8 +17,8 @@ export interface UserPreferences {
   notificationsMenuIdeas: boolean;
   notificationsReminders: boolean;
   
-  // Abonnement
-  abonnementType: "free" | "premium";
+  // Abonnement (free = gratuit ; premium / premium_plus = payant Stripe)
+  abonnementType: "free" | "premium" | "premium_plus";
   premiumStartDate?: string; // Date de début de l'abonnement premium (ISO string)
   premiumExpirationDate?: string; // Date d'expiration de l'abonnement premium (ISO string)
   
@@ -187,9 +187,16 @@ export function loadPreferences(): UserPreferences {
     if (stored) {
       const parsed = JSON.parse(stored) as Partial<UserPreferences>;
       const preferences = { ...DEFAULT_PREFERENCES, ...parsed };
+      const at = preferences.abonnementType;
+      if (at !== "free" && at !== "premium" && at !== "premium_plus") {
+        preferences.abonnementType = "free";
+      }
       
       // Vérifier si l'abonnement premium a expiré
-      if (preferences.abonnementType === "premium" && preferences.premiumExpirationDate) {
+      if (
+        (preferences.abonnementType === "premium" || preferences.abonnementType === "premium_plus") &&
+        preferences.premiumExpirationDate
+      ) {
         const expirationDate = new Date(preferences.premiumExpirationDate);
         const now = new Date();
         
@@ -223,7 +230,9 @@ export function savePreferences(preferences: UserPreferences): void {
 }
 
 /**
- * Réinitialise l'abonnement à "free" (utile pour les tests)
+ * Réinitialise l'abonnement à "free" dans le localStorage (tests rapides).
+ * Si le profil Supabase indique encore un abonnement actif, `PremiumContext` remettra
+ * le type payant au prochain `refreshProfile`.
  */
 export function resetToFreePlan(): void {
   if (typeof window === "undefined") {

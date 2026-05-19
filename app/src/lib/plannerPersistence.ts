@@ -1,10 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildGroceryFromPlan,
+  getEffectiveRecipePortions,
   type GroceryListItemDraft,
   type PlannedWeek,
   type PlannerPreferences,
 } from "./weeklyPlanner";
+import { computeMenuDiversityMetrics } from "./menuDiversityMetrics";
 
 export async function persistWeeklyPlanToSupabase(
   admin: SupabaseClient,
@@ -18,6 +20,7 @@ export async function persistWeeklyPlanToSupabase(
   }
 ): Promise<{ menuId: string; listId: string; grocery_count: number } | { error: string }> {
   const { userId, weekStart, title, merged, plan, generationContextExtra } = params;
+  const diversity = computeMenuDiversityMetrics(plan);
 
   const { data: menuRow, error: menuErr } = await admin
     .from("weekly_menus")
@@ -29,6 +32,7 @@ export async function persistWeeklyPlanToSupabase(
       generation_context: {
         preferences: merged,
         meta: plan.meta,
+        diversity,
         ...generationContextExtra,
       },
     })
@@ -41,6 +45,20 @@ export async function persistWeeklyPlanToSupabase(
   }
 
   const menuId = menuRow.id as string;
+
+  const allRecipeIds = plan.days.flatMap((d) => d.meals.map((m) => Number(m.recipe_id))).filter(Number.isFinite);
+  const { error: featureHistoryErr } = await admin.from("user_menu_feature_history").insert({
+    user_id: userId,
+    weekly_menu_id: menuId,
+    week_start_date: weekStart,
+    recipe_ids: allRecipeIds,
+    family_counts: diversity.family_counts,
+    diversity_tags_counts: diversity.diversity_tags_counts,
+    unique_ratio: diversity.unique_ratio,
+  });
+  if (featureHistoryErr) {
+    console.warn("[persistWeeklyPlan] user_menu_feature_history", featureHistoryErr.message);
+  }
 
   // Bulk-insert all days in a single call
   const daysPayload = plan.days.map((day) => ({
@@ -76,6 +94,9 @@ export async function persistWeeklyPlanToSupabase(
         recipe_id: meal.recipe_id,
         recipe_name: meal.recipe_name,
         recipe_payload: meal.recipe_payload as unknown as Record<string, unknown>,
+        batch_group_id: meal.batch_group_id ?? null,
+        is_batch_origin: meal.is_batch_origin ?? null,
+        batch_servings: meal.batch_servings ?? null,
       });
     }
   }
@@ -105,10 +126,8 @@ export async function persistWeeklyPlanToSupabase(
 
   const listId = listRow.id as string;
 
-  const groceryDraft: GroceryListItemDraft[] = buildGroceryFromPlan(
-    plan,
-    merged.household_size || 1
-  );
+  const portions = getEffectiveRecipePortions(merged);
+  const groceryDraft: GroceryListItemDraft[] = buildGroceryFromPlan(plan, portions);
 
   if (groceryDraft.length) {
     const { error: itemsErr } = await admin.from("grocery_list_items").insert(

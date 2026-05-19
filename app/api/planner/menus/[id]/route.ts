@@ -70,7 +70,7 @@ export async function GET(
       const { data: recipeRows } = await supabaseAdmin
         .from("recipes_v2")
         .select(
-          "id, nom_recette, type, difficulte, temps_preparation_min, nombre_personnes, description_courte, ingredients, instructions, equipements, calories, image_url, created_at"
+          "id, nom_recette, type, difficulte, temps_preparation_min, categorie_temps, nombre_personnes, description_courte, saison, meal_slot, dish_type, main_protein, main_carb, main_vegetables, allergens, igredient_tags, diet_tags, family, cooking_method, texture, meal_subtype, ingredients, ingredients_quantites, instructions, equipements, equipements_necessaires, calories, calories_par_portion, image_url, created_at"
         )
         .in("id", recipeIds);
       recipeById = new Map((recipeRows || []).map((r) => [Number(r.id), r as Record<string, unknown>]));

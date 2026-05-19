@@ -52,6 +52,7 @@ type PutBody = {
   preferences: Partial<PlannerPreferences> & {
     cooking_time_preference?: string;
     household_size?: number;
+    recipe_scaling_portions?: number | null;
     adults_count?: number;
     children_count?: number;
     planning_days?: number;
@@ -90,28 +91,138 @@ export async function PUT(request: NextRequest) {
   const allergy_keys = body.allergy_keys ?? p.allergy_keys;
   const excluded_ingredients = body.excluded_ingredients ?? p.excluded_ingredients;
 
+  const { data: existingRow } = await supabaseAdmin
+    .from("user_preferences")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const prev = existingRow as Record<string, unknown> | null;
+
+  const cooking_time_preference =
+    p.cooking_time_preference ??
+    (prev?.cooking_time_preference as string) ??
+    DEFAULT_PLANNER_PREFERENCES.cooking_time_preference;
+
+  const household_size = Math.max(
+    1,
+    p.household_size !== undefined && p.household_size !== null
+      ? Number(p.household_size)
+      : Number(prev?.household_size) || DEFAULT_PLANNER_PREFERENCES.household_size
+  );
+
+  let recipe_scaling_portions: number | null = null;
+  if (household_size === 5) {
+    if (p.recipe_scaling_portions !== undefined) {
+      if (p.recipe_scaling_portions === null) {
+        recipe_scaling_portions = null;
+      } else {
+        const n = Number(p.recipe_scaling_portions);
+        recipe_scaling_portions = n === 4 || n === 5 || n === 6 ? n : null;
+      }
+    } else if (prev?.recipe_scaling_portions != null) {
+      const n = Number(prev.recipe_scaling_portions);
+      recipe_scaling_portions = n === 4 || n === 5 || n === 6 ? n : null;
+    }
+  }
+
+  const adults_count = Math.max(
+    0,
+    p.adults_count !== undefined && p.adults_count !== null
+      ? Number(p.adults_count)
+      : Number(prev?.adults_count) || DEFAULT_PLANNER_PREFERENCES.adults_count
+  );
+
+  const children_count = Math.max(
+    0,
+    p.children_count !== undefined && p.children_count !== null
+      ? Number(p.children_count)
+      : Number(prev?.children_count) || DEFAULT_PLANNER_PREFERENCES.children_count
+  );
+
+  const planning_days = Math.min(
+    14,
+    Math.max(
+      1,
+      p.planning_days !== undefined && p.planning_days !== null
+        ? Number(p.planning_days)
+        : Number(prev?.planning_days) || DEFAULT_PLANNER_PREFERENCES.planning_days
+    )
+  );
+
+  const meal_types =
+    p.meal_types !== undefined
+      ? p.meal_types
+      : Array.isArray(prev?.meal_types) && (prev.meal_types as string[]).length
+        ? (prev.meal_types as string[])
+        : DEFAULT_PLANNER_PREFERENCES.meal_types;
+
+  const meal_structure =
+    p.meal_structure ??
+    (prev?.meal_structure as string) ??
+    DEFAULT_PLANNER_PREFERENCES.meal_structure;
+
+  const objectives =
+    p.objectives !== undefined
+      ? p.objectives
+      : Array.isArray(prev?.objectives) && (prev.objectives as string[]).length
+        ? (prev.objectives as string[])
+        : DEFAULT_PLANNER_PREFERENCES.objectives;
+
+  const dietary_filters =
+    p.dietary_filters !== undefined
+      ? p.dietary_filters
+      : Array.isArray(prev?.dietary_filters)
+        ? (prev.dietary_filters as string[])
+        : DEFAULT_PLANNER_PREFERENCES.dietary_filters;
+
+  const world_cuisines =
+    p.world_cuisines !== undefined
+      ? p.world_cuisines
+      : Array.isArray(prev?.world_cuisines)
+        ? (prev.world_cuisines as string[])
+        : DEFAULT_PLANNER_PREFERENCES.world_cuisines;
+
+  const seasonal_preference =
+    p.seasonal_preference !== undefined
+      ? Boolean(p.seasonal_preference)
+      : prev?.seasonal_preference !== undefined
+        ? Boolean(prev.seasonal_preference)
+        : DEFAULT_PLANNER_PREFERENCES.seasonal_preference;
+
+  const custom_goal =
+    p.custom_goal === null
+      ? null
+      : p.custom_goal !== undefined
+        ? String(p.custom_goal).trim().slice(0, 150) || null
+        : prev?.custom_goal != null
+          ? String(prev.custom_goal).trim().slice(0, 150) || null
+          : null;
+
+  const cooking_skill_level =
+    p.cooking_skill_level && ["debutant", "intermediaire", "confirme"].includes(p.cooking_skill_level)
+      ? p.cooking_skill_level
+      : prev?.cooking_skill_level &&
+          ["debutant", "intermediaire", "confirme"].includes(String(prev.cooking_skill_level))
+        ? String(prev.cooking_skill_level)
+        : DEFAULT_PLANNER_PREFERENCES.cooking_skill_level;
+
   const upsertRow = {
     user_id: userId,
-    cooking_time_preference: p.cooking_time_preference ?? DEFAULT_PLANNER_PREFERENCES.cooking_time_preference,
-    household_size: p.household_size ?? DEFAULT_PLANNER_PREFERENCES.household_size,
-    adults_count: p.adults_count ?? DEFAULT_PLANNER_PREFERENCES.adults_count,
-    children_count: p.children_count ?? DEFAULT_PLANNER_PREFERENCES.children_count,
-    planning_days: p.planning_days ?? DEFAULT_PLANNER_PREFERENCES.planning_days,
-    meal_types: p.meal_types ?? DEFAULT_PLANNER_PREFERENCES.meal_types,
-    meal_structure: p.meal_structure ?? DEFAULT_PLANNER_PREFERENCES.meal_structure,
-    objectives: p.objectives ?? DEFAULT_PLANNER_PREFERENCES.objectives,
-    dietary_filters: p.dietary_filters ?? DEFAULT_PLANNER_PREFERENCES.dietary_filters,
-    world_cuisines: p.world_cuisines ?? DEFAULT_PLANNER_PREFERENCES.world_cuisines,
-    seasonal_preference:
-      p.seasonal_preference ?? DEFAULT_PLANNER_PREFERENCES.seasonal_preference,
-    custom_goal:
-      p.custom_goal === null || p.custom_goal === undefined
-        ? null
-        : String(p.custom_goal).trim().slice(0, 150) || null,
-    cooking_skill_level:
-      p.cooking_skill_level && ["debutant", "intermediaire", "confirme"].includes(p.cooking_skill_level)
-        ? p.cooking_skill_level
-        : DEFAULT_PLANNER_PREFERENCES.cooking_skill_level,
+    cooking_time_preference,
+    household_size,
+    recipe_scaling_portions,
+    adults_count,
+    children_count,
+    planning_days,
+    meal_types,
+    meal_structure,
+    objectives,
+    dietary_filters,
+    world_cuisines,
+    seasonal_preference,
+    custom_goal,
+    cooking_skill_level,
   };
 
   const { error: upErr } = await supabaseAdmin.from("user_preferences").upsert(upsertRow, {

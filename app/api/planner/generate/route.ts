@@ -2,13 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
 import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
 import { fetchRecipes } from "../../../src/lib/recipes";
-import { buildWeeklyPlan, mergePlannerPreferences, type PlannerGenerateInput } from "../../../src/lib/weeklyPlanner";
+import {
+  buildWeeklyPlan,
+  buildExclusionList,
+  filterRecipesByStrictExclusions,
+  mergePlannerPreferences,
+  scoreRecipeForPlanner,
+  type PlannerGenerateInput,
+  type LockedSlot,
+} from "../../../src/lib/weeklyPlanner";
 import { DEFAULT_PLANNER_PREFERENCES } from "../../../src/lib/weeklyPlanner";
 import { rowToPlannerPreferences, type UserPreferencesRow } from "../../../src/lib/plannerServer";
 import type { PlannerPreferences } from "../../../src/lib/weeklyPlanner";
 import { persistWeeklyPlanToSupabase } from "../../../src/lib/plannerPersistence";
 import { buildWeeklyPlanWithAi } from "../../../src/lib/weeklyMenuAi";
 import type { Locale } from "../../../src/lib/i18n";
+import { filterRecipesByStructuredDietaryRules } from "../../../src/lib/dietaryStructured";
+import { filterRecipesForSeasonalPool, getCurrentSeason } from "../../../src/lib/seasonalFilter";
+import { repairPlanQuality } from "../../../src/lib/qualityControl";
+import { applyBatchCooking, isBatchCookingEnabled } from "../../../src/lib/batchCooking";
+import type { Recipe } from "../../../src/lib/recipes";
+import { FREE_MENU_GENERATIONS_PER_MONTH } from "../../../src/lib/freemiumLimits";
+import { monthPeriodKey, tryConsumeFreemiumQuota } from "../../../src/lib/usageQuotasServer";
 
 const AI_LOCALES: Locale[] = ["fr", "en", "es", "de"];
 
@@ -21,7 +36,7 @@ export const dynamic = "force-dynamic";
 let recipesCache: { at: number; data: Awaited<ReturnType<typeof fetchRecipes>> } | null = null;
 const RECIPES_TTL_MS = 5 * 60 * 1000;
 const FALLBACK_RECIPE_IMAGE_URL = "/menu-generation-collage.png";
-const AI_MENU_TIMEOUT_MS = 12000;
+const AI_MENU_TIMEOUT_MS = 24000;
 
 type PlanRecipe = {
   id: number;
@@ -95,11 +110,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Serveur non configuré (Supabase admin)" }, { status: 503 });
   }
 
+  const menuQuota = await tryConsumeFreemiumQuota(
+    userId,
+    "menu_generation",
+    monthPeriodKey(),
+    FREE_MENU_GENERATIONS_PER_MONTH
+  );
+  if (!menuQuota.allowed) {
+    return NextResponse.json(
+      {
+        error: "quota_exceeded",
+        metric: "menu_generation",
+        limit: menuQuota.limit,
+        count: menuQuota.count,
+        message: "Tu as atteint la limite de générations de menu pour ce mois sur le plan gratuit.",
+      },
+      { status: 403 }
+    );
+  }
+
   let body: {
     week_start_date?: string;
     overrides?: PlannerGenerateInput;
     use_ai_menu?: boolean;
     locale?: string;
+    locked_slots?: LockedSlot[];
   };
   try {
     body = await request.json();
@@ -156,7 +191,7 @@ export async function POST(request: NextRequest) {
     ? allRecipes.filter((r) => !dislikedIds.has(r.id))
     : allRecipes;
 
-  // Charger les recipe_id des 3 derniers menus pour pénaliser les répétitions
+  // Charger les recipe_id des 6 derniers menus pour pénaliser les répétitions
   const recentlyUsed = new Map<number, number>();
   if (supabaseAdmin) {
     const { data: recentMenus } = await supabaseAdmin
@@ -164,7 +199,7 @@ export async function POST(request: NextRequest) {
       .select("id, weekly_menu_days(weekly_menu_meals(recipe_id))")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
-      .limit(3);
+      .limit(6);
 
     if (recentMenus) {
       type MealRow = { recipe_id: number | string };
@@ -184,15 +219,87 @@ export async function POST(request: NextRequest) {
   }
 
   const openaiKey = process.env.OPENAI_API_KEY;
+  const recentFamilyCounts = new Map<string, number>();
+  if (supabaseAdmin) {
+    const { data: featureRows } = await supabaseAdmin
+      .from("user_menu_feature_history")
+      .select("family_counts")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(6);
+    for (const row of featureRows || []) {
+      const raw = (row as { family_counts?: Record<string, unknown> }).family_counts || {};
+      for (const [k, v] of Object.entries(raw)) {
+        const n = Number(v) || 0;
+        if (n <= 0) continue;
+        recentFamilyCounts.set(k, (recentFamilyCounts.get(k) || 0) + n);
+      }
+    }
+  }
+  const lockedSlots: LockedSlot[] = Array.isArray(body.locked_slots) ? body.locked_slots : [];
+
   const shouldUseAi = Boolean(openaiKey);
   const aiPlan = shouldUseAi
     ? await withTimeout(
-        buildWeeklyPlanWithAi(recipes, merged, weekStart, openaiKey as string, aiLocale, recentlyUsed),
+        buildWeeklyPlanWithAi(
+          recipes,
+          merged,
+          weekStart,
+          openaiKey as string,
+          aiLocale,
+          recentlyUsed,
+          recentFamilyCounts,
+          lockedSlots
+        ),
         AI_MENU_TIMEOUT_MS
       )
     : null;
-  const plan = aiPlan ?? buildWeeklyPlan(recipes, merged, weekStart, recentlyUsed);
+  const rawPlan =
+    aiPlan ?? buildWeeklyPlan(recipes, merged, weekStart, recentlyUsed, recentFamilyCounts, lockedSlots);
+
+  // ── Contrôle qualité post-génération ────────────────────────────────────
+  // On reconstruit un pool scoré minimal pour pouvoir REMPLACER les recettes
+  // qui font sauter un cap (protéine, féculent, dish_type, family).
+  // C'est le filet de sécurité final : même si l'IA ou le greedy laisse passer
+  // une répétition, le repair tente de l'absorber.
+  const season = getCurrentSeason();
+  let qualityPool: Recipe[] = filterRecipesByStructuredDietaryRules(
+    recipes,
+    merged.dietary_filters,
+    merged.allergy_keys
+  );
+  qualityPool = filterRecipesByStrictExclusions(qualityPool, buildExclusionList(merged));
+  // Pas de filtre équipement strict (voir commentaire dans buildWeeklyPlan)
+  if (merged.seasonal_preference) {
+    qualityPool = filterRecipesForSeasonalPool(qualityPool, season);
+  }
+  const scoredPool = qualityPool
+    .map((r) => ({
+      r,
+      s: scoreRecipeForPlanner(r, season, merged, recentFamilyCounts),
+    }))
+    .sort((a, b) => b.s - a.s);
+
+  // Contrôle qualité : les incompatibilités créneau sont corrigées SANS limite,
+  // les sur-représentations dans la limite de 8 remplacements.
+  const repaired = repairPlanQuality(rawPlan, merged, scoredPool, { maxReplacements: 8 });
+  const plan = repaired.plan;
   sanitizePlanRecipes(plan);
+
+  // ── Batch cooking ───────────────────────────────────────────────────────
+  // Si l'utilisateur a coché l'objectif "batch", on détecte les recettes
+  // batchables (gâteaux, granolas, soupes, mijotés, etc.) et on les réplique
+  // sur les jours suivants pour éviter la sur-cuisine.
+  let batchInfo: { batches_created: number; meals_replaced: number } = {
+    batches_created: 0,
+    meals_replaced: 0,
+  };
+  if (isBatchCookingEnabled(merged.objectives)) {
+    batchInfo = applyBatchCooking(plan, {
+      householdSize: merged.household_size,
+      lockedSlots,
+    });
+  }
 
   const title = `Menu semaine du ${weekStart}`;
 
@@ -204,6 +311,21 @@ export async function POST(request: NextRequest) {
     plan,
     generationContextExtra: {
       ai_menu: shouldUseAi,
+      quality_repair: {
+        replacements: repaired.replacements,
+        problems_before: repaired.report_before.problems.length,
+        problems_after: repaired.report_after.problems.length,
+        unique_recipes_before: repaired.report_before.unique_recipes,
+        unique_recipes_after: repaired.report_after.unique_recipes,
+        protein_counts_after: repaired.report_after.protein_counts,
+        carb_counts_after: repaired.report_after.carb_counts,
+        dish_counts_after: repaired.report_after.dish_counts,
+      },
+      batch_cooking: {
+        enabled: isBatchCookingEnabled(merged.objectives),
+        batches_created: batchInfo.batches_created,
+        meals_replaced: batchInfo.meals_replaced,
+      },
     },
   });
 

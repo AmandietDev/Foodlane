@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { deriveRecipeFeatures } from "./recipeFeatures";
 
 export type Recipe = {
   id: number;
@@ -10,10 +11,48 @@ export type Recipe = {
   nom_recette: string | null;
   description_courte: string | null;
   saison?: string | null;
+
+  // ── Métadonnées structurées (recipes_v2 enrichie) ────────────────────────
+  /** ex. "petit_dejeuner|dejeuner|diner". Multi-valeurs séparées. */
+  meal_slot?: string | null;
+  /** ex. "salade", "plat principal", "tarte salee", "soupe", "bowl"... */
+  dish_type?: string | null;
+  /** ex. "poulet", "boeuf", "tofu". Peut contenir plusieurs valeurs. */
+  main_protein?: string | null;
+  /** ex. "riz", "pates", "quinoa", "pomme de terre", "sans". */
+  main_carb?: string | null;
+  /** ex. "courgette|tomate|poivron". Multi-valeurs. */
+  main_vegetables?: string | null;
+  /** Allergènes structurés (ex. "gluten|lactose|fruits a coque"). */
+  allergens?: string | null;
+  /** Tags d'ingrédients (NB: typo "igredient" conservée côté DB). */
+  igredient_tags?: string | null;
+  /** Alias accepté en lecture si la colonne est renommée un jour. */
+  ingredient_tags?: string | null;
+  /** Tags de régime (ex. "vegetarien|sans_gluten|riche_en_proteines"). */
+  diet_tags?: string | null;
+
+  // ── Métadonnées dérivées (heuristiques de fallback) ──────────────────────
+  family?: string | null;
+  cooking_method?: string | null;
+  texture?: string | null;
+  meal_subtype?: string | null;
+
+  // ── Ingrédients / instructions / équipements / nutrition ─────────────────
+  /** Legacy : ancien nom de colonne (gardé pour le fallback CSV). */
   ingredients: string | null;
+  /** Nouveau nom recipes_v2. Utiliser getIngredientsText() pour lire. */
+  ingredients_quantites?: string | null;
   instructions: string | null;
+  /** Legacy : ancien nom (CSV). */
   equipements: string | null;
+  /** Nouveau nom recipes_v2. */
+  equipements_necessaires?: string | null;
+  /** Legacy : ancien nom (CSV). */
   calories: number | null;
+  /** Nouveau nom recipes_v2. */
+  calories_par_portion?: number | null;
+
   image_url: string | null;
   created_at: string;
 };
@@ -147,7 +186,23 @@ export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
         const equipements = (row["Équipements nécessaires (séparés par ;)"] || "").trim();
         const calories = (row["Calories (pour une portion)"] || "").trim();
         const imageUrl = (row["image_url"] || "").trim();
-        
+        const saisonRaw =
+          (row["saison"] || row["Saison"] || row["SAISON"] || "").toString().trim();
+        const familyRaw = (row["family"] || row["Family"] || "").toString().trim();
+        const cookingMethodRaw = (row["cooking_method"] || row["Cooking Method"] || "").toString().trim();
+        const textureRaw = (row["texture"] || row["Texture"] || "").toString().trim();
+        const mealSubtypeRaw = (row["meal_subtype"] || row["Meal Subtype"] || "").toString().trim();
+        const derived = deriveRecipeFeatures({
+          nom_recette: nomRecette || null,
+          type: type || null,
+          ingredients: ingredients || null,
+          instructions: instructions || null,
+          family: familyRaw || null,
+          cooking_method: cookingMethodRaw || null,
+          texture: textureRaw || null,
+          meal_subtype: mealSubtypeRaw || null,
+        });
+
         return {
           id: Number((row["ID"] && row["ID"]!.toString().trim()) || index + 1),
           type: type || null,
@@ -157,6 +212,11 @@ export async function fetchRecipesFromSheet(): Promise<Recipe[]> {
           nombre_personnes: nbPersonnes ? Number(nbPersonnes) : null,
           nom_recette: nomRecette || null,
           description_courte: description || null,
+          saison: saisonRaw ? saisonRaw : null,
+          family: derived.family,
+          cooking_method: derived.cooking_method,
+          texture: derived.texture,
+          meal_subtype: derived.meal_subtype,
           ingredients: ingredients || null,
           instructions: instructions || null,
           equipements: equipements || null,

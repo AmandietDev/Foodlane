@@ -2,12 +2,16 @@
 
 import { useCallback } from "react";
 import {
-  formatGroceryDisplayLine,
-  GROCERY_CATEGORY_LABEL_FR,
+  formatGroceryStoreLine,
+  groceryCategoryLabel,
   mapLegacyGroceryCategory,
+  sanitizeGroceryIngredientName,
   sortCategoriesForDisplay,
   type GroceryCategorySlug,
 } from "../src/lib/groceryFormat";
+import type { Locale } from "../src/lib/i18n";
+import { sessionAuthHeaders } from "../src/lib/plannerClient";
+import { inferGroceryCategory } from "../src/lib/weeklyPlanner";
 
 export type GroceryExportItem = {
   id: string;
@@ -21,24 +25,38 @@ export type GroceryExportItem = {
 function groupByCategory(items: GroceryExportItem[]): Map<GroceryCategorySlug, GroceryExportItem[]> {
   const m = new Map<GroceryCategorySlug, GroceryExportItem[]>();
   for (const it of items) {
-    const slug = mapLegacyGroceryCategory(it.category);
+    if (!sanitizeGroceryIngredientName(it.ingredient_name).trim()) continue;
+    const slug = mapLegacyGroceryCategory(inferGroceryCategory(it.ingredient_name));
     if (!m.has(slug)) m.set(slug, []);
     m.get(slug)!.push(it);
   }
   return m;
 }
 
-function buildPlainText(menuTitle: string, items: GroceryExportItem[]): string {
+function sortLocaleTag(locale: Locale): string {
+  if (locale === "fr") return "fr";
+  if (locale === "de") return "de";
+  return "en";
+}
+
+function buildPlainText(menuTitle: string, items: GroceryExportItem[], locale: Locale): string {
   if (items.length === 0) return `${menuTitle}\n\n(liste vide)`;
   const grouped = groupByCategory(items);
   const cats = sortCategoriesForDisplay([...grouped.keys()]);
   const lines: string[] = [`Liste de courses — ${menuTitle}`, ""];
+  const loc = sortLocaleTag(locale);
   for (const c of cats) {
-    const list = (grouped.get(c) || []).slice().sort((a, b) => a.ingredient_name.localeCompare(b.ingredient_name, "fr"));
+    const list = (grouped.get(c) || []).slice().sort((a, b) => a.ingredient_name.localeCompare(b.ingredient_name, loc));
     if (!list.length) continue;
-    lines.push(GROCERY_CATEGORY_LABEL_FR[c]);
+    lines.push(groceryCategoryLabel(c, locale));
     for (const it of list) {
-      const line = formatGroceryDisplayLine(it.ingredient_name, it.quantity, it.unit);
+      const line = formatGroceryStoreLine(
+        it.ingredient_name,
+        it.quantity,
+        it.unit,
+        locale,
+        mapLegacyGroceryCategory(inferGroceryCategory(it.ingredient_name))
+      );
       lines.push(`${it.checked ? "☑ " : "☐ "}${line}`);
     }
     lines.push("");
@@ -59,21 +77,28 @@ function fallbackDownloadPng(blob: Blob, menuTitle: string) {
   URL.revokeObjectURL(url);
 }
 
-function renderPngAndSave(menuTitle: string, items: GroceryExportItem[]) {
+function renderPngAndSave(menuTitle: string, items: GroceryExportItem[], locale: Locale) {
   const grouped = groupByCategory(items);
   const cats = sortCategoriesForDisplay([...grouped.keys()]);
   const pad = 36;
   const lineH = 26;
   const w = 680;
   const blocks: { title: string; lines: string[] }[] = [];
+  const loc = sortLocaleTag(locale);
   for (const c of cats) {
-    const list = (grouped.get(c) || []).slice().sort((a, b) => a.ingredient_name.localeCompare(b.ingredient_name, "fr"));
+    const list = (grouped.get(c) || []).slice().sort((a, b) => a.ingredient_name.localeCompare(b.ingredient_name, loc));
     if (!list.length) continue;
     const lines = list.map((it) => {
-      const line = formatGroceryDisplayLine(it.ingredient_name, it.quantity, it.unit);
+      const line = formatGroceryStoreLine(
+        it.ingredient_name,
+        it.quantity,
+        it.unit,
+        locale,
+        mapLegacyGroceryCategory(inferGroceryCategory(it.ingredient_name))
+      );
       return `${it.checked ? "☑ " : "☐ "}${line}`;
     });
-    blocks.push({ title: GROCERY_CATEGORY_LABEL_FR[c], lines });
+    blocks.push({ title: groceryCategoryLabel(c, locale), lines });
   }
   let h = pad + 44;
   for (const b of blocks) {
@@ -140,13 +165,35 @@ function renderPngAndSave(menuTitle: string, items: GroceryExportItem[]) {
 export default function GroceryExportBar({
   menuTitle,
   items,
+  locale = "fr",
 }: {
   menuTitle: string;
   items: GroceryExportItem[];
+  locale?: Locale;
 }) {
-  const plain = useCallback(() => buildPlainText(menuTitle, items), [menuTitle, items]);
+  const plain = useCallback(() => buildPlainText(menuTitle, items, locale), [menuTitle, items, locale]);
+
+  async function reserveGroceryExport(): Promise<boolean> {
+    const auth = await sessionAuthHeaders();
+    const res = await fetch("/api/usage/grocery-export", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", ...auth },
+    });
+    if (res.ok) return true;
+    let msg = "Quota d’export atteint pour cette semaine.";
+    try {
+      const j = (await res.json()) as { message?: string };
+      if (typeof j.message === "string" && j.message.trim()) msg = j.message;
+    } catch {
+      /* ignore */
+    }
+    alert(msg);
+    return false;
+  }
 
   async function shareNote() {
+    if (!(await reserveGroceryExport())) return;
     const text = plain();
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
@@ -164,7 +211,8 @@ export default function GroceryExportBar({
     }
   }
 
-  function printPdf() {
+  async function printPdf() {
+    if (!(await reserveGroceryExport())) return;
     window.print();
   }
 
@@ -188,7 +236,10 @@ export default function GroceryExportBar({
       </button>
       <button
         type="button"
-        onClick={() => renderPngAndSave(menuTitle, items)}
+        onClick={async () => {
+          if (!(await reserveGroceryExport())) return;
+          renderPngAndSave(menuTitle, items, locale);
+        }}
         className="rounded-full px-4 py-2 text-sm font-medium border border-[#6B2E2E] text-[#6B2E2E] bg-white"
       >
         Image (PNG)

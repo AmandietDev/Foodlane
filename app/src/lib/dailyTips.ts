@@ -115,6 +115,18 @@ export const TIPS: Tip[] = [
   { id: "sc_tip_3", category: "selfcare", difficulty: "easy", tags: ["general", "anytime"], text: "La régularité vaut plus que la perfection." },
   { id: "sc_tip_4", category: "selfcare", difficulty: "easy", tags: ["general", "anytime"], text: "Prendre soin de soi n'est pas égoïste, c'est essentiel." },
   { id: "sc_tip_5", category: "selfcare", difficulty: "easy", tags: ["general", "anytime"], text: "Une routine simple et réalisable est plus durable qu'une routine complexe." },
+
+  // Protéines + fibres (satiété, masse maigre, perte de poids durable)
+  { id: "n_tip_pf_1", category: "nutrition", difficulty: "easy", tags: ["weight_loss", "anytime"], text: "À chaque repas, vise « protéine + fibre » (ex. yaourt + son, salade + pois chiches) : meilleure satiété, moins de fringale." },
+  { id: "n_tip_pf_2", category: "nutrition", difficulty: "easy", tags: ["muscle_gain", "anytime"], text: "Répartir les protéines sur la journée soutient mieux la synthèse musculaire qu'un seul gros repas." },
+  { id: "n_tip_pf_3", category: "nutrition", difficulty: "easy", tags: ["general", "anytime"], text: "Les fibres ralentissent l'absorption du sucre : utiles pour l'énergie stable et la faim calme." },
+  { id: "n_tip_pf_4", category: "nutrition", difficulty: "easy", tags: ["general", "anytime"], text: "Une portion de légumineuses apporte protéines végétales + fibres : idéal en collation ou en plat." },
+  { id: "n_tip_pf_5", category: "nutrition", difficulty: "easy", tags: ["better_energy", "anytime"], text: "Si tu as un coup de barre l'après-midi, teste protéine + fruit (ex. fromage + pomme) plutôt que sucre seul." },
+
+  // Bien-être global (hors assiette)
+  { id: "sc_tip_6", category: "selfcare", difficulty: "easy", tags: ["general", "anytime"], text: "10 minutes de marche après le repas : digestion, humeur et régulation de l'appétit y gagnent." },
+  { id: "sc_tip_7", category: "selfcare", difficulty: "easy", tags: ["general", "anytime"], text: "La cohérence cardiaque (respiration lente guidée) peut calmer le stress… et les envies liées au stress." },
+  { id: "sc_tip_8", category: "selfcare", difficulty: "easy", tags: ["general", "anytime"], text: "Un livre de psycho ou de nutrition bienveillante peut renforcer tes repères — choisis un chapitre court aujourd'hui." },
 ];
 
 // Base de données des défis (Challenges)
@@ -300,6 +312,14 @@ export const CHALLENGES: Challenge[] = [
   { id: "sc_ch_13", category: "selfcare", difficulty: "easy", duration_min: 10, tags: ["general", "anytime"], action: "Lire 10 pages", why: "Pause et évasion" },
   { id: "sc_ch_14", category: "selfcare", difficulty: "easy", duration_min: 2, tags: ["general", "at_home"], action: "Mettre une bougie / ambiance relax", why: "Créer une atmosphère apaisante" },
   { id: "sc_ch_15", category: "selfcare", difficulty: "easy", duration_min: 1, tags: ["general", "no_equipment", "anytime"], action: "Faire une pause 'respirer' 1 minute", why: "Micro-pause essentielle" },
+
+  // Activité, méditation, soin de soi, lecture
+  { id: "sc_ch_16", category: "selfcare", difficulty: "easy", duration_min: 5, tags: ["general", "no_equipment", "at_home"], action: "Essayer 5 minutes de méditation guidée (appli ou silence)", why: "Réduit le stress et les grignotages émotionnels" },
+  { id: "sc_ch_17", category: "selfcare", difficulty: "easy", duration_min: 5, tags: ["general", "at_home"], action: "Cohérence cardiaque 5 min (respiration ~6 cycles/min)", why: "Apaise le système nerveux" },
+  { id: "sc_ch_18", category: "selfcare", difficulty: "easy", duration_min: 15, tags: ["general", "anytime"], action: "Lire 15 pages d'un livre qui te fait du bien (roman ou essai)", why: "Pause cognitive et plaisir" },
+  { id: "m_ch_11", category: "movement", difficulty: "easy", duration_min: 12, tags: ["general", "outdoors"], action: "12 minutes de marche rapide sans téléphone", why: "Cardio doux + déconnexion" },
+  { id: "m_ch_12", category: "movement", difficulty: "easy", duration_min: 8, tags: ["general", "at_home"], action: "8 minutes d'étirements + ouverture thoracique", why: "Posture et confort digestif" },
+  { id: "n_ch_57", category: "nutrition", difficulty: "easy", duration_min: 3, tags: ["weight_loss", "anytime"], action: "Ajouter 1 aliment riche en fibres ET 1 protéine au même repas", why: "Combo le plus efficace pour la satiété" },
 ];
 
 /**

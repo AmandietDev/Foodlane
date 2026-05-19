@@ -1,15 +1,31 @@
-/** Clés stables pour équipements (stockées en base + envoyées à l’API) */
+/**
+ * Clés stables pour équipements (stockées en base + envoyées à l’API).
+ *
+ * ⚠️ Liste BLANCHE : on ne propose à l'utilisateur QUE des équipements
+ * discriminants — ceux qu'un foyer peut légitimement ne pas posséder et
+ * qui bloquent vraiment certaines recettes. Les ustensiles évidents
+ * (couteau, planche, casserole, fouet, moule à gâteau...) sont volontairement
+ * absents : tout le monde les a, les inclure ne servirait qu'à polluer.
+ */
 export const EQUIPMENT_OPTIONS = [
+  // ── Indispensables (cocher pour la quasi-totalité des utilisateurs) ─
   { key: "four", label: "Four" },
   { key: "micro_ondes", label: "Micro-ondes" },
   { key: "plaque_cuisson", label: "Plaques de cuisson" },
-  { key: "airfryer", label: "Air fryer" },
-  { key: "blender", label: "Blender" },
-  { key: "robot_cuiseur", label: "Robot / cuiseur" },
-  { key: "autocuiseur", label: "Autocuiseur" },
-  { key: "barbecue", label: "Barbecue" },
-  { key: "congelateur", label: "Congélateur" },
   { key: "refrigerateur", label: "Réfrigérateur" },
+  { key: "congelateur", label: "Congélateur" },
+  // ── Petit électroménager courant ────────────────────────────────────
+  { key: "blender", label: "Blender / mixeur" },
+  { key: "robot_cuiseur", label: "Robot cuiseur (Thermomix, Cookeo…)" },
+  { key: "airfryer", label: "Air fryer" },
+  { key: "autocuiseur", label: "Autocuiseur / cocotte-minute" },
+  // ── Spécialisés (vraiment optionnels) ───────────────────────────────
+  { key: "cuiseur_vapeur", label: "Cuiseur vapeur" },
+  { key: "gaufrier", label: "Gaufrier" },
+  { key: "yaourtiere", label: "Yaourtière" },
+  { key: "machine_a_pain", label: "Machine à pain" },
+  { key: "spiraliseur", label: "Spiraliseur" },
+  { key: "barbecue", label: "Barbecue / plancha" },
 ] as const;
 
 export type EquipmentKey = (typeof EQUIPMENT_OPTIONS)[number]["key"];
@@ -80,10 +96,13 @@ export const MEAL_TYPE_OPTIONS = [
 
 export type PlannerMealType = (typeof MEAL_TYPE_OPTIONS)[number]["key"];
 
+/**
+ * Structures de repas proposées dans l'UI.
+ * Volontairement réduit à "plat_seul" : les structures à plusieurs services
+ * (entrée + plat, plat + dessert, etc.) ne sont plus exposées car elles
+ * créaient une charge cognitive sans bénéfice pratique.
+ */
 export const MEAL_STRUCTURE_OPTIONS = [
-  { key: "entree_plat_dessert", label: "Entrée + plat + dessert" },
-  { key: "entree_plat", label: "Entrée + plat" },
-  { key: "plat_dessert", label: "Plat + dessert" },
   { key: "plat_seul", label: "Plat seul" },
 ] as const;
 
@@ -92,13 +111,18 @@ export type MealStructureKey = (typeof MEAL_STRUCTURE_OPTIONS)[number]["key"];
 /** Synonymes français pour matcher le champ `equipements` des recettes */
 export const EQUIPMENT_KEY_SYNONYMS: Record<string, string[]> = {
   four: ["four"],
-  micro_ondes: ["micro", "micro-ondes", "micro ondes"],
-  plaque_cuisson: ["plaque", "feu", "casserole", "poêle", "poele", "cuisinière", "cuisiniere"],
-  airfryer: ["air fryer", "friteuse", "sans huile"],
+  micro_ondes: ["micro", "micro-ondes", "micro ondes", "micro_ondes"],
+  plaque_cuisson: ["plaque", "feu", "cuisinière", "cuisiniere", "induction", "gaz"],
+  airfryer: ["air fryer", "airfryer", "friteuse", "sans huile"],
   blender: ["blender", "mixeur"],
-  robot_cuiseur: ["thermomix", "robot", "companion", "cookéo", "cookeo"],
-  autocuiseur: ["autocuiseur", "cocotte minute", "instant pot"],
-  barbecue: ["barbecue", "bbq", "grill"],
+  robot_cuiseur: ["thermomix", "robot", "companion", "cookéo", "cookeo", "robot_cuiseur"],
+  autocuiseur: ["autocuiseur", "cocotte minute", "cocotte-minute", "instant pot"],
+  barbecue: ["barbecue", "bbq", "grill", "plancha"],
   congelateur: ["congelateur", "congélateur", "surgelé", "surgele"],
   refrigerateur: ["réfrigérateur", "refrigerateur", "frigo"],
+  gaufrier: ["gaufrier"],
+  yaourtiere: ["yaourtiere", "yaourtière"],
+  machine_a_pain: ["machine à pain", "machine a pain", "map"],
+  cuiseur_vapeur: ["cuiseur vapeur", "cuiseur_vapeur", "panier vapeur"],
+  spiraliseur: ["spiraliseur", "spiralizer"],
 };

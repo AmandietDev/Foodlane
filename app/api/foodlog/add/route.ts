@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { parseMeal } from "../../../src/lib/foodParser";
 import { analyzeDaily, MealEntry } from "../../../src/lib/dailyAnalyzer";
 import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
 import { requirePremium } from "../../../src/lib/premiumGuard";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
 
 /**
  * POST /api/foodlog/add
@@ -34,6 +32,13 @@ export async function POST(request: NextRequest) {
       return error as NextResponse;
     }
 
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: "Serveur non configuré (Supabase admin)" },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
     const { date, meal_type, raw_text, hunger_before, satiety_after, mood_energy } = body;
 
@@ -52,22 +57,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Non authentifié" },
-        { status: 401 }
-      );
-    }
-
     // Parser le repas
     const parsed = parseMeal(raw_text);
     const confidence = parsed.items.length > 0
       ? Math.round(parsed.items.reduce((sum, item) => sum + item.confidence, 0) / parsed.items.length)
       : 0;
 
-    // Sauvegarder l'entrée
-    const supabase = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-    const { data: entry, error: insertError } = await supabase
+    // Sauvegarder l'entrée (service role : la clé anon sans JWT utilisateur ne passe pas le RLS)
+    const { data: entry, error: insertError } = await supabaseAdmin
       .from("food_log_entries")
       .insert({
         user_id: userId,
@@ -92,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Récupérer tous les repas du jour pour recalculer le summary
-    const { data: allMeals, error: fetchError } = await supabase
+    const { data: allMeals, error: fetchError } = await supabaseAdmin
       .from("food_log_entries")
       .select("*")
       .eq("user_id", userId)
@@ -108,7 +105,7 @@ export async function POST(request: NextRequest) {
     // Si les colonnes n'existent pas encore, utiliser des valeurs par défaut
     let profile: any = null;
     try {
-      const { data } = await supabase
+      const { data } = await supabaseAdmin
         .from("profiles")
         .select("allergies, diets, objective, behavioral_preferences")
         .eq("id", userId)
@@ -138,7 +135,7 @@ export async function POST(request: NextRequest) {
     const summary = analyzeDaily(mealEntries, context);
 
     // Sauvegarder ou mettre à jour le daily_summary
-    const { error: summaryError } = await supabase
+    const { error: summaryError } = await supabaseAdmin
       .from("daily_summaries")
       .upsert({
         user_id: userId,

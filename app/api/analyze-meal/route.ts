@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { aiOutputLanguageDirective } from "../../src/lib/aiLocale";
+import type { Locale } from "../../src/lib/i18n";
+import { getUserIdFromRequest } from "../../src/lib/supabaseServer";
+import { requirePremiumPlus } from "../../src/lib/premiumGuard";
+
+const VISION_LOCALES: Locale[] = ["fr", "en", "es", "de"];
 
 /**
- * API pour analyser une photo de repas avec IA
- * Utilise OpenAI Vision API pour identifier les aliments et générer des conseils
+ * API pour analyser une photo de repas (assistant diététique + vision).
+ * Réservé au palier **Premium Plus**.
  */
 export async function POST(request: NextRequest) {
   try {
-    const { imageBase64 } = await request.json();
+    const body = await request.json();
+    const { imageBase64, locale: localeRaw } = body as { imageBase64?: string; locale?: string };
+    const locale: Locale =
+      typeof localeRaw === "string" && VISION_LOCALES.includes(localeRaw as Locale)
+        ? (localeRaw as Locale)
+        : "fr";
 
     if (!imageBase64) {
       return NextResponse.json(
@@ -23,8 +34,19 @@ export async function POST(request: NextRequest) {
     // Vérifier si OpenAI API key est configurée
     const openaiApiKey = process.env.OPENAI_API_KEY;
     
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    }
+
+    try {
+      await requirePremiumPlus(request, userId);
+    } catch (error) {
+      return error as NextResponse;
+    }
+
     if (!openaiApiKey) {
-      // Mode fallback : retourner une analyse simulée pour le développement
+      // Mode fallback : analyse simulée (même réservée au Premium Plus côté contrôle d’accès)
       return NextResponse.json({
         ingredients: [
           { name: "Salade verte", confidence: 0.85 },
@@ -46,6 +68,35 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const ingredientLang =
+      locale === "fr"
+        ? "noms courts en français (ex. « pâtes », « lardons », « parmesan »)"
+        : locale === "en"
+          ? "short names in English (e.g. pasta, bacon, parmesan)"
+          : locale === "es"
+            ? "nombres cortos en español (ej. pasta, bacon, parmesano)"
+            : "kurze Namen auf Deutsch (z. B. Nudeln, Speck, Parmesan)";
+
+    const systemVision = `Tu es un expert en nutrition et diététique. Analyse les photos de repas. Règles importantes : ne jamais mentionner de calories ni d'objectifs caloriques dans ton message ou tes suggestions.
+
+Fournis :
+1. Une liste détaillée des ingrédients/aliments visibles (${ingredientLang}) avec leur niveau de confiance (0.0-1.0)
+2. Un nom court pour le repas dans la même langue que l'interface utilisateur
+3. Une évaluation qualitative (sans calories) : équilibre du repas, points forts, une amélioration simple
+
+Réponds UNIQUEMENT en JSON valide, sans texte autour :
+{
+  "ingredients": [{"name": "nom court dans la langue de l'utilisateur", "confidence": 0.0-1.0}],
+  "mealName": "nom du repas",
+  "advice": {
+    "rating": "VERY_GOOD" | "GOOD" | "NEEDS_IMPROVEMENT",
+    "message": "évaluation bienveillante sans calories",
+    "suggestions": ["suggestion 1 sans calories", "suggestion 2"]
+  }
+}
+
+${aiOutputLanguageDirective(locale)}`;
+
     // Appel à OpenAI Vision API
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -58,23 +109,7 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: "system",
-            content: `Tu es un expert en nutrition et diététique. Analyse les photos de repas. Règles importantes : ne jamais mentionner de calories ni d'objectifs caloriques dans ton message ou tes suggestions.
-
-Fournis :
-1. Une liste détaillée des ingrédients/aliments visibles (noms courts, en français, ex: "pâtes", "lardons", "parmesan", "crème fraîche") avec leur niveau de confiance (0.0-1.0)
-2. Un nom court pour le repas (ex: "Pâtes carbonara")
-3. Une évaluation qualitative (sans calories) : équilibre du repas, points forts, une amélioration simple
-
-Réponds UNIQUEMENT en JSON valide, sans texte autour :
-{
-  "ingredients": [{"name": "nom français court", "confidence": 0.0-1.0}],
-  "mealName": "nom du repas",
-  "advice": {
-    "rating": "VERY_GOOD" | "GOOD" | "NEEDS_IMPROVEMENT",
-    "message": "évaluation bienveillante sans calories",
-    "suggestions": ["suggestion 1 sans calories", "suggestion 2"]
-  }
-}`,
+            content: systemVision,
           },
           {
             role: "user",

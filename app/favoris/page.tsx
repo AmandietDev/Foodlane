@@ -450,7 +450,7 @@ export default function FavorisPage() {
   }
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-6 pb-24">
+    <main className="max-w-md md:max-w-3xl lg:max-w-4xl mx-auto px-4 md:px-8 pt-6 pb-24 md:pb-10">
       {/* Message de succès pour l'ajout aux favoris */}
       {favoriteSuccessMessage && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[100] bg-gradient-to-r from-[#D44A4A] to-[#C03A3A] text-white px-6 py-4 rounded-xl shadow-2xl border-2 border-white/20">
@@ -883,7 +883,7 @@ export default function FavorisPage() {
           </p>
           {!selectedCollection && (
             <button
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/recettes")}
               className="px-5 py-2.5 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
             >
               Découvrir des recettes

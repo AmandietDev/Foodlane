@@ -1,38 +1,85 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
+import {
+  inferTierIntervalFromPriceId,
+  isFounderPriceId,
+  parseInterval,
+  parseTier,
+  resolveTierIntervalFromParts,
+  type BillingInterval,
+  type SubscriptionTier,
+} from "../../../src/lib/stripeSubscriptionEnv";
 
 /**
- * Webhook Stripe pour gérer les événements d'abonnement Premium
+ * Webhook Stripe — abonnements Premium & Premium Plus
  *
- * Événements gérés :
- * - checkout.session.completed : Premier paiement réussi → activer premium
- * - invoice.payment_succeeded : Renouvellement mensuel réussi → mettre à jour premium_end_date
- * - invoice.payment_failed : Échec de paiement lors du renouvellement → log (gestion optionnelle)
- * - customer.subscription.deleted : Abonnement supprimé → désactiver premium
- * - customer.subscription.updated : Changement d'abonnement → vérifier le status et désactiver si nécessaire
- *
- * ⚠️ IMPORTANT : Ce webhook doit être configuré dans le dashboard Stripe
- * avec l'URL : https://TON-DOMAINE/api/webhooks/stripe
- * 
- * Consultez GUIDE_STRIPE_ABONNEMENT_RECURRENT.md pour la configuration complète
+ * Variables : STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPABASE_SERVICE_ROLE_KEY
+ * Price IDs : STRIPE_PRICE_ID_PREMIUM_MENSUEL / _ANNUEL, STRIPE_PRICE_ID_PREMIUM_PLUS_MENSUEL / _ANNUEL
  */
+
+function lineItemParts(subscription: Stripe.Subscription): {
+  priceId: string | null;
+  recurring: string | undefined;
+} {
+  const item = subscription.items?.data?.[0];
+  return {
+    priceId: item?.price?.id ?? null,
+    recurring: item?.price?.recurring?.interval,
+  };
+}
+
+function resolveTierIntervalForSubscription(subscription: Stripe.Subscription): {
+  tier: SubscriptionTier | null;
+  interval: BillingInterval | null;
+} {
+  const { priceId, recurring } = lineItemParts(subscription);
+  return resolveTierIntervalFromParts(
+    { tier: subscription.metadata?.tier, interval: subscription.metadata?.interval },
+    priceId,
+    recurring
+  );
+}
+
+async function getUserIdFromSubscription(
+  stripe: Stripe,
+  subscription: Stripe.Subscription,
+  customerId: string
+): Promise<string | null> {
+  if (subscription.metadata?.userId) {
+    return subscription.metadata.userId;
+  }
+  if (customerId) {
+    try {
+      const customer = await stripe.customers.retrieve(customerId);
+      if (!customer.deleted && typeof customer === "object" && customer.metadata?.userId) {
+        return customer.metadata.userId;
+      }
+    } catch (err) {
+      console.warn(`[StripeWebhook] Impossible de récupérer le customer ${customerId}:`, err);
+    }
+  }
+  if (customerId && supabaseAdmin) {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("stripe_customer_id", customerId)
+      .maybeSingle();
+    if (profile?.id) return profile.id;
+  }
+  return null;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // Lire le body brut (important pour la vérification de signature)
     const body = await request.text();
     const signature = request.headers.get("stripe-signature");
 
     if (!signature) {
       console.error("[Webhook Stripe] Signature manquante dans les en-têtes");
-      return NextResponse.json(
-        { error: "Signature manquante" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Signature manquante" }, { status: 400 });
     }
 
-    // Vérifier les variables d'environnement
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -40,304 +87,123 @@ export async function POST(request: NextRequest) {
       console.error(
         "[Webhook Stripe] Variables Stripe manquantes. Vérifiez STRIPE_SECRET_KEY et STRIPE_WEBHOOK_SECRET"
       );
-      return NextResponse.json(
-        { error: "Stripe non configuré" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Stripe non configuré" }, { status: 500 });
     }
 
     if (!supabaseAdmin) {
       console.error("[Webhook Stripe] Client Supabase admin non initialisé");
-      return NextResponse.json(
-        { error: "Supabase non configuré" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Supabase non configuré" }, { status: 500 });
     }
 
-    // Initialiser Stripe (on laisse Stripe choisir la bonne version d'API)
     const stripe = new Stripe(stripeSecretKey as string);
 
-    // Vérifier la signature du webhook
     let event: Stripe.Event;
     try {
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (err) {
       console.error("[Webhook Stripe] Erreur de signature:", err);
-      return NextResponse.json(
-        { error: "Signature invalide" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Signature invalide" }, { status: 400 });
     }
 
     console.log(`[Webhook Stripe] Événement reçu: ${event.type}`);
 
-    // Helper pour déterminer le plan depuis une subscription Stripe
-    const getPremiumPlanFromSubscription = (subscription: Stripe.Subscription): { plan: "monthly" | "yearly" | null; priceId: string | null; interval: string | null } => {
-      try {
-        const item = subscription.items?.data?.[0];
-        const price = item?.price;
-        const priceId = price?.id || null;
-        const interval = price?.recurring?.interval || null; // "month" | "year"
-        
-        let premiumPlan: "monthly" | "yearly" | null = null;
-        
-        // Méthode 1 : Utiliser l'interval directement
-        if (interval === "month") {
-          premiumPlan = "monthly";
-        } else if (interval === "year") {
-          premiumPlan = "yearly";
-        }
-        
-        // Méthode 2 : Fallback sur les priceIds des variables d'environnement
-        if (!premiumPlan && priceId) {
-          const monthlyPriceId = process.env.STRIPE_PRICE_ID_MENSUEL;
-          const yearlyPriceId = process.env.STRIPE_PRICE_ID_ANNUEL;
-          
-          if (priceId === monthlyPriceId) {
-            premiumPlan = "monthly";
-          } else if (priceId === yearlyPriceId) {
-            premiumPlan = "yearly";
-          }
-        }
-        
-        console.log(`[StripeWebhook] interval: ${interval}, priceId: ${priceId}, premiumPlan: ${premiumPlan}`);
-        
-        return { plan: premiumPlan, priceId, interval };
-      } catch (err) {
-        console.error(`[StripeWebhook] ❌ Erreur lors de la récupération du plan depuis la subscription:`, err);
-        return { plan: null, priceId: null, interval: null };
-      }
-    };
-
-    // Helper pour extraire le priceId d'une subscription
-    const getPriceIdFromSubscription = (subscription: Stripe.Subscription): string | null => {
-      // Essayer subscription.items.data[0].price.id (nouvelle API)
-      if (subscription.items?.data?.[0]?.price?.id) {
-        return subscription.items.data[0].price.id;
-      }
-      // Fallback: subscription.items.data[0].plan.id (ancienne API)
-      if (subscription.items?.data?.[0]?.plan?.id) {
-        return subscription.items.data[0].plan.id;
-      }
-      return null;
-    };
-
-    // Helper pour récupérer userId depuis metadata ou lookup par customer_id
-    const getUserIdFromSubscription = async (
-      subscription: Stripe.Subscription,
-      customerId: string
-    ): Promise<string | null> => {
-      // Méthode 1 : Depuis les metadata de la subscription
-      if (subscription.metadata?.userId) {
-        return subscription.metadata.userId;
-      }
-      
-      // Méthode 2 : Depuis les metadata du customer (si disponible)
-      if (customerId) {
-        try {
-          const customer = await stripe.customers.retrieve(customerId);
-          if (!customer.deleted && typeof customer === "object" && customer.metadata?.userId) {
-            return customer.metadata.userId;
-          }
-        } catch (err) {
-          console.warn(`[StripeWebhook] Impossible de récupérer le customer ${customerId}:`, err);
-        }
-      }
-      
-      // Méthode 3 : Lookup par stripe_customer_id dans Supabase
-      if (customerId) {
-        const { data: profile } = await supabaseAdmin!
-          .from("profiles")
-          .select("id")
-          .eq("stripe_customer_id", customerId)
-          .maybeSingle();
-        
-        if (profile?.id) {
-          return profile.id;
-        }
-      }
-      
-      return null;
-    };
-
-    // Traiter les événements selon leur type
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-
-        // Récupérer userId depuis metadata (priorité)
         const userId = session.metadata?.userId || null;
-        
+        let tier = parseTier(session.metadata?.tier);
+        let interval = parseInterval(session.metadata?.interval);
+
         const customerId =
-          typeof session.customer === "string"
-            ? session.customer
-            : session.customer?.id || null;
+          typeof session.customer === "string" ? session.customer : session.customer?.id || null;
         const subscriptionId =
           typeof session.subscription === "string"
             ? session.subscription
             : session.subscription?.id || null;
 
-        if (!subscriptionId) {
-          console.error("[WEBHOOK] ❌ Subscription ID manquant dans checkout.session.completed");
-          break;
-        }
-
-        console.log(
-          `[WEBHOOK] 💳 checkout.session.completed - userId: ${userId}, customer: ${customerId}, subscription: ${subscriptionId}`
-        );
-
-        // Récupérer la subscription complète pour obtenir le plan et la date de fin
-        let premiumPlan: "monthly" | "yearly" | null = null;
-        let premiumEndDate: string | null = null;
-
-        try {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
-            expand: ["items.data.price"],
-          });
-          
-          const planInfo = getPremiumPlanFromSubscription(subscription);
-          premiumPlan = planInfo.plan;
-          
-          if (subscription.current_period_end) {
-            premiumEndDate = new Date(subscription.current_period_end * 1000).toISOString();
-          }
-
-          console.log(
-            `[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}, priceId: ${planInfo.priceId}, interval: ${planInfo.interval}`
-          );
-        } catch (err) {
-          console.error(`[WEBHOOK] ❌ Erreur lors de la récupération de la subscription ${subscriptionId}:`, err);
-          break;
-        }
-
-        if (!premiumPlan) {
-          console.error("[WEBHOOK] ❌ Impossible de déterminer le plan premium");
-          break;
-        }
-
-        // Mettre à jour le profil dans Supabase via userId (priorité) ou customer_id
-        const updateData: any = {
-          premium_active: true,
-          premium_end_date: premiumEndDate,
-          stripe_customer_id: customerId,
-          stripe_subscription_id: subscriptionId,
-        };
-        // Inclure premium_plan uniquement si premiumPlan n'est pas null
-        if (premiumPlan) {
-          updateData.premium_plan = premiumPlan;
-        }
-
-        let result;
-        if (userId) {
-          result = await supabaseAdmin!
-            .from("profiles")
-            .update(updateData)
-            .eq("id", userId)
-            .select();
-        } else if (customerId) {
-          // Fallback : utiliser customer_id si userId non disponible
-          result = await supabaseAdmin!
-            .from("profiles")
-            .update(updateData)
-            .eq("stripe_customer_id", customerId)
-            .select();
-        } else {
-          console.error("[WEBHOOK] ❌ userId et customerId manquants");
-          break;
-        }
-
-        if (result.error) {
-          console.error("[WEBHOOK] ❌ Erreur lors de l'activation du premium:", result.error);
-        } else if (result.data && result.data.length > 0) {
-          console.log(
-            `[WEBHOOK] ✅ updated profile ${result.data[0].id} - plan: ${premiumPlan}, end_date: ${premiumEndDate}`
-          );
-        } else {
-          console.warn(`[WEBHOOK] ⚠️ Aucun profil trouvé (userId: ${userId}, customerId: ${customerId})`);
-        }
-        break;
-      }
-
-      case "customer.subscription.created": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId =
-          typeof subscription.customer === "string"
-            ? subscription.customer
-            : subscription.customer?.id || null;
-        const subscriptionId = subscription.id;
-
-        console.log(
-          `[WEBHOOK] 🆕 customer.subscription.created - customer: ${customerId}, subscription: ${subscriptionId}`
-        );
-
-        if (!customerId) {
-          console.error(`[WEBHOOK] ❌ Customer ID manquant`);
-          break;
-        }
-
-        // Récupérer userId depuis metadata (priorité)
-        const userId = subscription.metadata?.userId || await getUserIdFromSubscription(subscription, customerId);
-
         if (!userId) {
-          console.warn(`[WEBHOOK] ⚠️ Impossible de trouver userId pour customer: ${customerId}`);
+          console.error("[WEBHOOK] ❌ checkout.session.completed : metadata.userId manquant");
           break;
         }
 
-        // Récupérer la subscription complète pour obtenir le plan
-        let premiumPlan: "monthly" | "yearly" | null = null;
-        let premiumEndDate: string | null = null;
+        if (!subscriptionId) {
+          console.error("[WEBHOOK] ❌ checkout.session.completed : subscription ID manquant");
+          break;
+        }
 
+        let subscription: Stripe.Subscription;
         try {
-          const fullSubscription = await stripe.subscriptions.retrieve(subscriptionId, {
+          subscription = await stripe.subscriptions.retrieve(subscriptionId, {
             expand: ["items.data.price"],
           });
-          
-          const planInfo = getPremiumPlanFromSubscription(fullSubscription);
-          premiumPlan = planInfo.plan;
-          premiumEndDate = fullSubscription.current_period_end
-            ? new Date(fullSubscription.current_period_end * 1000).toISOString()
-            : null;
-
-          console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}, priceId: ${planInfo.priceId}, interval: ${planInfo.interval}`);
         } catch (err) {
-          console.error(`[WEBHOOK] ❌ Erreur lors de la récupération de la subscription:`, err);
+          console.error(`[WEBHOOK] ❌ Impossible de récupérer la subscription ${subscriptionId}:`, err);
           break;
         }
 
-        if (!premiumPlan) {
-          console.error(`[WEBHOOK] ❌ Impossible de déterminer le plan premium`);
+        if (!tier || !interval) {
+          const resolved = resolveTierIntervalForSubscription(subscription);
+          tier = tier || resolved.tier;
+          interval = interval || resolved.interval;
+        }
+
+        if (!tier || !interval) {
+          console.error(
+            "[WEBHOOK] ❌ Impossible de déterminer tier/interval (metadata + price Stripe)"
+          );
           break;
         }
 
-        // Mettre à jour le profil
-        const updateData: any = {
+        const premiumEndDate = subscription.current_period_end
+          ? new Date(subscription.current_period_end * 1000).toISOString()
+          : null;
+        const nowIso = new Date().toISOString();
+
+        const { priceId: subPriceId } = lineItemParts(subscription);
+        const founder = isFounderPriceId(subPriceId);
+
+        const updateData: Record<string, unknown> = {
           premium_active: true,
-          premium_end_date: premiumEndDate,
+          subscription_tier: tier,
+          premium_plan: interval,
           stripe_customer_id: customerId,
           stripe_subscription_id: subscriptionId,
+          subscription_status: "active",
+          premium_started_at: nowIso,
+          premium_start_date: nowIso,
+          premium_end_date: premiumEndDate,
+          current_period_end: premiumEndDate,
+          premium_ended_at: null,
+          cancel_at_period_end: false,
+          subscription_cancelled_at: null,
+          is_founder: founder,
+          is_beta_tester: false,
+          founder_offer_type: founder ? "launch" : null,
+          stripe_price_id: subPriceId,
+          billing_cycle: interval,
         };
-        // Inclure premium_plan uniquement si premiumPlan n'est pas null
-        if (premiumPlan) {
-          updateData.premium_plan = premiumPlan;
-        }
 
-        const { data: updatedProfile, error } = await supabaseAdmin!
+        const { data, error } = await supabaseAdmin
           .from("profiles")
           .update(updateData)
           .eq("id", userId)
           .select();
 
         if (error) {
-          console.error(`[WEBHOOK] ❌ Erreur lors de la mise à jour du profil:`, error);
-        } else if (updatedProfile && updatedProfile.length > 0) {
+          console.error("[WEBHOOK] ❌ Erreur Supabase checkout.session.completed:", error);
+        } else if (!data?.length) {
+          console.error(
+            `[WEBHOOK] ❌ Aucun profil trouvé pour userId=${userId} (checkout.session.completed)`
+          );
+        } else {
           console.log(
-            `[WEBHOOK] ✅ updated profile ${userId} - plan: ${premiumPlan}, end_date: ${premiumEndDate}`
+            `[WEBHOOK] ✅ Profil ${userId} activé — tier=${tier}, interval=${interval}, current_period_end=${premiumEndDate ?? "null"}`
           );
         }
         break;
       }
 
-      case "customer.subscription.deleted":
+      case "customer.subscription.created":
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId =
@@ -345,382 +211,308 @@ export async function POST(request: NextRequest) {
             ? subscription.customer
             : subscription.customer?.id || null;
         const subscriptionId = subscription.id;
-        const status = subscription.status; // active, canceled, unpaid, past_due, etc.
-        const cancelAtPeriodEnd = subscription.cancel_at_period_end; // true si annulé mais actif jusqu'à la fin
-        const currentPeriodEnd = subscription.current_period_end; // Timestamp de fin de période
+        const status = subscription.status;
 
-        console.log(
-          `[WEBHOOK] 🧾 ${event.type} - status: ${status}, cancel_at_period_end: ${cancelAtPeriodEnd}, customer: ${customerId}, subscription: ${subscriptionId}`
-        );
+        if (event.type === "customer.subscription.updated") {
+          console.log("[Webhook Stripe] customer.subscription.updated", {
+            subscriptionId,
+            status,
+            cancel_at_period_end: subscription.cancel_at_period_end,
+            current_period_end_unix: subscription.current_period_end,
+          });
+        }
 
         if (!customerId) {
-          console.error(`[WEBHOOK] ❌ Customer ID manquant`);
+          console.error("[WEBHOOK] ❌ customer.subscription.* : Customer ID manquant");
           break;
         }
 
-        // Récupérer userId depuis metadata (priorité)
-        const userId = subscription.metadata?.userId || await getUserIdFromSubscription(subscription, customerId);
-
-        // Récupérer la subscription complète pour obtenir le plan
-        let premiumPlan: "monthly" | "yearly" | null = null;
-        let premiumEndDate: string | null = null;
-
+        let full: Stripe.Subscription;
         try {
-          const fullSubscription = await stripe.subscriptions.retrieve(subscriptionId, {
+          full = await stripe.subscriptions.retrieve(subscriptionId, {
             expand: ["items.data.price"],
           });
-          
-          const planInfo = getPremiumPlanFromSubscription(fullSubscription);
-          premiumPlan = planInfo.plan;
-          premiumEndDate = fullSubscription.current_period_end
-            ? new Date(fullSubscription.current_period_end * 1000).toISOString()
-            : null;
-
-          console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}, priceId: ${planInfo.priceId}, interval: ${planInfo.interval}`);
         } catch (err) {
-          console.error(`[WEBHOOK] ❌ Erreur lors de la récupération de la subscription:`, err);
+          console.error("[WEBHOOK] ❌ Erreur retrieve subscription:", err);
           break;
         }
 
-        // Si l'abonnement est complètement supprimé, garder premium actif jusqu'à current_period_end
-        if (event.type === "customer.subscription.deleted") {
-          console.log(
-            `[WEBHOOK] 🛑 customer.subscription.deleted - Premium maintenu jusqu'à ${premiumEndDate || "maintenant"}`
-          );
-
-          // Garder premium_active = false mais conserver premium_end_date si current_period_end existe
-          // Option: garder premium_active = true jusqu'à current_period_end (meilleure UX)
-          const updateData: any = {
-            premium_active: false,
-            premium_end_date: premiumEndDate || new Date().toISOString(), // Garder end_date si disponible
-          };
-          // Inclure premium_plan uniquement si premiumPlan n'est pas null
-          if (premiumPlan) {
-            updateData.premium_plan = premiumPlan;
-          }
-
-          let result;
-          if (userId) {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("id", userId)
-              .select();
-          } else {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("stripe_customer_id", customerId)
-              .select();
-          }
-
-          if (result.error) {
-            console.error(`[WEBHOOK] ❌ Erreur lors de la mise à jour:`, result.error);
-          } else if (result.data && result.data.length > 0) {
-            console.log(
-              `[WEBHOOK] ✅ updated profile ${userId || customerId} - premium_active: false, end_date: ${premiumEndDate}, plan: ${premiumPlan}`
-            );
-          }
-          break;
+        const userIdFromMeta = full.metadata?.userId || null;
+        const userId =
+          userIdFromMeta || (await getUserIdFromSubscription(stripe, full, customerId));
+        let { tier, interval } = resolveTierIntervalForSubscription(full);
+        if (!tier || !interval) {
+          const priceId = lineItemParts(full).priceId;
+          const inferred = inferTierIntervalFromPriceId(priceId);
+          tier = tier || inferred.tier;
+          interval = interval || inferred.interval;
         }
 
-        // Pour customer.subscription.updated
-        // Si l'abonnement est annulé mais actif jusqu'à la fin de la période
-        if (cancelAtPeriodEnd && currentPeriodEnd) {
-          console.log(
-            `[WEBHOOK] 📅 cancel_at_period_end=true - Premium actif jusqu'à ${premiumEndDate}`
-          );
+        const periodEndIso = full.current_period_end
+          ? new Date(full.current_period_end * 1000).toISOString()
+          : null;
+        const canceledAtIso =
+          full.canceled_at != null ? new Date(full.canceled_at * 1000).toISOString() : null;
 
-          // Garder premium_active à true mais mettre à jour premium_end_date et premium_plan
-          const updateData: any = {
-            premium_active: true, // Toujours actif jusqu'à la fin de la période
-            premium_end_date: premiumEndDate,
-          };
-          // Inclure premium_plan uniquement si premiumPlan n'est pas null
-          if (premiumPlan) {
-            updateData.premium_plan = premiumPlan;
-          }
+        const endedByStripe = status === "canceled" || status === "incomplete_expired";
 
-          let result;
-          if (userId) {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("id", userId)
-              .select();
-          } else {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("stripe_customer_id", customerId)
-              .select();
-          }
+        let premiumActive = status === "active" || status === "trialing";
+        const updateData: Record<string, unknown> = {
+          subscription_status: status,
+          stripe_customer_id: customerId,
+          stripe_subscription_id: subscriptionId,
+          premium_end_date: periodEndIso,
+          current_period_end: periodEndIso,
+        };
 
-          if (result.error) {
-            console.error(
-              `[Webhook Stripe] ❌ Erreur lors de la mise à jour:`,
-              result.error
-            );
-          } else if (result.data && result.data.length > 0) {
-            console.log(
-              `[Webhook Stripe] ✅ Premium maintenu jusqu'à ${premiumEndDate} pour ${result.data.length} profil(s) (plan: ${premiumPlan})`
-            );
-          }
-          break;
-        }
-
-        // Si l'abonnement est complètement annulé (pas juste "cancel_at_period_end")
-        // Pour canceled et incomplete_expired : garder premium actif jusqu'à current_period_end
-        // Pour unpaid et past_due : désactiver immédiatement (paiement échoué)
-        const isCanceled = status === "canceled" || status === "incomplete_expired";
-        const isUnpaid = status === "unpaid" || status === "past_due";
-
-        if (isCanceled) {
-          // Annulation : garder premium actif jusqu'à la fin de la période (meilleure UX)
-          console.log(
-            `[WEBHOOK] 🛑 status=${status} - Premium maintenu jusqu'à ${premiumEndDate}`
-          );
-
-          const updateData: any = {
-            premium_active: true, // Reste actif jusqu'à premium_end_date
-            premium_end_date: premiumEndDate || new Date().toISOString(),
-          };
-          // Inclure premium_plan uniquement si premiumPlan n'est pas null
-          if (premiumPlan) {
-            updateData.premium_plan = premiumPlan;
-          }
-
-          let result;
-          if (userId) {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("id", userId)
-              .select();
-          } else {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("stripe_customer_id", customerId)
-              .select();
-
-            if ((!result.data || result.data.length === 0) && subscriptionId) {
-              result = await supabaseAdmin!
-                .from("profiles")
-                .update(updateData)
-                .eq("stripe_subscription_id", subscriptionId)
-                .select();
-            }
-          }
-
-          if (result.error) {
-            console.error(`[WEBHOOK] ❌ Erreur lors de la mise à jour:`, result.error);
-          } else {
-            if (result.data && result.data.length > 0) {
-              console.log(
-                `[WEBHOOK] ✅ updated profile ${userId || customerId} - premium_active: true, end_date: ${premiumEndDate}, plan: ${premiumPlan}`
-              );
-            } else {
-              console.warn(
-                `[WEBHOOK] ⚠️ Aucun profil trouvé (customerId: ${customerId}, subscriptionId: ${subscriptionId})`
-              );
-            }
-          }
-        } else if (isUnpaid) {
-          // Paiement échoué : désactiver immédiatement
-          console.log(
-            `[WEBHOOK] 🛑 status=${status} - Premium désactivé immédiatement`
-          );
-
-          const updateData: any = {
-            premium_active: false,
-            premium_end_date: new Date().toISOString(),
-            premium_plan: null, // Réinitialiser le plan
-          };
-
-          let result;
-          if (userId) {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("id", userId)
-              .select();
-          } else {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("stripe_customer_id", customerId)
-              .select();
-
-            if ((!result.data || result.data.length === 0) && subscriptionId) {
-              result = await supabaseAdmin!
-                .from("profiles")
-                .update(updateData)
-                .eq("stripe_subscription_id", subscriptionId)
-                .select();
-            }
-          }
-
-          if (result.error) {
-            console.error(`[WEBHOOK] ❌ Erreur lors de la désactivation:`, result.error);
-          } else {
-            if (result.data && result.data.length > 0) {
-              console.log(
-                `[WEBHOOK] ✅ updated profile ${userId || customerId} - premium_active: false`
-              );
-            } else {
-              console.warn(
-                `[WEBHOOK] ⚠️ Aucun profil trouvé (customerId: ${customerId}, subscriptionId: ${subscriptionId})`
-              );
-            }
-          }
+        if (endedByStripe) {
+          const nowIso = new Date().toISOString();
+          premiumActive = false;
+          updateData.premium_active = false;
+          updateData.subscription_tier = "free";
+          updateData.premium_plan = null;
+          updateData.premium_ended_at = nowIso;
+          updateData.premium_end_date = periodEndIso || nowIso;
+          updateData.stripe_subscription_id = null;
+          updateData.cancel_at_period_end = false;
+          updateData.current_period_end = null;
+          updateData.subscription_cancelled_at = canceledAtIso || nowIso;
+          updateData.is_founder = false;
+          updateData.stripe_price_id = null;
+          updateData.founder_offer_type = null;
+          updateData.billing_cycle = null;
         } else {
-          // Abonnement toujours actif, mettre à jour premium_end_date et premium_plan
-          if (!premiumPlan) {
-            console.warn(`[WEBHOOK] ⚠️ Plan non déterminé, mise à jour partielle`);
-          }
+          updateData.premium_active = premiumActive;
+          if (tier) updateData.subscription_tier = tier;
+          if (interval) updateData.premium_plan = interval;
+          updateData.cancel_at_period_end = Boolean(full.cancel_at_period_end);
+          updateData.subscription_cancelled_at =
+            full.cancel_at_period_end ? canceledAtIso : null;
 
-          const updateData: any = {
-            premium_active: true,
-            premium_end_date: premiumEndDate,
-          };
-          // Inclure premium_plan uniquement si premiumPlan n'est pas null
-          if (premiumPlan) {
-            updateData.premium_plan = premiumPlan;
-          }
+          const { priceId: livePriceId } = lineItemParts(full);
+          const founder = isFounderPriceId(livePriceId);
+          updateData.is_founder = founder;
+          updateData.founder_offer_type = founder ? "launch" : null;
+          updateData.stripe_price_id = livePriceId;
+          updateData.billing_cycle = interval ?? null;
+          updateData.is_beta_tester = false;
+        }
 
-          let result;
-          if (userId) {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("id", userId)
-              .select();
-          } else {
-            result = await supabaseAdmin!
-              .from("profiles")
-              .update(updateData)
-              .eq("stripe_customer_id", customerId)
-              .select();
-          }
+        const applyUpdate = async (
+          column: "id" | "stripe_customer_id" | "stripe_subscription_id",
+          value: string
+        ) => {
+          return supabaseAdmin!.from("profiles").update(updateData).eq(column, value).select();
+        };
 
-          if (result.error) {
-            console.error(`[WEBHOOK] ❌ Erreur lors de la mise à jour:`, result.error);
-          } else if (result.data && result.data.length > 0) {
-            console.log(
-              `[WEBHOOK] ✅ updated profile ${userId || customerId} - plan: ${premiumPlan}, end_date: ${premiumEndDate}`
-            );
-          }
+        const attempts: Array<["id" | "stripe_customer_id" | "stripe_subscription_id", string]> = [];
+        if (subscriptionId) attempts.push(["stripe_subscription_id", subscriptionId]);
+        if (userId) attempts.push(["id", userId]);
+        if (customerId) attempts.push(["stripe_customer_id", customerId]);
+
+        if (attempts.length === 0) {
+          console.error("[WEBHOOK] ❌ Aucune clé pour cibler le profil (subscription.updated)");
+          break;
+        }
+
+        let result = await applyUpdate(attempts[0][0], attempts[0][1]);
+        for (let i = 1; i < attempts.length; i++) {
+          if (result.data?.length && !result.error) break;
+          const [col, val] = attempts[i];
+          result = await applyUpdate(col, val);
+        }
+
+        if (result.error) {
+          console.error("[WEBHOOK] ❌ Erreur customer.subscription.updated:", result.error);
+        } else if (!result.data?.length) {
+          console.error(
+            `[WEBHOOK] ❌ Aucun profil pour subscription.updated (userId=${userId}, customer=${customerId}, sub=${subscriptionId})`
+          );
+        } else {
+          console.log(
+            `[WEBHOOK] ✅ ${event.type} — subscriptionId=${subscriptionId}, status=${status}, premium_active=${premiumActive}, cancel_at_period_end=${updateData.cancel_at_period_end}, current_period_end=${updateData.current_period_end}, profils=${result.data?.length}`
+          );
+        }
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const subscriptionId = subscription.id;
+        const nowIso = new Date().toISOString();
+
+        const updateData: Record<string, unknown> = {
+          premium_active: false,
+          subscription_status: "canceled",
+          subscription_tier: "free",
+          premium_plan: null,
+          premium_ended_at: nowIso,
+          premium_end_date: nowIso,
+          stripe_subscription_id: null,
+          cancel_at_period_end: false,
+          current_period_end: null,
+          subscription_cancelled_at: nowIso,
+          is_founder: false,
+          stripe_price_id: null,
+          founder_offer_type: null,
+          billing_cycle: null,
+        };
+
+        const { data, error } = await supabaseAdmin
+          .from("profiles")
+          .update(updateData)
+          .eq("stripe_subscription_id", subscriptionId)
+          .select();
+
+        if (error) {
+          console.error("[WEBHOOK] ❌ Erreur customer.subscription.deleted:", error);
+        } else if (!data?.length) {
+          console.error(
+            `[WEBHOOK] ❌ Aucun profil pour stripe_subscription_id=${subscriptionId} (deleted)`
+          );
+        } else {
+          console.log(`[WEBHOOK] ✅ Abonnement supprimé — subscriptionId=${subscriptionId}, profils=${data?.length}`);
         }
         break;
       }
 
       case "invoice.payment_succeeded": {
-        // Renouvellement mensuel réussi
         const invoice = event.data.object as Stripe.Invoice;
         const subscriptionId =
           typeof invoice.subscription === "string"
             ? invoice.subscription
             : invoice.subscription?.id || null;
         const customerId =
-          typeof invoice.customer === "string"
-            ? invoice.customer
-            : invoice.customer?.id || null;
+          typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id || null;
 
-        console.log(
-          `[Webhook Stripe] 💳 Renouvellement réussi: invoice=${invoice.id}, subscription=${subscriptionId}, customer=${customerId}`
-        );
-
-        if (!customerId && !subscriptionId) {
-          console.warn("[Webhook Stripe] ⚠️ Customer ID et Subscription ID manquants dans invoice.payment_succeeded");
+        if (!subscriptionId && !customerId) {
+          console.warn("[WEBHOOK] ⚠️ invoice.payment_succeeded : pas de customer ni subscription");
           break;
         }
 
-        // Récupérer la subscription pour obtenir le plan et la date de fin
-        let premiumPlan: "monthly" | "yearly" | null = null;
         let premiumEndDate: string | null = null;
+        let tier: SubscriptionTier | null = null;
+        let interval: BillingInterval | null = null;
+        let cancelAtPeriodEnd = false;
+        let subscriptionCancelledAt: string | null = null;
+        let livePriceId: string | null = null;
 
         if (subscriptionId) {
           try {
-            const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+            const sub = await stripe.subscriptions.retrieve(subscriptionId, {
               expand: ["items.data.price"],
             });
-            const planInfo = getPremiumPlanFromSubscription(subscription);
-            premiumPlan = planInfo.plan;
-            premiumEndDate = subscription.current_period_end
-              ? new Date(subscription.current_period_end * 1000).toISOString()
+            const resolved = resolveTierIntervalForSubscription(sub);
+            tier = resolved.tier;
+            interval = resolved.interval;
+            livePriceId = sub.items?.data?.[0]?.price?.id ?? null;
+            premiumEndDate = sub.current_period_end
+              ? new Date(sub.current_period_end * 1000).toISOString()
               : null;
-            console.log(`[WEBHOOK] 📦 plan: ${premiumPlan}, end_date: ${premiumEndDate}, priceId: ${planInfo.priceId}, interval: ${planInfo.interval}`);
+            cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
+            subscriptionCancelledAt =
+              sub.cancel_at_period_end && sub.canceled_at != null
+                ? new Date(sub.canceled_at * 1000).toISOString()
+                : null;
           } catch (err) {
-            console.error(`[WEBHOOK] ❌ Erreur lors de la récupération de la subscription:`, err);
+            console.error("[WEBHOOK] ❌ invoice.payment_succeeded retrieve sub:", err);
             break;
           }
         }
 
-        const updateData: any = {
+        const updateData: Record<string, unknown> = {
           premium_active: true,
-          premium_end_date: premiumEndDate,
+          subscription_status: "active",
         };
-        // Inclure premium_plan uniquement si premiumPlan n'est pas null
-        if (premiumPlan) {
-          updateData.premium_plan = premiumPlan;
+        if (subscriptionId) {
+          updateData.premium_end_date = premiumEndDate;
+          updateData.current_period_end = premiumEndDate;
+          updateData.cancel_at_period_end = cancelAtPeriodEnd;
+          updateData.subscription_cancelled_at = subscriptionCancelledAt;
+          const founder = isFounderPriceId(livePriceId);
+          updateData.stripe_price_id = livePriceId;
+          updateData.is_founder = founder;
+          updateData.founder_offer_type = founder ? "launch" : null;
+          updateData.billing_cycle = interval;
+          updateData.is_beta_tester = false;
         }
+        if (tier) updateData.subscription_tier = tier;
+        if (interval) updateData.premium_plan = interval;
 
-        let updatedProfile = null;
-        let error = null;
-
-        // Essayer avec customer_id d'abord
+        let rows = null;
+        let err = null;
         if (customerId) {
-          const resultByCustomer = await supabaseAdmin!
+          const r = await supabaseAdmin
             .from("profiles")
             .update(updateData)
             .eq("stripe_customer_id", customerId)
             .select();
-
-          updatedProfile = resultByCustomer.data;
-          error = resultByCustomer.error;
+          rows = r.data;
+          err = r.error;
         }
-
-        // Si pas trouvé, essayer avec subscription_id
-        if ((!updatedProfile || updatedProfile.length === 0) && subscriptionId) {
-          const resultBySub = await supabaseAdmin!
+        if ((!rows || rows.length === 0) && subscriptionId) {
+          const r = await supabaseAdmin
             .from("profiles")
             .update(updateData)
             .eq("stripe_subscription_id", subscriptionId)
             .select();
-
-          updatedProfile = resultBySub.data;
-          error = resultBySub.error;
+          rows = r.data;
+          err = r.error;
         }
 
-        if (error) {
-          console.error("[WEBHOOK] ❌ Erreur lors de la mise à jour du renouvellement:", error);
-        } else if (updatedProfile && updatedProfile.length > 0) {
-          console.log(
-            `[WEBHOOK] ✅ updated profile - plan: ${premiumPlan}, end_date: ${premiumEndDate}`
+        if (err) console.error("[WEBHOOK] ❌ invoice.payment_succeeded:", err);
+        else if (!rows?.length) {
+          console.warn(
+            `[WEBHOOK] ⚠️ Aucun profil pour renouvellement (customer=${customerId}, sub=${subscriptionId})`
           );
         } else {
-          console.warn(
-            `[WEBHOOK] ⚠️ Aucun profil trouvé (customerId: ${customerId}, subscriptionId: ${subscriptionId})`
-          );
+          console.log("[WEBHOOK] ✅ Renouvellement enregistré");
         }
         break;
       }
 
       case "invoice.payment_failed": {
-        // Échec de paiement lors du renouvellement
         const invoice = event.data.object as Stripe.Invoice;
+        const subscriptionId =
+          typeof invoice.subscription === "string"
+            ? invoice.subscription
+            : invoice.subscription?.id || null;
         const customerId =
-          typeof invoice.customer === "string"
-            ? invoice.customer
-            : invoice.customer?.id || null;
+          typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id || null;
 
-        console.warn(
-          `[Webhook Stripe] ⚠️ Échec de paiement pour le renouvellement: invoice=${invoice.id}, customer=${customerId}`
-        );
+        const updateData: Record<string, unknown> = {
+          subscription_status: "past_due",
+        };
 
-        // Optionnel : vous pouvez désactiver le premium ou envoyer un email
-        // Pour l'instant, on laisse Stripe gérer les tentatives de paiement
+        let rows = null;
+        let err = null;
+        if (customerId) {
+          const r = await supabaseAdmin
+            .from("profiles")
+            .update(updateData)
+            .eq("stripe_customer_id", customerId)
+            .select();
+          rows = r.data;
+          err = r.error;
+        }
+        if ((!rows || rows.length === 0) && subscriptionId) {
+          const r = await supabaseAdmin
+            .from("profiles")
+            .update(updateData)
+            .eq("stripe_subscription_id", subscriptionId)
+            .select();
+          rows = r.data;
+          err = r.error;
+        }
+
+        if (err) console.error("[WEBHOOK] ❌ invoice.payment_failed:", err);
+        else if (!rows?.length) {
+          console.warn(
+            `[WEBHOOK] ⚠️ invoice.payment_failed : aucun profil (customer=${customerId}, sub=${subscriptionId})`
+          );
+        } else {
+          console.log("[WEBHOOK] ⚠️ Paiement échoué — subscription_status=past_due (premium non coupé de force)");
+        }
         break;
       }
 
@@ -728,11 +520,10 @@ export async function POST(request: NextRequest) {
         console.log(`[Webhook Stripe] Événement non géré: ${event.type}`);
     }
 
-    // Toujours retourner 200 pour confirmer la réception à Stripe
-    return NextResponse.json({ 
-      ok: true, 
+    return NextResponse.json({
+      ok: true,
       message: "Webhook traité avec succès",
-      event: event.type 
+      event: event.type,
     });
   } catch (error) {
     console.error("[Webhook Stripe] Erreur lors du traitement:", error);
@@ -746,5 +537,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// On s'assure d'être côté Node (pas Edge) pour Stripe
 export const runtime = "nodejs";

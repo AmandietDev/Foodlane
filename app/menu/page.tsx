@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useTheme } from "../contexts/ThemeContext";
 import { supabase } from "../src/lib/supabaseClient";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
@@ -17,8 +17,16 @@ import {
   updateAccount,
   type UserAccount,
 } from "../src/lib/userPreferences";
-import { t, setLocale, getLocale, type Locale } from "../src/lib/i18n";
+import { onSubscriptionStateChanged } from "../src/lib/subscriptionSyncEvents";
+import { setLocale, getLocale, type Locale } from "../src/lib/i18n";
+import { plannerFetch } from "../src/lib/plannerClient";
+import {
+  buildSupabasePayloadFromFoyer,
+  equipmentKeysToLabels,
+  filterKeysToDietaryProfiles,
+} from "../src/lib/foyerPreferencesSync";
 import { useTranslation } from "../components/TranslationProvider";
+import UserFeedback from "../components/UserFeedback";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -29,6 +37,8 @@ import {
 } from "../src/lib/dietaryProfiles";
 import { type NutritionGoal, NUTRITION_GOALS } from "../src/lib/nutritionGoals";
 import { useSwipeBack } from "../hooks/useSwipeBack";
+import { usePremium } from "../contexts/PremiumContext";
+import { formatDateFrDMY } from "../src/lib/subscriptionDisplay";
 
 // Liste des équipements disponibles
 const AVAILABLE_EQUIPMENTS = [
@@ -60,38 +70,7 @@ type MenuSection =
 
 type LegalDocType = "mentions" | "cgu" | "confidentialite" | "cgv" | "cookies" | null;
 
-const FAQ_ITEMS = [
-  {
-    question: "Comment ajouter une recette en favoris ?",
-    answer:
-      "Ouvre une recette depuis les résultats de recherche et clique sur l'étoile (☆) pour l'ajouter à tes favoris. Tu peux ensuite la retrouver dans l'onglet Outils.",
-  },
-  {
-    question: "Comment fonctionne la recherche de recettes ?",
-    answer:
-      "Saisis les ingrédients que tu as chez toi dans le champ de recherche. L'application te proposera des recettes correspondantes. Tu peux aussi filtrer par type (sucré/salé).",
-  },
-  {
-    question: "Puis-je utiliser l'app sans compte ?",
-    answer:
-      "Oui, tu peux utiliser les fonctionnalités de base sans compte. Cependant, certaines fonctionnalités comme la liste de courses sont réservées aux comptes Premium.",
-  },
-  {
-    question: "Comment passer à Premium ?",
-    answer:
-      "Dans l'onglet Menu > Espace compte, tu trouveras les options pour souscrire à un plan Premium et accéder à toutes les fonctionnalités avancées.",
-  },
-  {
-    question: "Mes favoris sont-ils sauvegardés ?",
-    answer:
-      "Oui, tes recettes favorites sont sauvegardées localement sur ton appareil. Elles restent disponibles même après fermeture de l'application.",
-  },
-  {
-    question: "Comment modifier mes informations de compte ?",
-    answer:
-      "Va dans Menu > Espace compte pour modifier ton email, ton mot de passe et gérer ton abonnement Premium.",
-  },
-];
+const FAQ_COUNT = 8;
 
 // Les régimes sont maintenant gérés dans dietaryProfiles.ts
 
@@ -123,8 +102,9 @@ const OBJECTIFS_USAGE = [
 export default function MenuPage() {
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
-  const { setLocale: setLocaleFromContext } = useTranslation();
+  const { setLocale: setLocaleFromContext, t } = useTranslation();
   const { user, profile, loading: sessionLoading } = useSupabaseSession();
+  const { isPremium, profile: billingProfile, refreshProfile, subscriptionTier } = usePremium();
   const [preferences, setPreferences] = useState<UserPreferences>(loadPreferences());
   const [loggedIn, setLoggedIn] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
@@ -151,6 +131,246 @@ export default function MenuPage() {
   const [activeSection, setActiveSection] = useState<MenuSection>(null);
   const [showLegalDoc, setShowLegalDoc] = useState<LegalDocType>(null);
   const [allergiesInput, setAllergiesInput] = useState("");
+  const [recipeScalingPortionsMenu, setRecipeScalingPortionsMenu] = useState<number | null>(null);
+  const [upgradeToPlusLoading, setUpgradeToPlusLoading] = useState(false);
+  const [cancelSubscriptionLoading, setCancelSubscriptionLoading] = useState(false);
+  // Flag interne anti-boucle : true pendant qu'on hydrate l'UI depuis Supabase
+  // (sinon le useEffect de sauvegarde se déclencherait juste après la lecture).
+  const foyerSyncSkipRef = useRef(true);
+  // Snapshot des champs Supabase non éditables dans l'onglet Foyer (mais qu'on
+  // doit préserver lors d'un PUT pour ne pas écraser le reste : équipements
+  // spécialisés, objectifs nutrition stockés en localStorage, etc.).
+  const supabaseSnapshotRef = useRef<{
+    objectives: string[];
+    equipment_keys: string[];
+  }>({ objectives: [], equipment_keys: [] });
+
+  const portalReturnHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("stripe_portal_return") !== "1") {
+      portalReturnHandledRef.current = false;
+      return;
+    }
+    if (portalReturnHandledRef.current) return;
+    portalReturnHandledRef.current = true;
+    if (sp.get("tab") === "abonnement") {
+      setActiveTab("abonnement");
+    }
+    void (async () => {
+      await refreshProfile();
+      setPreferences(loadPreferences());
+    })();
+    window.history.replaceState({}, "", window.location.pathname);
+  }, [refreshProfile]);
+
+  useEffect(() => {
+    if (activeTab !== "abonnement" || !user?.id) return;
+    void (async () => {
+      await refreshProfile();
+      setPreferences(loadPreferences());
+    })();
+  }, [activeTab, user?.id, refreshProfile]);
+
+  useEffect(() => {
+    return onSubscriptionStateChanged(() => {
+      setPreferences(loadPreferences());
+    });
+  }, []);
+
+  const handleUpgradeToPremiumPlus = useCallback(async () => {
+    if (!user?.id) {
+      alert("Tu dois être connecté.");
+      return;
+    }
+    setUpgradeToPlusLoading(true);
+    try {
+      const response = await fetch("/api/billing/upgrade-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        details?: string;
+      };
+      if (!response.ok) {
+        throw new Error(
+          [data.error, data.details].filter(Boolean).join("\n\n") || "Mise à niveau impossible."
+        );
+      }
+      await refreshProfile();
+      setPreferences(loadPreferences());
+    } catch (e) {
+      console.error("[Menu] upgrade Premium Plus:", e);
+      alert(e instanceof Error ? e.message : "Erreur lors du passage à Premium Plus.");
+    } finally {
+      setUpgradeToPlusLoading(false);
+    }
+  }, [user?.id, refreshProfile]);
+
+  const handleCancelSubscription = useCallback(async () => {
+    if (!user?.id) {
+      alert("Tu dois être connecté.");
+      return;
+    }
+    if (
+      !confirm(
+        "Tu vas être redirigé vers Stripe pour confirmer la résiliation (en général en fin de période). Ensuite tu reviendras automatiquement sur Foodlane."
+      )
+    ) {
+      return;
+    }
+    setCancelSubscriptionLoading(true);
+    try {
+      const response = await fetch("/api/billing/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          intent: "cancel_subscription",
+          returnTo: "menu",
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        details?: string;
+        url?: string;
+      };
+      if (!response.ok) {
+        throw new Error(
+          [data.error, data.details].filter(Boolean).join("\n\n") || "Impossible d’ouvrir Stripe."
+        );
+      }
+      if (!data.url) {
+        throw new Error("URL Stripe non reçue.");
+      }
+      window.location.assign(data.url);
+    } catch (e) {
+      console.error("[Menu] résiliation (portail Stripe):", e);
+      alert(e instanceof Error ? e.message : "Erreur lors de l’ouverture de Stripe.");
+    } finally {
+      setCancelSubscriptionLoading(false);
+    }
+  }, [user?.id]);
+
+  // ── Hydratation depuis Supabase quand on entre dans l'onglet Foyer ────
+  // Charge TOUS les champs synchronisables (et plus seulement household_size)
+  // pour offrir une vraie mutualisation entre /menu (onglet Foyer) et
+  // /preferences ("Mes préférences").
+  useEffect(() => {
+    if (!user?.id || activeTab !== "foyer") return;
+    let cancelled = false;
+    foyerSyncSkipRef.current = true;
+    (async () => {
+      const res = await plannerFetch("/preferences");
+      const j = await res.json().catch(() => ({}));
+      if (cancelled || !res.ok || !j.preferences) {
+        foyerSyncSkipRef.current = false;
+        return;
+      }
+      const p = j.preferences as {
+        household_size?: number;
+        recipe_scaling_portions?: number | null;
+        dietary_filters?: string[];
+        equipment_keys?: string[];
+        allergy_keys?: string[];
+        excluded_ingredients?: string[];
+        objectives?: string[];
+      };
+
+      const h = Math.max(1, Number(p.household_size) || 1);
+      const dietaryFromSupa = filterKeysToDietaryProfiles(p.dietary_filters || []);
+      const equipFromSupa = equipmentKeysToLabels(p.equipment_keys || []);
+      // Les "aversions/allergies" texte libre : on prend l'union (allergy_keys
+      // = mots-clés normalisés + excluded_ingredients = ingrédients libres).
+      const aversionsFromSupa = [
+        ...new Set([...(p.allergy_keys || []), ...(p.excluded_ingredients || [])]),
+      ].filter(Boolean);
+
+      // Snapshot des champs Supabase à préserver lors d'un futur PUT
+      supabaseSnapshotRef.current = {
+        objectives: p.objectives || [],
+        equipment_keys: p.equipment_keys || [],
+      };
+
+      setRecipeScalingPortionsMenu(h === 5 ? (p.recipe_scaling_portions ?? null) : null);
+      setPreferences((prev) => ({
+        ...prev,
+        nombrePersonnes: h,
+        // Régimes : on remplace par les valeurs Supabase (source de vérité),
+        // sauf si Supabase est vide et que l'utilisateur en a localement
+        // (cas d'un compte qui n'a jamais ouvert /preferences).
+        regimesParticuliers:
+          dietaryFromSupa.length > 0 ? dietaryFromSupa : prev.regimesParticuliers,
+        aversionsAlimentaires:
+          aversionsFromSupa.length > 0 ? aversionsFromSupa : prev.aversionsAlimentaires,
+        equipements: equipFromSupa.length > 0 ? equipFromSupa : prev.equipements,
+      }));
+      window.setTimeout(() => {
+        foyerSyncSkipRef.current = false;
+      }, 450);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, activeTab]);
+
+  // ── Sauvegarde automatique (debounce) vers Supabase ───────────────────
+  // À chaque modif d'un champ synchronisable de l'onglet Foyer, on persiste
+  // dans `user_preferences` + tables associées, pour que /preferences et le
+  // moteur de génération de menus voient immédiatement les changements.
+  useEffect(() => {
+    if (!user?.id || activeTab !== "foyer" || foyerSyncSkipRef.current) return;
+    const timer = window.setTimeout(() => {
+      const payload = buildSupabasePayloadFromFoyer(
+        {
+          nombrePersonnes: preferences.nombrePersonnes,
+          regimesParticuliers: preferences.regimesParticuliers as string[],
+          aversionsAlimentaires: preferences.aversionsAlimentaires,
+          equipements: preferences.equipements,
+          objectifsUsage: preferences.objectifsUsage as string[],
+        },
+        supabaseSnapshotRef.current,
+        // Pour l'instant on conserve la valeur batch existante en base.
+        // Un toggle dédié pourra être ajouté plus tard dans l'UI Foyer.
+        supabaseSnapshotRef.current.objectives.includes("batch")
+      );
+      // Met à jour le snapshot localement pour rester cohérent en cas de
+      // modifications successives sans rechargement.
+      supabaseSnapshotRef.current = {
+        objectives: payload.objectives,
+        equipment_keys: payload.equipment_keys,
+      };
+
+      plannerFetch("/preferences", {
+        method: "PUT",
+        body: JSON.stringify({
+          preferences: {
+            household_size: payload.household_size,
+            recipe_scaling_portions:
+              preferences.nombrePersonnes === 5 ? recipeScalingPortionsMenu : null,
+            dietary_filters: payload.dietary_filters,
+            objectives: payload.objectives,
+          },
+          equipment_keys: payload.equipment_keys,
+          excluded_ingredients: payload.excluded_ingredients,
+        }),
+      }).catch(() => {});
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [
+    user?.id,
+    activeTab,
+    preferences.nombrePersonnes,
+    preferences.regimesParticuliers,
+    preferences.aversionsAlimentaires,
+    preferences.equipements,
+    preferences.objectifsUsage,
+    recipeScalingPortionsMenu,
+  ]);
 
   // Geste de balayage pour revenir en arrière dans les sections
   useSwipeBack(() => {
@@ -1014,7 +1234,7 @@ export default function MenuPage() {
             </div>
           )}
 
-          {preferences.abonnementType === "free" && (
+          {!isPremium && (
             <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
               <h2 className="text-base font-semibold mb-2 text-[var(--foreground)]">
                 Plan Premium{" "}
@@ -1053,17 +1273,31 @@ export default function MenuPage() {
             </div>
           )}
 
-          {preferences.abonnementType === "premium" && (
+          {isPremium && (
             <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
               <h2 className="text-base font-semibold mb-2 text-[var(--foreground)]">
-                Abonnement Premium{" "}
+                {billingProfile?.subscription_tier === "premium_plus"
+                  ? "Abonnement Premium Plus"
+                  : "Abonnement Premium"}{" "}
                 <span className="text-xs text-[#BB8C78] uppercase tracking-wide">
                   Actif
                 </span>
               </h2>
               <p className="text-xs text-[var(--beige-text-muted)] mb-3">
-                Tu bénéficies de toutes les fonctionnalités Premium.
+                {billingProfile?.subscription_tier === "premium_plus"
+                  ? "Tu bénéficies de toutes les fonctionnalités Premium et des options Plus."
+                  : "Tu bénéficies de toutes les fonctionnalités Premium."}
               </p>
+              {subscriptionTier === "premium" && (
+                <button
+                  type="button"
+                  onClick={() => void handleUpgradeToPremiumPlus()}
+                  disabled={upgradeToPlusLoading || cancelSubscriptionLoading}
+                  className="w-full mb-2 px-4 py-2 rounded-xl bg-[#8B3A5C] hover:bg-[#6d2e49] disabled:opacity-60 text-white text-xs font-semibold transition-colors"
+                >
+                  {upgradeToPlusLoading ? "Mise à niveau…" : "Passer à Premium Plus"}
+                </button>
+              )}
               <button
                 onClick={async () => {
                   if (!user) {
@@ -1101,6 +1335,26 @@ export default function MenuPage() {
               >
                 Historique de facturation / Voir sur le store
               </button>
+              {billingProfile?.cancel_at_period_end ? (
+                <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-2 text-xs font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-950/80 dark:text-amber-50">
+                  Résiliation enregistrée — accès jusqu&apos;au{" "}
+                  <strong>
+                    {formatDateFrDMY(
+                      billingProfile.current_period_end || billingProfile.premium_end_date
+                    ) || "fin de période"}
+                  </strong>
+                  .
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleCancelSubscription()}
+                  disabled={cancelSubscriptionLoading || upgradeToPlusLoading}
+                  className="mt-2 w-full px-4 py-2 rounded-xl border border-red-200 bg-red-50 text-red-900 text-xs font-semibold hover:bg-red-100 disabled:opacity-60 dark:border-red-900 dark:bg-red-950/50 dark:text-red-100"
+                >
+                  {cancelSubscriptionLoading ? "Redirection…" : "Résilier l'abonnement"}
+                </button>
+              )}
             </div>
           )}
         </section>
@@ -1210,7 +1464,7 @@ export default function MenuPage() {
                 </ul>
                 <p className="mt-2">
                   Pour exercer ces droits, contactez-nous à :
-                  contact.foodlane@gmail.com
+                  contact@foodlane.fr
                 </p>
               </div>
             </div>
@@ -1313,7 +1567,7 @@ export default function MenuPage() {
                 <span>Politique de confidentialité</span>
                 <span>{showLegalDoc === "confidentialite" ? "−" : "+"}</span>
               </button>
-              {preferences.abonnementType === "premium" && (
+              {isPremium && (
                 <button
                   onClick={() =>
                     setShowLegalDoc(showLegalDoc === "cgv" ? null : "cgv")
@@ -1350,7 +1604,7 @@ export default function MenuPage() {
                     <br />
                     Siège social : 55 rue Grignan, 13006 Marseille, France
                     <br />
-                    Email : contact.foodlane@gmail.com
+                    Email : contact@foodlane.fr
                   </p>
                 </div>
                 <div>
@@ -1422,7 +1676,7 @@ export default function MenuPage() {
                   <p>
                     Pour toute demande ou réclamation :
                     <br />
-                    📧 contact.foodlane@gmail.com
+                    📧 contact@foodlane.fr
                   </p>
                 </div>
               </div>
@@ -1496,7 +1750,7 @@ export default function MenuPage() {
                     • les directives applicables en France
                     <br />
                     <br />
-                    L&apos;utilisateur peut exercer ses droits via contact.foodlane@gmail.com.
+                    L&apos;utilisateur peut exercer ses droits via contact@foodlane.fr.
                   </p>
                 </div>
                 <div>
@@ -1562,7 +1816,7 @@ export default function MenuPage() {
                   <p className="space-y-1">
                     L&apos;utilisateur peut supprimer son compte à tout moment depuis l&apos;application ou en envoyant une demande à :
                     <br />
-                    📧 contact.foodlane@gmail.com
+                    📧 contact@foodlane.fr
                     <br />
                     <br />
                     La suppression du compte entraîne l&apos;effacement des données conformément au RGPD.
@@ -1610,7 +1864,7 @@ export default function MenuPage() {
                     <br />
                     Adresse : 55 rue Grignan, 13006 Marseille, France
                     <br />
-                    Email : contact.foodlane@gmail.com
+                    Email : contact@foodlane.fr
                     <br />
                     <br />
                     Amandine Fontaine est Responsable du traitement au sens du RGPD.
@@ -1767,7 +2021,7 @@ export default function MenuPage() {
                     <br />
                     via l&apos;adresse suivante :
                     <br />
-                    contact.foodlane@gmail.com
+                    contact@foodlane.fr
                     <br />
                     <br />
                     En cas de réclamation, il peut contacter :
@@ -1805,7 +2059,7 @@ export default function MenuPage() {
                   <p className="space-y-1">
                     Pour toute question ou demande liée aux données personnelles :
                     <br />
-                    📧 contact.foodlane@gmail.com
+                    📧 contact@foodlane.fr
                   </p>
                 </div>
               </div>
@@ -2045,7 +2299,7 @@ export default function MenuPage() {
                     Version gratuite avec publicités
                   </p>
                 </div>
-                {preferences.abonnementType === "free" && (
+                {!isPremium && (
                   <button
                     onClick={() => router.push("/premium")}
                     className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
@@ -2224,7 +2478,7 @@ export default function MenuPage() {
                       <br />
                       Siège social : 55 rue Grignan, 13006 Marseille, France
                       <br />
-                      Email : contact.foodlane@gmail.com
+                      Email : contact@foodlane.fr
                     </p>
                   </div>
                   <div>
@@ -2296,7 +2550,7 @@ export default function MenuPage() {
                     <p>
                       Pour toute demande ou réclamation :
                       <br />
-                      📧 contact.foodlane@gmail.com
+                      📧 contact@foodlane.fr
                     </p>
                   </div>
                 </div>
@@ -2370,7 +2624,7 @@ export default function MenuPage() {
                       • les directives applicables en France
                       <br />
                       <br />
-                      L&apos;utilisateur peut exercer ses droits via contact.foodlane@gmail.com.
+                      L&apos;utilisateur peut exercer ses droits via contact@foodlane.fr.
                     </p>
                   </div>
                   <div>
@@ -2436,7 +2690,7 @@ export default function MenuPage() {
                     <p className="space-y-1">
                       L&apos;utilisateur peut supprimer son compte à tout moment depuis l&apos;application ou en envoyant une demande à :
                       <br />
-                      📧 contact.foodlane@gmail.com
+                      📧 contact@foodlane.fr
                       <br />
                       <br />
                       La suppression du compte entraîne l&apos;effacement des données conformément au RGPD.
@@ -2484,7 +2738,7 @@ export default function MenuPage() {
                       <br />
                       Adresse : 55 rue Grignan, 13006 Marseille, France
                       <br />
-                      Email : contact.foodlane@gmail.com
+                      Email : contact@foodlane.fr
                       <br />
                       <br />
                       Amandine Fontaine est Responsable du traitement au sens du RGPD.
@@ -2641,7 +2895,7 @@ export default function MenuPage() {
                       <br />
                       via l&apos;adresse suivante :
                       <br />
-                      contact.foodlane@gmail.com
+                      contact@foodlane.fr
                       <br />
                       <br />
                       En cas de réclamation, il peut contacter :
@@ -2679,7 +2933,7 @@ export default function MenuPage() {
                     <p className="space-y-1">
                       Pour toute question ou demande liée aux données personnelles :
                       <br />
-                      📧 contact.foodlane@gmail.com
+                      📧 contact@foodlane.fr
                     </p>
                   </div>
                 </div>
@@ -2859,12 +3113,43 @@ export default function MenuPage() {
                 type="number"
                 min="1"
                 value={preferences.nombrePersonnes}
-                onChange={(e) =>
-                  updatePreference("nombrePersonnes", parseInt(e.target.value) || 1)
-                }
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10) || 1;
+                  updatePreference("nombrePersonnes", n);
+                  if (n !== 5) setRecipeScalingPortionsMenu(null);
+                }}
                 className="w-full px-3 py-2 rounded-lg border border-[var(--beige-border)] bg-white text-[var(--foreground)]"
               />
             </div>
+            {preferences.nombrePersonnes === 5 && (
+              <div className="mt-3">
+                <span className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                  Portions pour recettes et liste de courses
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {([4, 5, 6] as const).map((n) => {
+                    const active = (recipeScalingPortionsMenu ?? 5) === n;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                          active
+                            ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)] font-medium text-[var(--foreground)]"
+                            : "border-[var(--beige-border)] bg-white text-[var(--foreground)]"
+                        }`}
+                        onClick={() => setRecipeScalingPortionsMenu(n === 5 ? null : n)}
+                      >
+                        {n} pers.
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  Enregistré dans Supabase avec ton profil menus.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Alimentation particulière */}
@@ -2876,7 +3161,7 @@ export default function MenuPage() {
               {ALL_DIETARY_PROFILES.map((profile) => {
                 const isAvailable = isDietaryProfileAvailable(
                   profile,
-                  preferences.abonnementType
+                  subscriptionTier
                 );
                 const isSelected = (
                   preferences.regimesParticuliers as DietaryProfile[]
@@ -3072,21 +3357,31 @@ export default function MenuPage() {
                 </p>
                 <div className="rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 flex items-center justify-between">
                   <span className="font-semibold text-[var(--foreground)]">
-                    {preferences.abonnementType === "premium" ? "Premium" : "Gratuit"}
+                    {!isPremium
+                      ? "Gratuit"
+                      : billingProfile?.subscription_tier === "premium_plus"
+                        ? "Premium Plus"
+                        : "Premium"}
                   </span>
                   <span
                     className={`text-xs px-2 py-1 rounded-full ${
-                      preferences.abonnementType === "premium"
-                        ? "bg-[#D44A4A] text-white"
+                      isPremium
+                        ? billingProfile?.subscription_tier === "premium_plus"
+                          ? "bg-[#8B3A5C] text-white"
+                          : "bg-[#D44A4A] text-white"
                         : "bg-[var(--beige-card-alt)] text-[var(--beige-text-muted)]"
                     }`}
                   >
-                    {preferences.abonnementType === "premium" ? "Premium" : "Gratuit"}
+                    {!isPremium
+                      ? "Gratuit"
+                      : billingProfile?.subscription_tier === "premium_plus"
+                        ? "Plus"
+                        : "Premium"}
                   </span>
                 </div>
               </div>
 
-              {preferences.abonnementType === "free" && (
+              {!isPremium && (
                 <>
                   <div className="pt-2 border-t border-[var(--beige-border)]">
                     <p className="text-xs text-[var(--beige-text-muted)] mb-2">
@@ -3124,7 +3419,23 @@ export default function MenuPage() {
                 </>
               )}
 
-              {preferences.abonnementType === "premium" && (
+              {isPremium && subscriptionTier === "premium" && (
+                <div className="pt-2 border-t border-[var(--beige-border)]">
+                  <p className="text-xs text-[var(--beige-text-muted)] mb-2">
+                    Passer au palier supérieur (même facturation, prorata Stripe)
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void handleUpgradeToPremiumPlus()}
+                    disabled={upgradeToPlusLoading || cancelSubscriptionLoading}
+                    className="w-full px-4 py-3 rounded-xl bg-[#8B3A5C] hover:bg-[#6d2e49] disabled:opacity-60 text-white text-sm font-semibold transition-colors"
+                  >
+                    {upgradeToPlusLoading ? "Mise à niveau…" : "Passer à Premium Plus"}
+                  </button>
+                </div>
+              )}
+
+              {isPremium && (
                 <div className="pt-2 border-t border-[var(--beige-border)]">
                   <p className="text-xs text-[var(--beige-text-muted)] mb-2">
                     Gestion de l&apos;abonnement
@@ -3164,8 +3475,28 @@ export default function MenuPage() {
                     }}
                     className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
                   >
-                    Historique de facturation / Voir sur le store
+                    Historique de facturation / Portail Stripe
                   </button>
+                  {billingProfile?.cancel_at_period_end ? (
+                    <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-2 text-xs font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-950/80 dark:text-amber-50">
+                      Résiliation enregistrée — accès jusqu&apos;au{" "}
+                      <strong>
+                        {formatDateFrDMY(
+                          billingProfile.current_period_end || billingProfile.premium_end_date
+                        ) || "fin de période"}
+                      </strong>
+                      .
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleCancelSubscription()}
+                      disabled={cancelSubscriptionLoading || upgradeToPlusLoading}
+                      className="mt-2 w-full px-4 py-2 rounded-xl border border-red-200 bg-red-50 text-red-900 text-xs font-semibold hover:bg-red-100 disabled:opacity-60 dark:border-red-900 dark:bg-red-950/50 dark:text-red-100"
+                    >
+                      {cancelSubscriptionLoading ? "Redirection…" : "Résilier l'abonnement"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -3176,26 +3507,26 @@ export default function MenuPage() {
       {activeTab === "contact" && (
         <section className="space-y-4">
           <h2 className="text-xl font-bold text-[var(--foreground)] mb-4">
-            Contact & Support
+            {t("contact.title")}
           </h2>
 
           {/* FAQ */}
           <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
             <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
-              Questions fréquentes (FAQ)
+              {t("contact.faq.title")}
             </h2>
             <div className="space-y-3">
-              {FAQ_ITEMS.map((item, index) => (
+              {Array.from({ length: FAQ_COUNT }, (_, i) => i + 1).map((num) => (
                 <details
-                  key={index}
+                  key={num}
                   className="border-b border-[var(--beige-border)] pb-2 last:border-0"
                 >
                   <summary className="text-sm font-medium text-[var(--foreground)] cursor-pointer list-none flex items-center justify-between">
-                    <span>{item.question}</span>
+                    <span>{t(`faq.${num}.q`)}</span>
                     <span className="text-[var(--beige-text-muted)]">+</span>
                   </summary>
                   <p className="text-xs text-[var(--beige-text-light)] mt-2 pl-2">
-                    {item.answer}
+                    {t(`faq.${num}.a`)}
                   </p>
                 </details>
               ))}
@@ -3205,28 +3536,12 @@ export default function MenuPage() {
           {/* Formulaire de contact */}
           {!showContactForm ? (
             <div className="space-y-3">
-              {/* Formulaire de retour utilisateur */}
-              <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4 text-center">
-                <p className="text-sm text-[var(--foreground)] mb-2 font-semibold">
-                  💬 Retour utilisateur
-                </p>
-                <p className="text-xs text-[var(--text-secondary)] mb-3">
-                  Aide-nous à améliorer l'application en partageant ton expérience
-                </p>
-                <a
-                  href="https://docs.google.com/forms/d/e/1FAIpQLScGB2x-Bkk_GObFgDEeiSdhIle7od7XL1r8R86fV0m_sXqswQ/viewform?usp=dialog"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white text-xs font-semibold transition-colors"
-                >
-                  Donner mon avis
-                </a>
-              </div>
-              
+              <UserFeedback />
+
               {/* Formulaire de contact classique */}
               <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4 text-center">
                 <p className="text-sm text-[var(--foreground)] mb-3">
-                  Tu n&apos;as pas trouvé de réponse dans la FAQ ?
+                  {t("contact.form.not_found")}
                 </p>
                 <button
                   onClick={() => setShowContactForm(true)}

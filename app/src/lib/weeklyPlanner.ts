@@ -1,12 +1,20 @@
 import type { Recipe } from "./recipes";
-import { filterRecipesByEquipment } from "./dietaryProfiles";
 import {
   displayUnitForStorage,
   normalizeGroceryUnit,
+  sanitizeGroceryIngredientName,
+  stripEpicesCondimentsLabel,
   type GroceryCategorySlug,
 } from "./groceryFormat";
-import { getCurrentSeason, scoreRecipeSeasonRelevance, type Season } from "./seasonalFilter";
-import { sortMealTypesForDisplay } from "./mealOrder";
+import {
+  filterRecipesForSeasonalPool,
+  getCurrentSeason,
+  isExplicitlyWrongSeason,
+  isRecipeSeasonal,
+  scoreRecipeSeasonRelevance,
+  type Season,
+} from "./seasonalFilter";
+import { sortMealTypesForDisplay, sortMealsByDisplayOrder } from "./mealOrder";
 import {
   EQUIPMENT_KEY_SYNONYMS,
   type BreakfastPreferenceKey,
@@ -20,12 +28,29 @@ import {
   addRecipeDominantKeys,
   dominantKeysConflictWithDay,
 } from "./proteinVariety";
+import { isRecipeCompatibleWithMealType } from "./mealCompatibility";
+import {
+  addRecipeDiversityTags,
+  wouldExceedWeekDiversityCap,
+} from "./recipeDiversity";
+import { rerankWithMMR } from "./mmrRanking";
+import {
+  filterRecipesByStructuredDietaryRules,
+  recipeContainsUserAllergen,
+} from "./dietaryStructured";
+import {
+  getMainCarb,
+  getMainProteins,
+  getMainVegetables,
+  getDishType,
+} from "./recipeFields";
 import {
   formatScaledIngredient,
   getScalingFactor,
   normalizeIngredientNameForMerge,
   parseIngredientLine as parseIngredientWithUnits,
   scaleIngredientQuantity,
+  type ParsedIngredient,
 } from "./ingredientQuantities";
 
 export type GroceryCategory = GroceryCategorySlug;
@@ -104,7 +129,15 @@ function normalize(s: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0153/g, "oe")
+    .replace(/œ/g, "oe")
+    .replace(/Œ/g, "oe")
     .trim();
+}
+
+function isCookingOilIngredientName(line: string): boolean {
+  const n = normalize(line).replace(/['’]/g, "");
+  return /\bhuile\b/.test(n);
 }
 
 function shuffleArray<T>(items: T[]): T[] {
@@ -125,6 +158,10 @@ function pickWeightedRandom<T>(items: { item: T; weight: number }[]): T | null {
     if (cursor <= 0) return it.item;
   }
   return items[items.length - 1]?.item ?? null;
+}
+
+function recipeUseCount(usage: Map<number, number>, recipeId: number): number {
+  return usage.get(recipeId) || 0;
 }
 
 export function maxMinutesForCookingPreference(key: CookingTimeKey): number {
@@ -213,17 +250,70 @@ function skillMatchesDifficulty(
   return 6;
 }
 
+/**
+ * Compteurs intra-semaine permettant un scoring "soft" qui pénalise les
+ * répétitions DANS la semaine en cours (en plus des caps durs gérés ailleurs).
+ *
+ * Tous les champs sont optionnels — si le caller ne les passe pas, le scoring
+ * dégrade en simple scoring statique (comportement historique).
+ */
+export interface WeekCounters {
+  /** Compteur d'occurrences déjà sélectionnées dans la semaine, par famille de protéine. */
+  protein?: Map<string, number>;
+  /** Compteur par main_carb normalisé. */
+  carb?: Map<string, number>;
+  /** Compteur par main_vegetables (un par légume). */
+  vegetables?: Map<string, number>;
+  /** Compteur par dish_type normalisé. */
+  dish?: Map<string, number>;
+}
+
 export function scoreRecipeForPlanner(
   recipe: Recipe,
   season: Season,
-  prefs: PlannerPreferences
+  prefs: PlannerPreferences,
+  recentFamilyCounts?: Map<string, number>,
+  weekCounters?: WeekCounters
 ): number {
   let score = 50;
   score += skillMatchesDifficulty(prefs.cooking_skill_level, recipe.difficulte || "");
+
+  // Pertinence saison (0–35) : toujours un peu pour éviter les plats très hors-saison.
+  const seasonPts = scoreRecipeSeasonRelevance(recipe, season);
+  score += prefs.seasonal_preference ? seasonPts : Math.round(seasonPts * 0.35);
+
+  // Pénalités saisonnières renforcées.
   if (prefs.seasonal_preference) {
-    // Score 0-35 : utilise la colonne DB `saison` en priorité, ingrédients en fallback
-    score += scoreRecipeSeasonRelevance(recipe, season);
+    if (isExplicitlyWrongSeason(recipe, season)) {
+      // Recette explicitement hors-saison (ex. "hiver" en mai) : quasi-exclusion.
+      score -= 45;
+    } else {
+      // "Toute l’année" ou sans tag, mais avec ingrédients typiques de la saison opposée.
+      const saison = recipe.saison?.toLowerCase() || "";
+      const isAllYear = saison.includes("toute") || saison.includes("annee") || saison.includes("année");
+      if (isAllYear || !recipe.saison) {
+        const opposites: Season[] = season === "printemps" || season === "été"
+          ? ["automne", "hiver"]
+          : ["printemps", "été"];
+        for (const opp of opposites) {
+          if (isRecipeSeasonal(recipe, opp)) { score -= 30; break; } // était -12
+        }
+      }
+    }
   }
+
+  // Scoring doux du temps de préparation (remplace le filtre dur).
+  // L’utilisateur exprime une préférence, pas une contrainte absolue.
+  const maxMin = maxMinutesForCookingPreference(prefs.cooking_time_preference);
+  if (maxMin < 999) {
+    const prepTime = Number(recipe.temps_preparation_min);
+    if (Number.isFinite(prepTime) && prepTime > 0) {
+      if (prepTime <= maxMin) score += 12;
+      else if (prepTime <= maxMin * 1.5) score += 4;
+      else score -= Math.min(18, Math.round((prepTime - maxMin) / maxMin * 10));
+    }
+  }
+
   const ing = normalize(recipe.ingredients || "");
   for (const obj of prefs.objectives) {
     if (obj === "perte_poids") {
@@ -248,27 +338,73 @@ export function scoreRecipeForPlanner(
   for (const c of prefs.world_cuisines) {
     if (c && ing.includes(normalize(c))) score += 6;
   }
+  const familyKey = normalize((recipe.family || recipe.meal_subtype || recipe.type || "").trim());
+  if (recentFamilyCounts && familyKey) {
+    const seen = recentFamilyCounts.get(familyKey) || 0;
+    if (seen > 0) score -= Math.min(28, seen * 7);
+  }
+
+  // ── Pénalité INTRA-SEMAINE (mode "menu varié") ───────────────────────────
+  // Cible : décourager les recettes qui répètent une protéine / un féculent /
+  // un type de plat / un légume déjà présents dans la semaine en cours.
+  // Pénalités progressives : la 2ᵉ occurrence est tolérée, la 3ᵉ devient
+  // coûteuse, la 4ᵉ quasiment éliminatoire. Combinées avec les caps durs.
+  if (weekCounters) {
+    if (weekCounters.protein) {
+      for (const p of getMainProteins(recipe)) {
+        const seen = weekCounters.protein.get(p) || 0;
+        if (seen === 1) score -= 6;
+        else if (seen === 2) score -= 18;
+        else if (seen >= 3) score -= 40;
+      }
+    }
+    if (weekCounters.carb) {
+      const carb = getMainCarb(recipe);
+      if (carb && carb !== "sans" && carb !== "aucun") {
+        const seen = weekCounters.carb.get(carb) || 0;
+        if (seen === 1) score -= 5;
+        else if (seen === 2) score -= 16;
+        else if (seen >= 3) score -= 35;
+      }
+    }
+    if (weekCounters.vegetables) {
+      for (const v of getMainVegetables(recipe)) {
+        const seen = weekCounters.vegetables.get(v) || 0;
+        if (seen === 1) score -= 3;
+        else if (seen >= 2) score -= 10;
+      }
+    }
+    if (weekCounters.dish) {
+      const d = getDishType(recipe);
+      if (d) {
+        const seen = weekCounters.dish.get(d) || 0;
+        if (seen === 1) score -= 8;
+        else if (seen === 2) score -= 22;
+        else if (seen >= 3) score -= 45;
+      }
+    }
+  }
+
   return score;
-}
-
-function preferSweetForMeal(meal: PlannerMealType): boolean {
-  return meal === "breakfast" || meal === "snack";
-}
-
-function isSavoryRecipe(r: Recipe): boolean {
-  const t = normalize(r.type || "");
-  return t.includes("sale") || t.includes("salé") || (!t.includes("sucre") && !t.includes("sucré"));
-}
-
-function isSweetRecipe(r: Recipe): boolean {
-  const t = normalize(r.type || "");
-  return t.includes("sucre") || t.includes("sucré");
 }
 
 export interface PlannedMeal {
   meal_type: PlannerMealType;
   recipe_id: number;
   recipe_name: string;
+  recipe_payload: Recipe;
+  /** UUID partage par tous les creneaux d'un meme batch cooking. */
+  batch_group_id?: string | null;
+  /** TRUE = creneau ou la preparation est reellement faite, FALSE = reprise. */
+  is_batch_origin?: boolean | null;
+  /** Nombre total de portions preparees (= household_size * nb_creneaux du batch). */
+  batch_servings?: number | null;
+}
+
+export interface LockedSlot {
+  day_index: number;
+  meal_type: string;
+  recipe_id: number;
   recipe_payload: Recipe;
 }
 
@@ -300,98 +436,284 @@ export function buildWeeklyPlan(
   recipes: Recipe[],
   prefs: PlannerPreferences,
   weekStartISO: string,
-  recentlyUsed?: Map<number, number>
+  recentlyUsed?: Map<number, number>,
+  recentFamilyCounts?: Map<string, number>,
+  lockedMeals?: LockedSlot[]
 ): PlannedWeek {
   const season = getCurrentSeason();
-  const maxMin = maxMinutesForCookingPreference(prefs.cooking_time_preference);
   const exclusions = buildExclusionList(prefs);
-  const equipStrings = expandEquipmentKeys(prefs.equipment_keys);
 
-  let pool = filterRecipesByStrictExclusions(recipes, exclusions);
-  const afterEx = pool.length;
-  pool = filterRecipesByMaxPrepTime(pool, maxMin);
-  if (equipStrings.length > 0) {
-    pool = filterRecipesByEquipment(pool, equipStrings);
+  // Filtres durs :
+  //  1. Règles diététiques structurées (allergens / diet_tags / main_protein)
+  //  2. Regex legacy sur ingredients (fallback pour les recettes mal taggées).
+  //
+  // ⚠️ NB : le filtre `equipement` n'est PLUS appliqué comme contrainte dure.
+  // En pratique, la plupart des utilisateurs ne renseignent pas exhaustivement
+  // leur cuisine et le filtre éliminait jusqu'à 80% des recettes (toute
+  // recette demandant "blender" ou "robot" sautait).
+  let pool = filterRecipesByStructuredDietaryRules(
+    recipes,
+    prefs.dietary_filters,
+    prefs.allergy_keys
+  );
+  pool = filterRecipesByStrictExclusions(pool, exclusions);
+
+  // Filtre saisonnier DUR : quand seasonal_preference est actif, seules les recettes
+  // de la saison courante, "toute l'année" ou sans tag entrent dans le pool.
+  // Aucune recette hors-saison (hiver en mai, etc.) ne peut apparaître, même en fallback.
+  const basePool = prefs.seasonal_preference
+    ? filterRecipesForSeasonalPool(pool, season)
+    : pool;
+
+  // ── Exclusion `recentlyUsed` PAR CRÉNEAU ───────────────────────────────
+  // Ancien comportement : on regardait la taille GLOBALE du pool frais. Si elle
+  // était >= 2× minSlotsNeeded, on excluait toutes les recettes récentes.
+  // Problème : un pool global de 1700 cache parfaitement un pool breakfast de
+  // 0 (toutes les breakfast ont été utilisées dans les 6 derniers menus).
+  //
+  // Nouveau : on calcule la TAILLE par créneau et on n'applique l'exclusion
+  // `recentlyUsed` que pour les créneaux où elle laisse encore assez de marge
+  // (≥ 3× planning_days). Sinon on garde toutes les recettes pour ce créneau.
+  const recentIds = recentlyUsed ? new Set(recentlyUsed.keys()) : new Set<number>();
+  const workingPool: Recipe[] = (() => {
+    if (recentIds.size === 0) return basePool;
+    const result = new Set<Recipe>();
+    for (const mealType of prefs.meal_types) {
+      const compatibleAll = basePool.filter((r) =>
+        isRecipeCompatibleWithMealType(r, mealType)
+      );
+      const fresh = compatibleAll.filter((r) => !recentIds.has(r.id));
+      // Seuil souple : il faut au moins 3× planning_days recettes fraîches pour
+      // ce créneau, sinon on autorise les recettes récentes (le scoring les
+      // pénalisera quand même).
+      const threshold = prefs.planning_days * 3;
+      const chosen = fresh.length >= threshold ? fresh : compatibleAll;
+      for (const r of chosen) result.add(r);
+    }
+    return Array.from(result);
+  })();
+
+  console.log(
+    `[planner] Tailles pool : recipes=${recipes.length} ` +
+      `after_dietary+exclusions+equipment=${pool.length} ` +
+      `after_seasonal=${basePool.length} ` +
+      `recentlyUsed=${recentIds.size} ` +
+      `working=${workingPool.length}`
+  );
+  // Détail par créneau pour identifier les zones faibles
+  const perMealDiagnostic: Record<string, number> = {};
+  for (const mt of prefs.meal_types) {
+    perMealDiagnostic[mt] = workingPool.filter((r) => isRecipeCompatibleWithMealType(r, mt)).length;
   }
+  console.log(`[planner] Compatibles par créneau dans workingPool :`, perMealDiagnostic);
 
-  const scored = pool
+  const scoredRaw = workingPool
     .map((r) => {
-      let s = scoreRecipeForPlanner(r, season, prefs);
-      // Priorité 2 : pénalité cross-générations sur les recettes récemment servies
+      let s = scoreRecipeForPlanner(r, season, prefs, recentFamilyCounts);
+      // Pénalité graduelle pour les recettes récemment utilisées. S'applique
+      // toujours (pas conditionnel) : si la recette est dans le pool malgré
+      // l'historique, c'est qu'on en a besoin, mais on la pénalise.
       if (recentlyUsed) {
         const menusAgo = recentlyUsed.get(r.id);
-        if (menusAgo === 0) s = Math.max(0, s - 50);      // dernier menu
-        else if (menusAgo === 1) s = Math.max(0, s - 25); // avant-dernier
-        else if (menusAgo === 2) s = Math.max(0, s - 10); // 3e menu précédent
+        if (menusAgo === 0) s = Math.max(0, s - 60);
+        else if (menusAgo === 1) s = Math.max(0, s - 35);
+        else if (menusAgo === 2) s = Math.max(0, s - 20);
+        else if (menusAgo === 3) s = Math.max(0, s - 10);
+        else if (menusAgo === 4) s = Math.max(0, s - 5);
       }
       return { r, s };
     })
     .sort((a, b) => b.s - a.s);
+  // Bruit d'exploration plus large pour éviter que les mêmes recettes gagnent à chaque tirage.
+  const scored = rerankWithMMR(scoredRaw, 0.72).map(({ r, s }) => ({
+    r,
+    s: s + Math.random() * 45,
+  }));
+
+  // Index des slots verrouillés par jour
+  const lockedByDay = new Map<number, Map<string, PlannedMeal>>();
+  for (const lm of lockedMeals || []) {
+    if (!lockedByDay.has(lm.day_index)) lockedByDay.set(lm.day_index, new Map());
+    lockedByDay.get(lm.day_index)!.set(lm.meal_type, {
+      meal_type: lm.meal_type as PlannerMealType,
+      recipe_id: lm.recipe_id,
+      recipe_name: lm.recipe_payload.nom_recette || "Recette",
+      recipe_payload: lm.recipe_payload,
+    });
+  }
 
   const used = new Set<number>();
+  const usageCount = new Map<number, number>();
+  const weekTagCounts = new Map<string, number>();
+  // Compteurs intra-semaine pour pénalité dynamique (mode "menu varié").
+  const weekCounters: WeekCounters = {
+    protein: new Map<string, number>(),
+    carb: new Map<string, number>(),
+    vegetables: new Map<string, number>(),
+    dish: new Map<string, number>(),
+  };
   const days: PlannedDay[] = [];
   const sortedSlots = sortMealTypesForDisplay(prefs.meal_types);
+  const totalSlots = prefs.planning_days * sortedSlots.length;
+
+  // Helper : pénalité de variété dynamique pour une recette donnée, en fonction
+  // des compteurs intra-semaine au moment du tirage. Renvoie un nombre POSITIF
+  // à soustraire au poids.
+  const dynamicVarietyPenalty = (r: Recipe): number => {
+    let p = 0;
+    for (const pr of getMainProteins(r)) {
+      const seen = weekCounters.protein!.get(pr) || 0;
+      if (seen === 1) p += 6;
+      else if (seen === 2) p += 18;
+      else if (seen >= 3) p += 40;
+    }
+    const carb = getMainCarb(r);
+    if (carb && carb !== "sans" && carb !== "aucun") {
+      const seen = weekCounters.carb!.get(carb) || 0;
+      if (seen === 1) p += 5;
+      else if (seen === 2) p += 16;
+      else if (seen >= 3) p += 35;
+    }
+    for (const v of getMainVegetables(r)) {
+      const seen = weekCounters.vegetables!.get(v) || 0;
+      if (seen >= 1) p += 5 * seen;
+    }
+    const dish = getDishType(r);
+    if (dish) {
+      const seen = weekCounters.dish!.get(dish) || 0;
+      if (seen === 1) p += 8;
+      else if (seen === 2) p += 22;
+      else if (seen >= 3) p += 45;
+    }
+    return p;
+  };
+
+  const updateWeekCounters = (r: Recipe): void => {
+    for (const pr of getMainProteins(r)) {
+      weekCounters.protein!.set(pr, (weekCounters.protein!.get(pr) || 0) + 1);
+    }
+    const carb = getMainCarb(r);
+    if (carb && carb !== "sans" && carb !== "aucun") {
+      weekCounters.carb!.set(carb, (weekCounters.carb!.get(carb) || 0) + 1);
+    }
+    for (const v of getMainVegetables(r)) {
+      weekCounters.vegetables!.set(v, (weekCounters.vegetables!.get(v) || 0) + 1);
+    }
+    const dish = getDishType(r);
+    if (dish) {
+      weekCounters.dish!.set(dish, (weekCounters.dish!.get(dish) || 0) + 1);
+    }
+  };
 
   for (let d = 0; d < prefs.planning_days; d++) {
     const dayDominant = new Set<string>();
     const meals: PlannedMeal[] = [];
+
+    // Pré-remplissage des slots verrouillés pour ce jour
+    const dayLocked = lockedByDay.get(d);
+    if (dayLocked) {
+      for (const [mt, lm] of dayLocked) {
+        if (!sortedSlots.includes(mt as PlannerMealType)) continue;
+        used.add(lm.recipe_id);
+        usageCount.set(lm.recipe_id, (usageCount.get(lm.recipe_id) || 0) + 1);
+        addRecipeDominantKeys(lm.recipe_payload, dayDominant);
+        addRecipeDiversityTags(lm.recipe_payload, weekTagCounts);
+        updateWeekCounters(lm.recipe_payload);
+        meals.push(lm);
+      }
+    }
     for (const meal of sortedSlots) {
-      const wantSweet = preferSweetForMeal(meal);
+      // Slot déjà rempli par un verrou → on passe
+      if (meals.some((m) => m.meal_type === meal)) continue;
+
+      // Helper : convertit un score en poids final en appliquant la pénalité dynamique.
+      const weightFor = (r: Recipe, s: number, reusePenalty = 0): number => {
+        return Math.max(1, s - dynamicVarietyPenalty(r) - reusePenalty);
+      };
+
       let picked: Recipe | null = null;
       const primaryCandidates = scored.filter(({ r }) => {
         if (used.has(r.id)) return false;
-        if (wantSweet && isSavoryRecipe(r) && !isSweetRecipe(r)) return false;
-        if (!wantSweet && isSweetRecipe(r) && meal !== "snack") return false;
+        if (!isRecipeCompatibleWithMealType(r, meal)) return false;
         if (dominantKeysConflictWithDay(r, dayDominant)) return false;
+        if (wouldExceedWeekDiversityCap(r, weekTagCounts, totalSlots)) return false;
         return true;
       });
       if (primaryCandidates.length > 0) {
-        // Pool élargi à 30 : moins biaisé vers le top absolu, plus de variété entre générations
-        const top = primaryCandidates.slice(0, Math.min(30, primaryCandidates.length));
-        const randomizedTop = shuffleArray(top);
+        // Sélection pondérée sur TOUS les candidats compatibles — aucune troncature.
+        // Le score est ajusté dynamiquement par la pénalité intra-semaine.
         picked =
           pickWeightedRandom(
-            randomizedTop.map(({ r, s }, idx) => ({
-              item: r,
-              weight: Math.max(1, (top.length - idx) * 0.6 + s / 10),
-            }))
+            primaryCandidates.map(({ r, s }) => ({ item: r, weight: weightFor(r, s) }))
           ) ?? null;
       }
       if (!picked) {
         const secondaryCandidates = scored.filter(({ r }) => {
           if (used.has(r.id)) return false;
-          if (wantSweet && isSavoryRecipe(r) && !isSweetRecipe(r)) return false;
-          if (!wantSweet && isSweetRecipe(r) && meal !== "snack") return false;
+          if (!isRecipeCompatibleWithMealType(r, meal)) return false;
+          if (wouldExceedWeekDiversityCap(r, weekTagCounts, totalSlots)) return false;
           return true;
         });
         if (secondaryCandidates.length > 0) {
-          const top = secondaryCandidates.slice(0, Math.min(20, secondaryCandidates.length));
-          const randomizedTop = shuffleArray(top);
           picked =
             pickWeightedRandom(
-              randomizedTop.map(({ r, s }, idx) => ({
-                item: r,
-                weight: Math.max(1, (top.length - idx) * 0.7 + s / 12),
-              }))
+              secondaryCandidates.map(({ r, s }) => ({ item: r, weight: weightFor(r, s) }))
             ) ?? null;
         }
       }
       if (!picked) {
-        const anyRemaining = scored.filter(({ r }) => !used.has(r.id));
+        const anyRemaining = scored.filter(({ r }) => !used.has(r.id) && isRecipeCompatibleWithMealType(r, meal));
         if (anyRemaining.length > 0) {
-          const randomized = shuffleArray(anyRemaining).slice(0, Math.min(25, anyRemaining.length));
           picked =
             pickWeightedRandom(
-              randomized.map(({ r, s }, idx) => ({
-                item: r,
-                weight: Math.max(1, (randomized.length - idx) * 0.5 + s / 15),
-              }))
+              anyRemaining.map(({ r, s }) => ({ item: r, weight: weightFor(r, s) }))
             ) ?? null;
         }
       }
+      // Réutilisation graduelle: max de variété, semaine toujours complète.
+      if (!picked) {
+        const reuseWithDominant = scored.filter(({ r }) => {
+          if (recipeUseCount(usageCount, r.id) >= 2) return false;
+          if (!isRecipeCompatibleWithMealType(r, meal)) return false;
+          if (dominantKeysConflictWithDay(r, dayDominant)) return false;
+          if (wouldExceedWeekDiversityCap(r, weekTagCounts, totalSlots)) return false;
+          return true;
+        });
+        if (reuseWithDominant.length > 0) {
+          picked =
+            pickWeightedRandom(
+              reuseWithDominant.map(({ r, s }) => ({
+                item: r,
+                weight: weightFor(r, s, recipeUseCount(usageCount, r.id) * 22),
+              }))
+            ) ?? reuseWithDominant[0].r;
+        }
+      }
+      if (!picked) {
+        const reuseLoose = scored.filter(({ r }) => {
+          if (recipeUseCount(usageCount, r.id) >= 3) return false;
+          if (!isRecipeCompatibleWithMealType(r, meal)) return false;
+          return true;
+        });
+        if (reuseLoose.length > 0) {
+          picked =
+            pickWeightedRandom(
+              reuseLoose.map(({ r, s }) => ({
+                item: r,
+                weight: weightFor(r, s, recipeUseCount(usageCount, r.id) * 24),
+              }))
+            ) ?? reuseLoose[0].r;
+        }
+      }
+      if (!picked && scored.length > 0) {
+        picked = shuffleArray(scored)[0].r;
+      }
       if (!picked) break;
       used.add(picked.id);
+      usageCount.set(picked.id, recipeUseCount(usageCount, picked.id) + 1);
       addRecipeDominantKeys(picked, dayDominant);
+      addRecipeDiversityTags(picked, weekTagCounts);
+      updateWeekCounters(picked);
       meals.push({
         meal_type: meal,
         recipe_id: picked.id,
@@ -406,13 +728,187 @@ export function buildWeeklyPlan(
     });
   }
 
-  return {
-    days,
-    meta: {
-      season,
-      recipes_considered: recipes.length,
-      recipes_after_filters: pool.length,
+  // Pool de secours pour le finalize : on garde TOUS les filtres durs (diététiques,
+  // allergènes, équipement) mais on retire le filtre saisonnier ET recentlyUsed.
+  // Le finalize l'utilise uniquement si le pool principal n'a rien de compatible
+  // pour un créneau — c'est ce qui évite les slots vides à breakfast/snack.
+  const fallbackPool = pool;
+
+  return finalizeIncompleteWeeklyPlan(
+    {
+      days,
+      meta: {
+        season,
+        recipes_considered: recipes.length,
+        recipes_after_filters: basePool.length,
+      },
     },
+    prefs,
+    weekStartISO,
+    scored,
+    fallbackPool
+  );
+}
+
+/**
+ * Garantit `planning_days` jours et tous les créneaux `meal_types`, en complétant avec le catalogue
+ * trié par score (réutilisation de recettes autorisée). Idempotent si le plan est déjà complet.
+ *
+ * @param fallbackPool — pool LARGE (filtres durs seulement, sans saison ni recentlyUsed)
+ *                       utilisé EN ULTIME RECOURS quand `scored` n'a aucune recette compatible
+ *                       avec un créneau. Permet de ne JAMAIS laisser un slot vide à cause d'un
+ *                       filtre saisonnier ou historique trop strict.
+ */
+export function finalizeIncompleteWeeklyPlan(
+  plan: PlannedWeek,
+  prefs: PlannerPreferences,
+  weekStartISO: string,
+  scored: { r: Recipe; s: number }[],
+  fallbackPool?: Recipe[]
+): PlannedWeek {
+  const sortedSlots = sortMealTypesForDisplay(prefs.meal_types);
+  const newDays: PlannedDay[] = [];
+  const usageCount = new Map<number, number>();
+  const weekUsed = new Set<number>();
+  const weekTagCounts = new Map<string, number>();
+  const totalSlots = prefs.planning_days * sortedSlots.length;
+
+  // Compteurs par créneau de "slots vides faute de candidat compatible"
+  // Sert au diagnostic dans les logs serveur.
+  const emergencyByMeal: Record<string, number> = {};
+
+  for (let d = 0; d < prefs.planning_days; d++) {
+    const existingDay = plan.days[d];
+    const bySlot = new Map<PlannerMealType, PlannedMeal>();
+    for (const m of existingDay?.meals ?? []) {
+      bySlot.set(m.meal_type, m);
+    }
+
+    const dayDominant = new Set<string>();
+    const dayRecipeIds = new Set<number>();
+    const meals: PlannedMeal[] = [];
+
+    // allowReuse=false (défaut) : exclut les recettes déjà utilisées cette semaine.
+    // allowReuse=true : dernier recours quand le pool unique est épuisé.
+    const chooseCandidate = (meal: PlannerMealType, strictDominant: boolean, allowReuse = false): Recipe | null => {
+      const candidates = scored.filter(({ r }) => {
+        if (!allowReuse && weekUsed.has(r.id)) return false; // exclusion stricte par défaut
+        if (dayRecipeIds.has(r.id)) return false;
+        if (!isRecipeCompatibleWithMealType(r, meal)) return false;
+        if (strictDominant && dominantKeysConflictWithDay(r, dayDominant)) return false;
+        if (wouldExceedWeekDiversityCap(r, weekTagCounts, totalSlots)) return false;
+        return true;
+      });
+      return pickWeightedRandom(
+        candidates.map(({ r, s }) => {
+          const reuse = recipeUseCount(usageCount, r.id);
+          return { item: r, weight: Math.max(1, s - reuse * 28) };
+        })
+      );
+    };
+
+    for (const meal of sortedSlots) {
+      const kept = bySlot.get(meal);
+      if (kept) {
+        const duplicateInWeek = weekUsed.has(kept.recipe_id);
+        const duplicateInDay = dayRecipeIds.has(kept.recipe_id);
+        // Rejeter aussi les recettes incompatibles avec le créneau (ex. recette dîner en petit-déj)
+        const incompatibleType = !isRecipeCompatibleWithMealType(kept.recipe_payload, meal);
+        if (!duplicateInWeek && !duplicateInDay && !incompatibleType) {
+          addRecipeDominantKeys(kept.recipe_payload, dayDominant);
+          dayRecipeIds.add(kept.recipe_id);
+          weekUsed.add(kept.recipe_id);
+          usageCount.set(kept.recipe_id, recipeUseCount(usageCount, kept.recipe_id) + 1);
+          addRecipeDiversityTags(kept.recipe_payload, weekTagCounts);
+          meals.push(kept);
+          continue;
+        }
+      }
+
+      // Cascade : unique + strict → unique + souple → reuse + strict → reuse + souple
+      let pick: Recipe | null =
+        chooseCandidate(meal, true) ??
+        chooseCandidate(meal, false) ??
+        chooseCandidate(meal, true, true) ??
+        chooseCandidate(meal, false, true);
+
+      // Fallback d'urgence : on accepte de RÉUTILISER une recette plusieurs fois,
+      // mais JAMAIS de placer une recette incompatible avec le créneau.
+      if (!pick && scored.length > 0) {
+        const compatible = scored.filter(({ r }) => isRecipeCompatibleWithMealType(r, meal));
+        if (compatible.length > 0) {
+          const ranked = compatible
+            .map(({ r, s }) => ({
+              r,
+              adjusted:
+                (!dayRecipeIds.has(r.id) ? 200 : -1000) +
+                (!weekUsed.has(r.id) ? 80 : 0) +
+                s -
+                recipeUseCount(usageCount, r.id) * 18 +
+                Math.random(),
+            }))
+            .sort((a, b) => b.adjusted - a.adjusted);
+          pick = ranked[0]?.r ?? null;
+        }
+      }
+
+      // ULTIME RECOURS : aucune recette compatible dans le scored pool. On va
+      // piocher dans le fallbackPool (filtres durs seulement, pas de saison ni
+      // de filtre historique). Mieux vaut une recette légèrement hors-saison ou
+      // déjà vue récemment qu'un slot vide.
+      if (!pick && fallbackPool && fallbackPool.length > 0) {
+        const compatibleFallback = fallbackPool.filter(
+          (r) => isRecipeCompatibleWithMealType(r, meal) && !dayRecipeIds.has(r.id)
+        );
+        if (compatibleFallback.length > 0) {
+          // Préférer une recette non utilisée cette semaine, puis aléatoire
+          const fresh = compatibleFallback.filter((r) => !weekUsed.has(r.id));
+          const pickFrom = fresh.length > 0 ? fresh : compatibleFallback;
+          pick = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+          emergencyByMeal[meal] = (emergencyByMeal[meal] || 0) + 1;
+        }
+      }
+
+      if (!pick) {
+        console.warn(
+          `[planner] Aucune recette compatible avec "${meal}" — slot vide. ` +
+            `Vérifier meal_slot dans recipes_v2 et les filtres utilisateur.`
+        );
+        continue;
+      }
+
+      addRecipeDominantKeys(pick, dayDominant);
+      dayRecipeIds.add(pick.id);
+      weekUsed.add(pick.id);
+      usageCount.set(pick.id, recipeUseCount(usageCount, pick.id) + 1);
+      addRecipeDiversityTags(pick, weekTagCounts);
+      meals.push({
+        meal_type: meal,
+        recipe_id: pick.id,
+        recipe_name: pick.nom_recette || "Recette",
+        recipe_payload: pick,
+      });
+    }
+
+    newDays.push({
+      day_index: d,
+      day_date: addDaysISO(weekStartISO, d),
+      meals: sortMealsByDisplayOrder(meals),
+    });
+  }
+
+  // Logging diagnostic : on peut voir dans les logs combien de slots ont nécessité
+  // le pool de secours (donc filtres saison/historique probablement trop stricts).
+  if (Object.keys(emergencyByMeal).length > 0) {
+    console.log(
+      `[planner] Pool de secours utilisé pour : ${JSON.stringify(emergencyByMeal)} ` +
+        `(scored=${scored.length}, fallback=${fallbackPool?.length ?? 0})`
+    );
+  }
+
+  return {
+    ...plan,
+    days: newDays,
   };
 }
 
@@ -424,47 +920,51 @@ export interface GroceryListItemDraft {
   source_recipe_ids: number[];
 }
 
-function inferCategory(line: string): GroceryCategorySlug {
+export function inferGroceryCategory(line: string): GroceryCategorySlug {
   const n = normalize(line);
 
-  // Épices & condiments — liste étendue
+  // Épices & condiments — liste étendue (les câpres → épicerie salée)
   if (
-    /\b(sel\b|poivre|curry|cumin|paprika|piment|coriandre|gingembre|bouillon|moutarde|ketchup|mayonnaise|wasabi|sauce soja|sauce worcestershire|miso|harissa|tabasco|nuoc mam|nuoc-mam|herbes de provence|thym|romarin|laurier|cannelle|muscade|noix de muscade|persil|basilic|menthe|ciboulette|estragon|cerfeuil|origan|aneth|safran|quatre epices|cardamome|clou de girofle|girofle|fenugrec|pate de curry|relish|cornichon|capre|zaatar|ras el hanout|epice|assaisonnement|herbe|aromate|fleur de sel|sel de mer|poivre noir|poivre blanc|piment d'espelette)\b/.test(n)
+    /\b(sel\b|poivre|curry|cumin|paprika|piment|coriandre|gingembre|bouillon|moutarde|ketchup|mayonnaise|wasabi|sauce soja|sauce worcestershire|miso|harissa|tabasco|nuoc mam|nuoc-mam|herbes de provence|thym|romarin|laurier|cannelle|muscade|noix de muscade|persil|basilic|menthe|ciboulette|estragon|cerfeuil|origan|aneth|safran|quatre epices|cardamome|clou de girofle|girofle|fenugrec|pate de curry|relish|cornichon|zaatar|ras el hanout|epice|assaisonnement|herbe|aromate|fleur de sel|sel de mer|poivre noir|poivre blanc|piment d'espelette)\b/.test(n)
   )
     return "epices_condiments";
   if (/\b(vinaigre|vinaigrette|citron\b|citrons|jus de citron|jus d'orange|lime)\b/.test(n)) return "epices_condiments";
+  if (/\bhuile\b/.test(n)) return "epices_condiments";
 
   // Épicerie salée
   if (/\b(lait de coco|creme de coco|conserve|boite de|concentre de tomates|double concentre|coulis de tomates|tomates en boite|tomates pelees|pulpe de tomates|sauce tomate|bouillon de|fond de|fumet)\b/.test(n)) return "epicerie_salee";
-  if (/\b(farine|maizena|levure|bicarbonate|huile\b|huile d'olive|huile de tournesol|huile de sesame|huile de coco|huile de colza|vinaigre balsamique|sauce|moutarde|ketchup|tamari|worcestershire|nuoc|tabasco|eau gazeuse|eau minerale|eau\b)\b/.test(n)) return "epicerie_salee";
+  if (
+    /\b(farine|maizena|levure|bicarbonate|vinaigre balsamique|sauce|moutarde|ketchup|tamari|worcestershire|nuoc|tabasco|eau gazeuse|eau minerale|eau\b|capres?|olives?\s+noires?|tapenade|pignons?(\s+de\s+pin|\s+pin)?|cacahuetes?)\b/.test(n)
+  )
+    return "epicerie_salee";
 
   // Fruits & légumes — liste très étendue
   if (
-    /\b(tomate|carotte|salade|laitue|roquette|epinard|chou\b|courgette|aubergine|poivron|oignon|ail\b|echalote|poireau|celeri|fenouil|asperge|brocoli|chou-fleur|artichaut|betterave|radis|navet|pomme de terre|patate douce|potiron|courge|butternut|petit pois|haricot vert|feve|champignon|girolle|cep\b|morille|truffe|pomme\b|poire\b|banane|orange|clementine|kiwi|raisin|fraise|framboise|myrtille|cerise|peche|nectarine|abricot|prune|figue|datte|ananas|mangue|avocat|melon|pasteque|concombre|mais\b|artichaut|endive|cresson|blette|bette|navet|rutabaga|topinambour|igname|manioc|taro|papaye|grenade|litchi|carambole|goyave|passion|physalis|sureau|baie|airelle|canneberge|groseille|mure\b|noix de coco\b|citron vert|pamplemousse|kumquat)\b/.test(n)
+    /\b(tomates?|carottes?|salades?|laitues?|roquette|epinards?|chou\b|courgettes?|aubergines?|poivrons?|oignons?|oignon\s+rouge|oignon\s+blanc|ail\b|echalotes?|poireaux?|celeris?|fenouils?|asperges?|brocolis?|chou-fleur|choux?-?fleurs?|artichauts?|betteraves?|radis|navets?|potirons?|courges?|butternuts?|petits?\s+pois|haricots?\s+verts?|feves?|champignons?|girolles?|ceps?|morilles?|truffes?|pommes?\b(?!\s+de\s+terre)|poires?|bananes?|oranges?|clementines?|kiwis?|raisins?|fraises?|framboises?|myrtilles?|cerises?|peches?|nectarines?|abricots?|prunes?|figues?|dattes?|ananas|mangues?|avocats?|melons?|pasteques?|concombres?|mais\b|endives?|cressons?|blettes?|bettes?|rutabagas?|topinambours?|ignames?|maniocs?|taros?|papayes?|grenades?|litchis?|caramboles?|goyaves?|passions?|physalis|sureau|baies?|airelles?|canneberges?|groseilles?|mures?\b|noix de coco\b|citron vert|pamplemousse|kumquat)\b/.test(n)
   )
     return "fruits_legumes";
 
   // Produits laitiers — étendu
   if (
-    /\b(lait\b|yaourt|yogourt|fromage|fromage blanc|fromage frais|creme fraiche|creme liquide|creme\b|beurre|mozzarella|parmesan|emmental|cheddar|feta|ricotta|mascarpone|burrata|comte|chevre|reblochon|camembert|brie\b|roquefort|gruyere|raclette|munster|beaufort|saint-nectaire|gouda|edam|mimolette|tomme|lait de vache|lait de brebis|lait d'amande|lait de soja|lait d'avoine|lait vegetal|creme vegetal|oeufs\b|oeuf\b)\b/.test(n)
+    /\b(lait\b|yaourt|yogourt|fromage|fromage blanc|fromage frais|creme fraiche|creme liquide|creme\b|beurre|mozzarella|parmesan|emmental|cheddar|feta|ricotta|mascarpone|burrata|halloumi|pecorino|comte|chevre|reblochon|camembert|brie\b|roquefort|gruyere|raclette|munster|beaufort|saint-nectaire|gouda|edam|mimolette|tomme|lait de vache|lait de brebis|lait d'amande|lait de soja|lait d'avoine|lait vegetal|creme vegetal|cream\s+cheese|philadelphia|skyr|faisselle)\b/.test(n)
   )
     return "produits_laitiers";
 
   // Protéines — étendu
   if (
-    /\b(poulet|dinde|canard|boeuf|porc|veau|agneau|mouton|lapin|gibier|jambon|lardons|bacon|saucisse|chorizo|merguez|andouille|chipolata|boudin|pate de campagne|rillette|saumon|thon|cabillaud|maquereau|sardine|anchois|crevette|moule\b|calamar|poulpe|bar\b|daurade|dorade|truite|lieu|merlu|sole\b|turbot|langoustine|homard|langouste|crabe|seiche|palourde|huitre|morue|stockfish|surimi|tofu|tempeh|seitan|proteine|viande|filet|escalope|blanquette|boulette|hache|steak|roti\b|cuisse|aile\b|pilon|lardon|jambon cru|jambon cuit)\b/.test(n)
+    /\b(poulet|dinde|canard|boeuf|porc|veau|agneau|mouton|lapin|gibier|jambon|lardons|bacon|saucisse|chorizo|merguez|andouille|chipolata|boudin|pate de campagne|rillette|saumon|thon|cabillaud|maquereau|sardine|anchois|crevette|moule\b|calamar|poulpe|bar\b|daurade|dorade|truite|lieu|merlu|sole\b|turbot|langoustine|homard|langouste|crabe|seiche|palourde|huitre|morue|stockfish|surimi|tofu|tempeh|seitan|proteine|viande|filet|escalope|blanquette|boulette|hache|steak|roti\b|cuisse|aile\b|pilon|lardon|jambon cru|jambon cuit|oeufs?)\b/.test(n)
   )
     return "proteines";
 
   // Épicerie sucrée
   if (
-    /\b(sucre\b|cassonade|vergeoise|chocolat\b|praline|nutella|pate a tartiner|confiture|miel|sirop d'erable|sirop d agave|sirop\b|vanille|extrait de vanille|pepites|cacao|poudre de cacao|noix de coco rapee|raisins secs|fruits secs|abricot sec|figue seche|pruneau|datte|cranberry|chips de|cookie|biscuit|gateau|cake|madeleine|brioche|pain au lait|cereale|muesli|granola|flocon d'avoine)\b/.test(n)
+    /\b(sucre\b|cassonade|vergeoise|chocolat\b|praline|nutella|pate a tartiner|confiture|miel|sirop d'erable|sirop d agave|sirop\b|vanille|extrait de vanille|pepites|cacao|poudre de cacao|noix de coco rapee|raisins secs|fruits secs|abricot sec|figue seche|pruneau|datte|cranberry|chips de|cookie|biscuit|gateau|cake|madeleine|cereale|muesli|granola|flocon d'avoine)\b/.test(n)
   )
     return "epicerie_sucree";
 
   // Féculents — étendu
   if (
-    /\b(pates\b|nouilles|spaghetti|penne|tagliatelle|fusilli|rigatoni|lasagne|gnocchi|riz\b|riz basmati|riz complet|riz arborio|quinoa|boulgour|semoule|couscous|polenta|avoine|lentille|pois chiche|haricot blanc|haricot rouge|flageolet|pain\b|pain de mie|pain complet|baguette|tortilla|wrap|galette|crackers|biscottes|chapelure|panure|fecule)\b/.test(n)
+    /\b(pates\b|nouilles|spaghetti|pennes?|penne|linguine|coquillettes?|tagliatelle|fusilli|rigatoni|lasagne|gnocchi|riz\b|riz basmati|riz complet|riz arborio|quinoa|boulgour|semoule|couscous|polenta|avoine|lentilles?|pois\s+chiches?|pois chiche|haricots?\s+blancs?|haricots?\s+rouges?|flageolets?|pain\b|pain de mie|pain complet|baguette|bagels?|brioche|brioches?|pain au lait|tortillas?|wrap|galette|crackers|biscottes|chapelure|panure|fecule|pommes?\s+de\s+terre|patates?\s+douces?)\b/.test(n)
   )
     return "feculents";
 
@@ -510,12 +1010,177 @@ function normalizeIngredientKey(name: string): string {
 }
 
 /**
- * Agrège les ingrédients du plan (déduplication par nom normalisé).
+ * Clé de fusion : nom canonique, avec séparation frais / conserve pour les tomates
+ * afin de ne pas additionner tomates cerises et tomates pelées en boîte.
  */
-function groceryMergeKey(name: string, unit: string | null): string {
-  const nk = normalizeIngredientKey(name);
-  const nu = normalizeGroceryUnit(unit);
-  return `${nk}\u0001${nu ?? "piece"}`;
+function groceryListMergeKey(ingredientName: string): string {
+  const nk = normalizeIngredientKey(ingredientName);
+  const n = normalize(ingredientName).replace(/['’]/g, "");
+  if (nk === "thon") {
+    if (
+      /\b(thon rouge|thon frais|sashimi|tartare|carpaccio|mi.?cuit|steak de thon|filet de thon|pave de thon|pavé de thon)\b/.test(
+        n
+      )
+    ) {
+      return `${nk}#frais`;
+    }
+    return `${nk}#conserve`;
+  }
+  if (nk === "tomate" || nk === "tomate cerise") {
+    if (
+      /\b(conserve|boite|boites|boîte|boîtes|bocal|concentre|double concentre|pelees|pelee|couli|sauce tomate|pulpe|pelées|pelée)\b/.test(
+        n
+      )
+    ) {
+      return `${nk}#conserve`;
+    }
+    return `${nk}#frais`;
+  }
+  return nk;
+}
+
+/** c.à.s. / c.à.c. → g ou ml (liste de courses lisible, sans petites mesures). */
+function convertSpoonsForGroceryList(parsed: ParsedIngredient): ParsedIngredient {
+  if (parsed.canonicalUnit !== "tbsp" || parsed.canonicalQuantity == null) return parsed;
+  if (inferGroceryCategory(parsed.name) === "epices_condiments") {
+    if (isCookingOilIngredientName(parsed.name)) {
+      /* huiles : garder la conversion c.à.s. → ml */
+    } else {
+      return { ...parsed, canonicalQuantity: null, canonicalUnit: null };
+    }
+  }
+  const n = normalize(parsed.name).replace(/['’]/g, "");
+  if (
+    /\b(huile|vinaigre|sauce soja|nuoc|tamari|lait\b|creme liquide|jus\b|eau\b|vin\b|porto|sherry|liqueur|mayonnaise|ketchup)\b/.test(
+      n
+    )
+  ) {
+    return { ...parsed, canonicalUnit: "ml", canonicalQuantity: parsed.canonicalQuantity * 15 };
+  }
+  if (/\b(miel|sirop|confiture|nutella|cacao|melasse)\b/.test(n)) {
+    return { ...parsed, canonicalUnit: "g", canonicalQuantity: parsed.canonicalQuantity * 20 };
+  }
+  if (/\b(farine|sucre|maizena|fecule|chapelure|levure chimique|bicarbonate|semoule)\b/.test(n)) {
+    return { ...parsed, canonicalUnit: "g", canonicalQuantity: parsed.canonicalQuantity * 10 };
+  }
+  return { ...parsed, canonicalUnit: "ml", canonicalQuantity: parsed.canonicalQuantity * 15 };
+}
+
+const CANNED_FISH_G: Record<string, number> = {
+  thon: 130,
+  sardine: 85,
+  maquereau: 180,
+};
+
+function groceryMergeUnitKind(raw: string | null): "g" | "ml" | "piece" | "other" {
+  if (!raw) return "other";
+  const disp = displayUnitForStorage(raw) || raw;
+  const nu = normalizeGroceryUnit(disp);
+  if (nu === "g") return "g";
+  if (nu === "ml") return "ml";
+  if (nu === "piece") return "piece";
+  const low = String(raw).toLowerCase();
+  if (/\b(boite|boîte|conserve|pot|brique)\b/.test(low)) return "piece";
+  return "other";
+}
+
+function mergeTwoQuantities(
+  mergeKey: string,
+  q1: number,
+  u1: string | null,
+  q2: number,
+  u2: string | null
+): { qty: number; unitRaw: string | null } | null {
+  const nk = mergeKey.includes("#") ? mergeKey.split("#")[0]! : mergeKey;
+  const k1 = groceryMergeUnitKind(u1);
+  const k2 = groceryMergeUnitKind(u2);
+  if (k1 === k2 && k1 !== "other") {
+    return { qty: q1 + q2, unitRaw: u1 };
+  }
+  let perCan: number | undefined = CANNED_FISH_G[nk as keyof typeof CANNED_FISH_G];
+  if (nk === "thon" && mergeKey.endsWith("#frais")) perCan = undefined;
+  if (perCan) {
+    const g1 = k1 === "g" ? q1 : k1 === "piece" ? q1 * perCan : null;
+    const g2 = k2 === "g" ? q2 : k2 === "piece" ? q2 * perCan : null;
+    if (g1 != null && g2 != null) {
+      return { qty: g1 + g2, unitRaw: "g" };
+    }
+  }
+  return null;
+}
+
+function prettyGroceryNameFromMergeKey(mergeKey: string): string {
+  const nk = mergeKey.includes("#") ? mergeKey.split("#")[0]! : mergeKey;
+  const overrides: Record<string, string> = {
+    thon: mergeKey.includes("thon#frais") ? "Thon" : "Thon en conserve",
+    sardine: "Sardines en conserve",
+    maquereau: "Maquereau en conserve",
+    saumon: "Saumon",
+    poulet: "Poulet",
+    carotte: "Carotte",
+    tomate: "Tomates",
+    "tomate cerise": "Tomates cerises",
+    oignon: "Oignon",
+    "oignon rouge": "Oignon rouge",
+    "oignon blanc": "Oignon blanc",
+    "pomme de terre": "Pomme de terre",
+    courgette: "Courgette",
+    "fromage blanc": "Fromage blanc",
+    "huile olive": "Huile d'olive",
+    "huile tournesol": "Huile de tournesol",
+    "huile colza": "Huile de colza",
+    "huile neutre": "Huile neutre",
+    "huile sesame": "Huile de sésame",
+  };
+  if (overrides[nk]) return sanitizeGroceryIngredientName(overrides[nk]!);
+  const built = nk
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  return sanitizeGroceryIngredientName(built);
+}
+
+function pickBetterGroceryCategory(a: GroceryCategorySlug, b: GroceryCategorySlug): GroceryCategorySlug {
+  if (a === b) return a;
+  if (a === "epices_condiments" || b === "epices_condiments") return "epices_condiments";
+  if (
+    (a === "fruits_legumes" && b === "epicerie_salee") ||
+    (b === "fruits_legumes" && a === "epicerie_salee")
+  ) {
+    return "epicerie_salee";
+  }
+  return a;
+}
+
+function finalizeGroceryDrafts(items: GroceryListItemDraft[]): GroceryListItemDraft[] {
+  for (const d of items) {
+    d.ingredient_name = sanitizeGroceryIngredientName(d.ingredient_name);
+    if (d.category === "epices_condiments") {
+      if (!isCookingOilIngredientName(d.ingredient_name)) {
+        d.quantity = null;
+        d.unit = null;
+        d.ingredient_name = stripEpicesCondimentsLabel(d.ingredient_name);
+      }
+      continue;
+    }
+    const nk = normalizeIngredientKey(d.ingredient_name);
+    if ((nk === "thon" || nk === "sardine" || nk === "maquereau") && d.quantity != null && d.quantity > 0) {
+      if (nk === "thon" && /\b(thon rouge|frais|sashimi|tartare|filet|steak|pave|pavé)\b/i.test(d.ingredient_name)) {
+        continue;
+      }
+      const per = CANNED_FISH_G[nk] ?? 130;
+      if (groceryMergeUnitKind(d.unit) === "g") {
+        const cans = Math.max(1, Math.ceil(d.quantity / per));
+        d.quantity = cans;
+        d.unit = null;
+        if (nk === "thon") d.ingredient_name = "Thon en conserve";
+        else if (nk === "sardine") d.ingredient_name = "Sardines en conserve";
+        else d.ingredient_name = "Maquereau en conserve";
+      }
+    }
+  }
+  return items.filter((d) => d.ingredient_name.trim().length > 0);
 }
 
 export function buildGroceryFromPlan(
@@ -524,62 +1189,102 @@ export function buildGroceryFromPlan(
 ): GroceryListItemDraft[] {
   const map = new Map<
     string,
-    { draft: GroceryListItemDraft; qty: number | null; unitRaw: string | null }
+    { draft: GroceryListItemDraft; qty: number | null; unitRaw: string | null; mergeKey: string }
   >();
 
   for (const day of plan.days) {
     for (const m of day.meals) {
+      // Batch cooking : si le créneau est une "reprise" (is_batch_origin === false),
+      // les ingrédients sont déjà comptés sur le créneau d'origine. On skip
+      // pour ne pas dupliquer les courses.
+      if (m.batch_group_id && m.is_batch_origin === false) {
+        continue;
+      }
+
       const r = m.recipe_payload;
-      const factor = getScalingFactor(r, householdSize);
+      // Pour un créneau "origin" d'un batch, on doit multiplier les
+      // ingrédients par le nombre total de créneaux servis, pas juste 1 fois
+      // le foyer. batch_servings contient déjà ce total.
+      const effectivePortions =
+        m.batch_group_id && m.is_batch_origin && m.batch_servings
+          ? m.batch_servings
+          : householdSize;
+      const factor = getScalingFactor(r, effectivePortions);
       const parts = (r.ingredients || "").split(";").map((p) => p.trim()).filter(Boolean);
       for (const part of parts) {
-        const parsed = scaleIngredientQuantity(parseIngredientWithUnits(part), factor);
+        let parsed = scaleIngredientQuantity(parseIngredientWithUnits(part), factor);
+        parsed = convertSpoonsForGroceryList(parsed);
         if (!parsed.name) continue;
         const displayLine = formatScaledIngredient(parsed);
-        const key = groceryMergeKey(parsed.name, parsed.canonicalUnit || parsed.unit);
+        const mergeKey = groceryListMergeKey(parsed.name);
+        const key = mergeKey;
         const existing = map.get(key);
-        const cat = inferCategory(parsed.name);
+        const cat = inferGroceryCategory(parsed.name);
+        const pretty = prettyGroceryNameFromMergeKey(mergeKey);
+        if (!pretty.trim()) continue;
+        const unitCanon = parsed.canonicalUnit || parsed.unit;
+        const unitStored = displayUnitForStorage(unitCanon);
+
         if (!existing) {
           map.set(key, {
+            mergeKey,
             draft: {
-              ingredient_name: parsed.name,
+              ingredient_name: pretty,
               quantity: parsed.canonicalQuantity,
-              unit: displayUnitForStorage(parsed.canonicalUnit || parsed.unit),
+              unit: unitStored,
               category: cat,
               source_recipe_ids: [r.id],
             },
             qty: parsed.canonicalQuantity,
-            unitRaw: parsed.canonicalUnit || parsed.unit,
+            unitRaw: unitCanon,
           });
         } else {
           if (!existing.draft.source_recipe_ids.includes(r.id)) {
             existing.draft.source_recipe_ids.push(r.id);
           }
-          const sameUnitKind =
-            normalizeGroceryUnit(parsed.canonicalUnit || parsed.unit) === normalizeGroceryUnit(existing.unitRaw);
-          if (sameUnitKind && parsed.canonicalQuantity != null && existing.qty != null) {
-            existing.draft.quantity = existing.qty + parsed.canonicalQuantity;
-            existing.qty = existing.draft.quantity;
-          } else if (parsed.canonicalQuantity != null && existing.qty == null) {
-            existing.draft.quantity = parsed.canonicalQuantity;
-            existing.qty = parsed.canonicalQuantity;
-            existing.draft.unit = displayUnitForStorage(parsed.canonicalUnit || parsed.unit);
-            existing.unitRaw = parsed.canonicalUnit || parsed.unit;
-          }
-          if ((parsed.canonicalUnit || parsed.unit) && !existing.unitRaw) {
-            existing.draft.unit = displayUnitForStorage(parsed.canonicalUnit || parsed.unit);
-            existing.unitRaw = parsed.canonicalUnit || parsed.unit;
-          }
-          if (existing.qty == null && !existing.draft.ingredient_name.includes(parsed.name)) {
-            // fallback lisible lorsque les unités ne peuvent pas être fusionnées
-            existing.draft.ingredient_name = `${existing.draft.ingredient_name} + ${displayLine}`;
+          existing.draft.category = pickBetterGroceryCategory(existing.draft.category, cat);
+          existing.draft.ingredient_name = prettyGroceryNameFromMergeKey(existing.mergeKey);
+
+          const qNew = parsed.canonicalQuantity;
+          const uNew = unitCanon;
+          if (qNew == null) {
+            /* garder l'existant */
+          } else if (existing.qty == null) {
+            existing.qty = qNew;
+            existing.draft.quantity = qNew;
+            existing.unitRaw = uNew;
+            existing.draft.unit = unitStored;
+          } else {
+            const merged = mergeTwoQuantities(
+              mergeKey,
+              existing.qty,
+              existing.unitRaw,
+              qNew,
+              uNew
+            );
+            if (merged) {
+              existing.qty = merged.qty;
+              existing.draft.quantity = merged.qty;
+              existing.unitRaw = merged.unitRaw;
+              existing.draft.unit = displayUnitForStorage(merged.unitRaw);
+            } else {
+              const sameKind =
+                normalizeGroceryUnit(displayUnitForStorage(existing.unitRaw) || existing.unitRaw) ===
+                normalizeGroceryUnit(unitStored || uNew);
+              if (sameKind) {
+                existing.qty = existing.qty + qNew;
+                existing.draft.quantity = existing.qty;
+              } else if (!existing.draft.ingredient_name.includes(parsed.name)) {
+                existing.draft.ingredient_name = `${existing.draft.ingredient_name} + ${displayLine}`;
+              }
+            }
           }
         }
       }
     }
   }
 
-  return [...map.values()].map((v) => v.draft);
+  return finalizeGroceryDrafts([...map.values()].map((v) => v.draft));
 }
 
 export function mergePlannerPreferences(

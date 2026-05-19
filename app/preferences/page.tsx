@@ -49,13 +49,13 @@ export default function PreferencesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF8F6] pt-6 px-4 pb-8">
-      <div className="max-w-2xl mx-auto flex items-center justify-between mb-4">
+    <div className="min-h-screen bg-[#FFF8F6] pt-6 px-4 pb-8 md:px-8 md:pt-10">
+      <div className="max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-between mb-4">
         <Link href="/tableau" className="text-sm text-[#8A4A4A]">
           ← Retour
         </Link>
       </div>
-      <div className="max-w-2xl mx-auto mb-6">
+      <div className="max-w-2xl lg:max-w-3xl mx-auto mb-6">
         <h1 className="text-2xl font-bold text-[#4a2c2c]">Mes préférences</h1>
         {saved && (
           <p className="text-sm text-green-700 mt-2">Modifications enregistrées.</p>
@@ -64,6 +64,7 @@ export default function PreferencesPage() {
       <PlannerProfileForm
         key={user.id}
         initial={initial}
+        visualVariant="foyer"
         submitLabel="Mettre à jour"
         onSubmit={async ({ preferences, equipment_keys, allergy_keys, excluded_ingredients }) => {
           const res = await plannerFetch("/preferences", {

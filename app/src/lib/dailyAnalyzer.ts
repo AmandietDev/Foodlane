@@ -267,62 +267,189 @@ function generateTipOptions(meals: MealEntry[], priorityTip: string): string[] {
   return options.slice(0, 2);
 }
 
+function uniqueTokens(values: string[], max: number): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of values) {
+    const k = v.toLowerCase().trim();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(v.trim());
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+function collectComponents(meals: MealEntry[], key: keyof ParsedMeal["components"]): string[] {
+  const acc: string[] = [];
+  for (const m of meals) {
+    const arr = m.parsed.components[key];
+    if (!Array.isArray(arr)) continue;
+    for (const t of arr) {
+      if (typeof t === "string" && t.trim()) acc.push(t.trim());
+    }
+  }
+  return uniqueTokens(acc, 8);
+}
+
 /**
- * Génère le plan pour demain (4 suggestions)
+ * Conseils concrets pour le lendemain (repas par créneau) : actions mesurables,
+ * pas des formules génériques « protéine + féculent ».
  */
 function generatePlanForTomorrow(
   meals: MealEntry[],
   context: UserContext
 ): DailySummary["plan_for_tomorrow"] {
-  const hasVeggies = meals.some(m => m.parsed.components.veggie.length > 0);
-  const proteinMeals = meals.filter(m => m.parsed.components.protein.length > 0);
-  const hasFruits = meals.some(m => m.parsed.components.fruit.length > 0);
-  
+  const hasBreakfast = meals.some((m) => m.meal_type === "breakfast");
+  const breakfastMeals = meals.filter((m) => m.meal_type === "breakfast");
+  const hasLunch = meals.some((m) => m.meal_type === "lunch");
+  const hasDinner = meals.some((m) => m.meal_type === "dinner");
+  const hasVeggies = meals.some((m) => m.parsed.components.veggie.length > 0);
+  const hasFruits = meals.some((m) => m.parsed.components.fruit.length > 0);
+  const fruitAtBreakfast = breakfastMeals.some((m) => m.parsed.components.fruit.length > 0);
+  const proteinMeals = meals.filter((m) => m.parsed.components.protein.length > 0);
+  const vegSamples = collectComponents(meals, "veggie");
+  const protSamples = collectComponents(meals, "protein");
   const isVegetarian = context.diets?.includes("vegetarian") || context.diets?.includes("vegan");
-  const hasGlutenAllergy = context.allergies?.includes("gluten");
-  
+  const isVegan = context.diets?.includes("vegan");
+  const noGluten = context.allergies?.includes("gluten");
+  const obj = context.objective;
+
   const breakfast: string[] = [];
   const lunch: string[] = [];
   const dinner: string[] = [];
   const snack: string[] = [];
-  
-  // Petit-déjeuner
-  if (hasGlutenAllergy) {
-    breakfast.push("Porridge aux flocons d'avoine sans gluten + fruits");
-    breakfast.push("Œufs brouillés + avocat + pain sans gluten");
+
+  // — Petit-déjeuner
+  if (!hasBreakfast) {
+    breakfast.push(
+      "Demain matin, bloque 12 minutes : flocons d’avoine 40 g + lait (ou boisson végétale) au micro-ondes 2 min, 1 c. à s. de graines (lin ou chia) et 1 fruit (clémentine ou pomme)."
+    );
+    breakfast.push(
+      "Alternative salée : 2 tartines de pain complet + 1 œuf au plat + tomates en rondelles + poivre — tu ajoutes fibres et protéines sans préparation longue."
+    );
+  } else if (!fruitAtBreakfast && !hasFruits) {
+    breakfast.push(
+      "Ajoute un fruit entier au petit-déj demain (banane à emporter, ou 120 g de fruits rouges) : viser 1 portion fruit aide vitamine C et potassium dès le matin."
+    );
+    breakfast.push(
+      "Si tu as faim avant midi : yaourt grec nature 125 g + 1 c. à s. de purée d’amande complète + cannelle — mieux qu’un viennoisis seul en sucres rapides."
+    );
   } else {
-    breakfast.push("Tartines complètes + fromage blanc + fruit");
-    breakfast.push("Œufs + pain complet + tomate");
+    const v = vegSamples[0];
+    breakfast.push(
+      v
+        ? `Demain matin, varie sans te compliquer : tartine complète + fromage frais + fines lamelles de ${v} (crues ou poêlées 2 min).`
+        : "Demain matin, prépare 150–200 g de légumes crus (concombre, radis, carotte râpée) avec fromage frais allégé : fibres + calcium en peu de temps."
+    );
+    breakfast.push(
+      "Hydratation : 1 grand verre d’eau au réveil ; café ou thé 10–15 min après le repas pour ne pas freiner l’absorption du fer des céréales."
+    );
   }
-  
-  // Déjeuner
-  if (isVegetarian) {
-    lunch.push("Salade de quinoa + légumineuses + légumes");
-    lunch.push("Bowl de légumes + tofu + riz");
+
+  if (isVegan) {
+    breakfast[0] =
+      "Demain matin : porridge d’avoine (sans gluten si besoin) + lait d’avoine + 1 c. à s. de beurre de cacahuète + banane écrasée — protéines végétales et sucres lents.";
+    breakfast[1] =
+      "Ou galettes de sarrasin + houmous + roquette + graines de courge torréfiées (1 petite poignée) pour une version salée express.";
+  } else if (noGluten) {
+    breakfast[0] =
+      "Demain matin : galettes de sarrasin sans gluten + chèvre frais + fruit, ou flocons d’avoine sans gluten + lait + fruit.";
+    breakfast[1] =
+      "Si tu pars tôt : shaker préparé la veille (boisson au riz + protéine en poudre sans gluten + banane mixée) à boire dès le réveil.";
+  }
+
+  // — Déjeuner
+  if (!hasVeggies) {
+    lunch.push(
+      "Demain midi, vise une assiette « moitié légumes » : poêlée 300 g (brocoli, carotte, courgette) à l’huile d’olive (1 c. à s.), ail, citron — cuisson wok 5–6 min."
+    );
+    lunch.push(
+      isVegetarian
+        ? "Complète avec 150 g de légumineuses égouttées (pois chiches ou lentilles corail) + 80 g de quinoa cuit : tu sécurises protéines et satiété."
+        : "Ajoute 120–150 g de protéine maigre (filet de poulet à la poêle, lieu noir au four, ou steak haché 5 % dans une poêle antiadhésive sans matière grasse ajoutée)."
+    );
+  } else if (proteinMeals.length < 2) {
+    lunch.push(
+      isVegetarian
+        ? "Demain midi, double la protéine végétale : bol 200 g riz complet + 150 g tempeh mariné (soja + jus de citron + paprika) sur lit de salade."
+        : "Demain midi, une protéine simple : 2 œufs mollet sur salade OU 120 g thon naturel égoutté mélangé à 150 g fromage blanc 0 % + ciboulette."
+    );
+    lunch.push(
+      "Portion féculent midi : 80 g pesés crus de pâtes complètes ou riz complet (équivalent standard pour un après-midi actif sans somnolence)."
+    );
   } else {
-    lunch.push("Salade composée + protéine (poulet/poisson) + féculent");
-    lunch.push("Légumes + viande/poisson + riz ou pâtes");
+    const p = protSamples[0] ?? "ta protéine habituelle";
+    const v = vegSamples[0] ?? "tes légumes de saison";
+    lunch.push(
+      `Demain midi, en 20 min : wok très chaud sur ${v}, puis ${p} en morceaux réguliers pour une cuisson homogène ; termine au citron.`
+    );
+    lunch.push(
+      "Assaisonnement mesuré : 1 c. à s. d’huile au total pour l’assiette + herbes fraîches (aneth, coriandre) pour du goût sans sel en excès."
+    );
   }
-  
-  // Dîner
-  if (context.objective === "weight_loss") {
-    dinner.push("Légumes vapeur + poisson + petite portion de féculents");
-    dinner.push("Soupe de légumes + protéine + pain complet");
+
+  if (!hasLunch) {
+    lunch[0] =
+      "Tu n’as pas noté de déjeuner : demain midi, prépare une lunchbox veille au soir (crudités + féculent + boîte de protéine) pour ne pas grignoter sur le pouce.";
+    lunch[1] =
+      "Si cantine / extérieur : repère une assiette où tu vois des légumes visibles + une protéine identifiable (évite la formule 100 % frites + soda).";
+  }
+
+  // — Dîner
+  if (obj === "weight_loss") {
+    dinner.push(
+      "Demain soir : 400–500 mL de soupe maison de légumes + 100–120 g de poisson blanc vapeur + 3 c. à s. de riz complet cuit (≈ 60 g cuit) pour finir léger mais nourri."
+    );
+    dinner.push(
+      "Sauce : remplace crème fraîche par 150 g fromage blanc 0 % + 1 c. à c. moutarde + bouillon — même onctuosité, moins de lipides saturés."
+    );
+  } else if (obj === "muscle_gain") {
+    dinner.push(
+      "Demain soir : 150 g pommes de terre rôties aux herbes + 150 g protéine (viande/poisson) ou 200 g tofu pressé + salade verte à volonté."
+    );
+    dinner.push(
+      "Option récup : 250 ml lait ou boisson protéinée + 20 g poudre + fruits rouges 1 h avant le coucher si entraînement en fin de journée."
+    );
   } else {
-    dinner.push("Légumes + protéine + féculents");
-    dinner.push("Plat complet équilibré (légumes + protéine + féculents)");
+    dinner.push(
+      "Demain soir, plat « une poêle » : courgettes + oignon + pois chiches égouttés + œufs brouillés + cumin/paprika — peu de vaisselle, beaucoup de fibres."
+    );
+    dinner.push(
+      "Après 20 h, évite sucres rapides seuls : infusion + 2 carrés chocolat noir ≥ 70 % si envie sucrée, ou fromage + quelques noisettes."
+    );
   }
-  
-  // Collation
+
+  if (!hasDinner) {
+    dinner[0] =
+      "Tu n’as pas noté de dîner : demain, cuisine 15 min plus tôt que d’habitude (alarme 19 h) pour éviter le grignotage devant un écran affamé.";
+    dinner[1] =
+      "Repère au frigo 2 légumes + 1 protéine + 1 féculent avant la journée : moins de décision « à froid » le soir.";
+  }
+
+  // — Collation
   if (!hasFruits) {
-    snack.push("Fruit frais");
-    snack.push("Yaourt + fruits");
+    snack.push(
+      "Entre 16 h et 18 h : 1 fruit + 7 amandes ou noisettes (≈ 15 g) pour tenir jusqu’au dîner sans craquer sur le sucre ultra-transformé."
+    );
+    snack.push(
+      "Salée express : 150 g tomates cerises + mozzarella 60 g + basilic + 1 c. à c. huile d’olive mesurée sur l’assiette."
+    );
   } else {
-    snack.push("Fruit ou légume cru");
-    snack.push("Petite poignée de noix");
+    snack.push(
+      "Goûter demain : yaourt nature + 1 c. à s. purée d’amande complète + cannelle + max 15 g raisins secs (portion sucre maîtrisée)."
+    );
+    snack.push(
+      "Si sport : banane mûre + compote sans sucre ajouté (100 g) environ 45 min avant l’effort pour une montée d’énergie progressive."
+    );
   }
-  
-  return { breakfast, lunch, dinner, snack };
+
+  return {
+    breakfast: breakfast.slice(0, 2),
+    lunch: lunch.slice(0, 2),
+    dinner: dinner.slice(0, 2),
+    snack: snack.slice(0, 2),
+  };
 }
 
 /**

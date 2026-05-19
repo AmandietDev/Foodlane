@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   type UserPreferences,
@@ -9,18 +9,22 @@ import {
   isLoggedIn,
   logout,
 } from "../src/lib/userPreferences";
+import { onSubscriptionStateChanged } from "../src/lib/subscriptionSyncEvents";
 import { supabase, isSupabaseConfigured } from "../src/lib/supabaseClient";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { usePremium } from "../contexts/PremiumContext";
+import { getSubscriptionAccountMessage } from "../src/lib/subscriptionDisplay";
 import ErrorMessage from "../components/ErrorMessage";
 
 export default function AccountPage() {
   const router = useRouter();
   const { user } = useSupabaseSession();
-  const { isPremium, refreshProfile } = usePremium();
+  const { isPremium, refreshProfile, profile } = usePremium();
   const [isEditing, setIsEditing] = useState(false);
   const [isNewAccount, setIsNewAccount] = useState(false);
   const [loadingPortal, setLoadingPortal] = useState(false);
+  const [cancelSubscriptionLoading, setCancelSubscriptionLoading] = useState(false);
+  const portalReturnHandledRef = useRef(false);
   const [formData, setFormData] = useState<UserPreferences>(() => {
     if (typeof window !== "undefined") {
       return loadPreferences();
@@ -73,6 +77,40 @@ export default function AccountPage() {
     }
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    return onSubscriptionStateChanged(() => {
+      const p = loadPreferences();
+      setFormData((prev) => ({
+        ...prev,
+        abonnementType: p.abonnementType,
+        premiumStartDate: p.premiumStartDate,
+        premiumExpirationDate: p.premiumExpirationDate,
+      }));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("stripe_portal_return") !== "1") {
+      portalReturnHandledRef.current = false;
+      return;
+    }
+    if (portalReturnHandledRef.current) return;
+    portalReturnHandledRef.current = true;
+    void (async () => {
+      await refreshProfile();
+      const p = loadPreferences();
+      setFormData((prev) => ({
+        ...prev,
+        abonnementType: p.abonnementType,
+        premiumStartDate: p.premiumStartDate,
+        premiumExpirationDate: p.premiumExpirationDate,
+      }));
+    })();
+    window.history.replaceState({}, "", window.location.pathname);
+  }, [refreshProfile]);
 
   const handleInputChange = (
     field: keyof UserPreferences,
@@ -403,12 +441,14 @@ export default function AccountPage() {
               Modifier mon profil
             </button>
             
-            {/* Section Compte - Gestion d'abonnement (discret) */}
-            {isPremium && user && (
+            {/* Abonnement : statut (tous les comptes) + actions Stripe si Premium payant */}
+            {user && !isNewAccount && (
               <div className="pt-3 border-t border-[var(--beige-border)]">
                 <p className="text-xs text-[var(--beige-text-muted)] mb-2 text-center">
-                  Compte Premium actif
+                  {getSubscriptionAccountMessage(profile).statusLine}
                 </p>
+                {isPremium && (
+                  <>
                 <button
                   onClick={async () => {
                     if (!user) return;
@@ -433,36 +473,65 @@ export default function AccountPage() {
                       setLoadingPortal(false);
                     }
                   }}
-                  disabled={loadingPortal}
+                  disabled={loadingPortal || cancelSubscriptionLoading}
                   className="w-full py-2 px-4 text-sm font-medium text-white bg-[#D44A4A] hover:bg-[#C03A3A] rounded-xl transition-colors disabled:opacity-50"
                 >
-                  {loadingPortal ? "Chargement..." : "Gérer mon abonnement"}
+                  {loadingPortal ? "Chargement..." : "Gérer mon abonnement (Stripe)"}
                 </button>
+                {profile?.cancel_at_period_end ? (
+                  <p className="mt-2 rounded-lg border border-amber-400 bg-amber-100/90 p-3 text-center text-xs font-medium text-amber-950 dark:border-amber-600 dark:bg-amber-900/50 dark:text-amber-50">
+                    {getSubscriptionAccountMessage(profile).detailTu}{" "}
+                    Pour annuler la résiliation, utilise le portail Stripe (bouton ci-dessus).
+                  </p>
+                ) : (
                 <button
                   onClick={async () => {
                     if (!user) return;
-                    if (!confirm("Confirmer la résiliation de ton abonnement Premium ? Tu perdras l'accès aux fonctionnalités premium à la fin de la période en cours.")) return;
-                    setLoadingPortal(true);
+                    if (
+                      !confirm(
+                        "Tu vas être redirigé vers Stripe pour confirmer la résiliation. Tu reviendras ensuite sur cette page."
+                      )
+                    )
+                      return;
+                    setCancelSubscriptionLoading(true);
                     try {
                       const response = await fetch("/api/billing/portal", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ userId: user.id }),
+                        body: JSON.stringify({
+                          userId: user.id,
+                          intent: "cancel_subscription",
+                          returnTo: "compte",
+                        }),
                       });
-                      if (!response.ok) throw new Error("Erreur portail");
-                      const { url } = await response.json();
-                      if (url) window.open(url, "_blank");
-                    } catch {
-                      alert("Impossible d'ouvrir le portail de résiliation.");
+                      const data = (await response.json().catch(() => ({}))) as {
+                        error?: string;
+                        details?: string;
+                        url?: string;
+                      };
+                      if (!response.ok) {
+                        throw new Error(
+                          [data.error, data.details].filter(Boolean).join("\n\n") ||
+                            "Impossible d’ouvrir Stripe."
+                        );
+                      }
+                      if (!data.url) throw new Error("URL Stripe non reçue.");
+                      window.location.assign(data.url);
+                    } catch (e) {
+                      console.error("[Account] résiliation (portail):", e);
+                      alert(e instanceof Error ? e.message : "Erreur lors de l’ouverture de Stripe.");
                     } finally {
-                      setLoadingPortal(false);
+                      setCancelSubscriptionLoading(false);
                     }
                   }}
-                  disabled={loadingPortal}
+                  disabled={loadingPortal || cancelSubscriptionLoading}
                   className="w-full py-2 px-4 text-xs text-[var(--beige-text-muted)] hover:text-red-600 transition-colors underline disabled:opacity-50"
                 >
-                  Résilier mon abonnement
+                  {cancelSubscriptionLoading ? "Redirection…" : "Résilier mon abonnement"}
                 </button>
+                )}
+                  </>
+                )}
               </div>
             )}
             
@@ -761,7 +830,7 @@ export default function AccountPage() {
                   • les directives applicables en France
                   <br />
                   <br />
-                  L&apos;utilisateur peut exercer ses droits via contact.foodlane@gmail.com.
+                  L&apos;utilisateur peut exercer ses droits via contact@foodlane.fr.
                 </p>
               </div>
               <div>
@@ -817,7 +886,7 @@ export default function AccountPage() {
                 <p className="space-y-1">
                   L&apos;utilisateur peut supprimer son compte à tout moment depuis l&apos;application ou en envoyant une demande à :
                   <br />
-                  📧 contact.foodlane@gmail.com
+                  📧 contact@foodlane.fr
                   <br />
                   <br />
                   La suppression du compte entraîne l&apos;effacement des données conformément au RGPD.

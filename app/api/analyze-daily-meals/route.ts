@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getUserIdFromRequest } from "../../src/lib/supabaseServer";
+import { monthPeriodKey, tryConsumeFreemiumQuota } from "../../src/lib/usageQuotasServer";
+import { FREE_DIETITIAN_TEXT_ANALYSES_PER_MONTH } from "../../src/lib/freemiumLimits";
 
 /**
  * API pour analyser les repas de la journée avec IA
  * Utilise OpenAI ou Anthropic (Claude) pour générer des conseils nutritionnels personnalisés
  * Retourne 2-3 points positifs et 1-2 axes d'amélioration doux
+ *
+ * Gratuit : quota mensuel (texte uniquement). Premium / Premium Plus : illimité.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -13,6 +18,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Aucun repas fourni" },
         { status: 400 }
+      );
+    }
+
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    }
+
+    const quota = await tryConsumeFreemiumQuota(
+      userId,
+      "analyze_meal",
+      monthPeriodKey(),
+      FREE_DIETITIAN_TEXT_ANALYSES_PER_MONTH
+    );
+    if (!quota.allowed) {
+      return NextResponse.json(
+        {
+          error: "Limite atteinte",
+          details: `Tu as utilisé tes ${FREE_DIETITIAN_TEXT_ANALYSES_PER_MONTH} analyses gratuites ce mois-ci. Passe à Premium pour l’assistant diététicien texte illimité.`,
+          limit: quota.limit,
+          count: quota.count,
+        },
+        { status: 429 }
       );
     }
 

@@ -46,10 +46,10 @@ export const ALL_DIETARY_PROFILES: DietaryProfile[] = [
  */
 export function isDietaryProfileAvailable(
   profile: DietaryProfile,
-  subscriptionType: "free" | "premium"
+  subscriptionType: "free" | "premium" | "premium_plus"
 ): boolean {
-  if (subscriptionType === "premium") {
-    return true; // Premium a accès à tout
+  if (subscriptionType === "premium" || subscriptionType === "premium_plus") {
+    return true;
   }
   return FREE_DIETARY_PROFILES.includes(profile);
 }

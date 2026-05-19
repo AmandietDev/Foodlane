@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchRecipes } from "../../../src/lib/recipes";
 import { createClient } from "@supabase/supabase-js";
 import type { Recipe } from "../../../src/lib/recipes";
+import {
+  getCurrentSeason,
+  scoreRecipeSeasonRelevance,
+  type Season,
+} from "../../../src/lib/seasonalFilter";
 
 /**
  * API de recherche de recettes avec scoring de pertinence
@@ -120,109 +125,6 @@ function recipeIngredientNames(recipe: Recipe): string[] {
     .filter((ing) => ing.length > 0);
 }
 
-// Fonction pour déterminer la saison actuelle
-function getCurrentSeason(): "printemps" | "été" | "automne" | "hiver" {
-  const now = new Date();
-  const month = now.getMonth() + 1; // 1-12
-  const day = now.getDate();
-
-  // Printemps : 21 mars - 20 juin
-  if ((month === 3 && day >= 21) || month === 4 || month === 5 || (month === 6 && day < 21)) {
-    return "printemps";
-  }
-  // Été : 21 juin - 22 septembre
-  if ((month === 6 && day >= 21) || month === 7 || month === 8 || (month === 9 && day < 23)) {
-    return "été";
-  }
-  // Automne : 23 septembre - 20 décembre
-  if ((month === 9 && day >= 23) || month === 10 || month === 11 || (month === 12 && day < 21)) {
-    return "automne";
-  }
-  // Hiver : 21 décembre - 20 mars
-  return "hiver";
-}
-
-// Dictionnaire des ingrédients saisonniers (normalisés)
-const seasonalIngredients: Record<string, string[]> = {
-  printemps: [
-    "asperge", "asperges", "artichaut", "artichauts", "petit pois", "petits pois", "radis", "radis rose",
-    "fraise", "fraises", "cerise", "cerises", "rhubarbe", "épinard", "épinards", "epinard", "epinards",
-    "salade verte", "laitue", "carotte primeur", "carottes primeur", "navet", "navets", "oignon nouveau",
-    "oignons nouveaux", "aillet", "aillets", "menthe", "ciboulette", "persil", "basilic"
-  ],
-  été: [
-    "tomate", "tomates", "courgette", "courgettes", "aubergine", "aubergines", "poivron", "poivrons",
-    "concombre", "concombres", "haricot vert", "haricots verts", "maïs", "mais", "melon", "pastèque",
-    "pêche", "pêches", "peche", "peches", "abricot", "abricots", "nectarine", "nectarines",
-    "cerise", "cerises", "framboise", "framboises", "mûre", "mures", "myrtille", "myrtilles",
-    "basilic", "menthe", "coriandre", "estragon", "thym", "romarin"
-  ],
-  automne: [
-    "potiron", "potirons", "citrouille", "citrouilles", "courge", "courges", "butternut", "patate douce",
-    "patates douces", "champignon", "champignons", "cèpe", "cepe", "girolle", "girolles",
-    "châtaigne", "chataigne", "châtaignes", "chataignes", "noix", "noisette", "noisettes",
-    "raisin", "raisins", "pomme", "pommes", "poire", "poires", "prune", "prunes",
-    "mûre", "mures", "figue", "figues", "chou", "choux", "brocoli", "brocolis",
-    "chou-fleur", "choux-fleurs", "choufleur", "choufleurs", "endive", "endives"
-  ],
-  hiver: [
-    "chou", "choux", "chou de bruxelles", "choux de bruxelles", "chou kale", "choux kale",
-    "brocoli", "brocolis", "chou-fleur", "choux-fleurs", "choufleur", "choufleurs",
-    "endive", "endives", "mâche", "mache", "scarole", "scaroles", "céleri", "celeri",
-    "céleri-rave", "celeri-rave", "panais", "topinambour", "topinambours", "rutabaga",
-    "rutabagas", "orange", "oranges", "oranges", "clémentine", "clementine", "clémentines",
-    "clementines", "mandarine", "mandarines", "pamplemousse", "pamplemousses", "kiwi", "kiwis",
-    "poireau", "poireaux", "oignon", "oignons", "échalote", "echalote", "échalotes", "echalotes"
-  ]
-};
-
-// Fonction pour détecter si une recette contient des ingrédients de saison
-function detectSeasonalIngredients(recipe: Recipe, season: string): number {
-  const normalizedIngredients = normalizeText(recipe.ingredients || "");
-  const seasonIngredients = seasonalIngredients[season as keyof typeof seasonalIngredients] || [];
-  
-  // Extraire les ingrédients de la recette (sans quantités)
-  const ingredientsList = (recipe.ingredients || "")
-    .split(";")
-    .map(ing => {
-      const parts = ing.trim().split(/\s+/);
-      const units = ['g', 'kg', 'ml', 'l', 'cl', 'dl', 'cuillere', 'cuilleres', 'tasse', 'tasses', 'pincee', 'pincées', 'pincees', 'soupe', 'cafe', 'the', 'd', 'de', "d'"];
-      let startIdx = 0;
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        if (/^\d+([.,]\d+)?$/.test(part) || units.some(u => part.toLowerCase().includes(u))) {
-          startIdx = i + 1;
-        } else {
-          break;
-        }
-      }
-      return startIdx < parts.length ? parts.slice(startIdx).join(" ") : ing.trim();
-    })
-    .map(ing => normalizeText(ing))
-    .filter(ing => ing.length > 0);
-  
-  let matchCount = 0;
-  const matchedIngredients = new Set<string>(); // Pour éviter les doublons
-  
-  seasonIngredients.forEach(ingredient => {
-    const normalizedIngredient = normalizeText(ingredient);
-    
-    // Vérifier dans le texte complet normalisé
-    if (normalizedIngredients.includes(normalizedIngredient)) {
-      matchedIngredients.add(normalizedIngredient);
-    } else {
-      // Vérifier dans chaque ingrédient individuellement
-      ingredientsList.forEach(ing => {
-        if (ing.includes(normalizedIngredient) || normalizedIngredient.includes(ing)) {
-          matchedIngredients.add(normalizedIngredient);
-        }
-      });
-    }
-  });
-
-  return matchedIngredients.size;
-}
-
 // Fonction pour calculer le score de pertinence d'une recette
 function calculateRecipeScore(
   recipe: Recipe,
@@ -230,7 +132,7 @@ function calculateRecipeScore(
   selectedIngredients: string[],
   userAllergies: string[] = [],
   userDiets: string[] = [],
-  currentSeason?: string
+  currentSeason?: Season
 ): { score: number; reasons: string[]; coverage: number; matchedIngredientsCount: number } {
   let score = 0;
   const reasons: string[] = [];
@@ -360,13 +262,14 @@ function calculateRecipeScore(
     }
   }
 
-  // 5. Bonus saisonnier (adaptation aux saisons)
-  const seasonalMatchCount = detectSeasonalIngredients(recipe, season);
-  if (seasonalMatchCount > 0) {
-    // Bonus progressif : +15 pour 1 ingrédient de saison, +25 pour 2+, +35 pour 3+
-    const seasonalBonus = seasonalMatchCount === 1 ? 15 : seasonalMatchCount === 2 ? 25 : 35;
-    score += seasonalBonus;
-    reasons.push(`Saison ${season} (${seasonalMatchCount} ingrédient${seasonalMatchCount > 1 ? "s" : ""})`);
+  // 5. Pertinence saisonnière (colonne DB `saison` prioritaire, ingrédients en secours)
+  const seasonalPts = scoreRecipeSeasonRelevance(recipe, season);
+  if (seasonalPts > 0) {
+    score += seasonalPts;
+    if (seasonalPts >= 35) reasons.push("Très bonne adéquation saison");
+    else if (seasonalPts >= 20) reasons.push("Recette toute saison / polyvalente");
+    else if (seasonalPts >= 15) reasons.push("Ingrédients de saison");
+    else reasons.push("Saison proche (transition)");
   }
 
   // 6. Filtre dur : allergies (exclusion)
@@ -493,17 +396,21 @@ export async function GET(request: NextRequest) {
 
     // Si aucun ingrédient n'est sélectionné, retourner des recettes aléatoires du type sélectionné
     if (selectedIngredients.length === 0 && query === "") {
-      // Mélanger et prendre quelques recettes aléatoires
-      const shuffled = [...filteredRecipes];
+      const season = getCurrentSeason();
+      const ranked = [...filteredRecipes].sort(
+        (a, b) => scoreRecipeSeasonRelevance(b, season) - scoreRecipeSeasonRelevance(a, season)
+      );
+      const pool = ranked.slice(0, Math.min(120, ranked.length));
+      const shuffled = [...pool];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      
-      const randomRecipes = shuffled.slice(0, 8).map(recipe => ({
+
+      const randomRecipes = shuffled.slice(0, 8).map((recipe) => ({
         recipe,
-        score: 10, // Score de base pour les recettes aléatoires
-        reasons: ["Recette du type sélectionné"]
+        score: 10 + scoreRecipeSeasonRelevance(recipe, season),
+        reasons: ["Recette du type sélectionné", "Pondération saison actuelle"],
       }));
 
       return NextResponse.json({

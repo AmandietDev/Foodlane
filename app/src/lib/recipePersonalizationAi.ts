@@ -32,8 +32,16 @@ export async function scoreRecipesForUserProfile(
   }
 
   const { scoreRecipeForPlanner } = await import("./weeklyPlanner");
-  const { getCurrentSeason } = await import("./seasonalFilter");
+  const { filterRecipesBySeasonSmart, getCurrentSeason, getSeasonName } = await import(
+    "./seasonalFilter"
+  );
   const season = getCurrentSeason();
+  if (prefs.seasonal_preference) {
+    pool = filterRecipesBySeasonSmart(pool, season);
+  }
+  if (pool.length === 0) {
+    return { scored: [], usedAi: false };
+  }
 
   // Étape 1 : score heuristique rapide sur tout le pool filtré (pas de limite de taille)
   const heuristicScored = pool
@@ -65,6 +73,7 @@ export async function scoreRecipesForUserProfile(
     equipements: (r.equipements || "").slice(0, 150),
   }));
 
+  const seasonLabel = getSeasonName(season);
   const system = `Tu es un moteur de recommandation de recettes alimentaires expert en nutrition.
 Tu reçois le profil complet d’un utilisateur et une liste de recettes candidates.
 Tu dois scorer chaque recette de 0 à 100 selon sa pertinence pour cet utilisateur.
@@ -72,6 +81,8 @@ Tu dois scorer chaque recette de 0 à 100 selon sa pertinence pour cet utilisate
 Règles absolues :
 - Score 0 et exclusion immédiate si la recette contient un allergène déclaré.
 - Score 0 si la recette est incompatible avec le régime alimentaire de l’utilisateur.
+
+Contexte calendrier : nous sommes en ${seasonLabel}. Chaque recette a un champ "saison" (ex. "printemps été", "automne hiver", "toute l'année"). Pénalise fortement les recettes manifestement hors saison lorsque "saison" contredit la période ; valorise "toute l'année" et les correspondances directes.
 
 Critères de scoring (sur 100 au total) :
 - Compatibilité intolérances / exclusions : jusqu’à 20 pts

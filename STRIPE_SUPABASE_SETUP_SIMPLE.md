@@ -2,6 +2,8 @@
 
 Ce guide explique comment configurer l'intégration Stripe ↔ Supabase pour gérer les abonnements Premium, **sans utiliser Stripe CLI**.
 
+> **Tu as déjà tes Price IDs (`price_...`) ?** Suis le guide pas à pas dédié : **`GUIDE_STRIPE_APRES_PRICE_IDS.md`**.
+
 ---
 
 ## 📋 Prérequis
@@ -20,8 +22,10 @@ Ajoute ces variables dans ton fichier `.env.local` (pour le développement) et d
 ```env
 # Stripe - Clés API
 STRIPE_SECRET_KEY=sk_test_... (ta clé secrète Stripe en mode test)
-STRIPE_PRICE_ID_MENSUEL=price_... (ID du prix mensuel créé dans Stripe)
-STRIPE_PRICE_ID_ANNUEL=price_... (ID du prix annuel créé dans Stripe)
+STRIPE_PRICE_ID_PREMIUM_MENSUEL=price_...
+STRIPE_PRICE_ID_PREMIUM_ANNUEL=price_...
+STRIPE_PRICE_ID_PREMIUM_PLUS_MENSUEL=price_...
+STRIPE_PRICE_ID_PREMIUM_PLUS_ANNUEL=price_...
 STRIPE_WEBHOOK_SECRET=whsec_... (on va le récupérer à l'étape suivante)
 
 # Supabase - Service Role (pour les webhooks uniquement)
@@ -41,8 +45,10 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000 (en dev)
 | Variable | Rôle | Où la trouver |
 |----------|------|---------------|
 | `STRIPE_SECRET_KEY` | Clé secrète Stripe pour les API | Stripe Dashboard → Developers → API keys → Secret key |
-| `STRIPE_PRICE_ID_MENSUEL` | ID du prix mensuel (9,99€/mois) | Stripe Dashboard → Products → [Ton produit] → Price ID |
-| `STRIPE_PRICE_ID_ANNUEL` | ID du prix annuel (79€/an) | Stripe Dashboard → Products → [Ton produit] → Price ID |
+| `STRIPE_PRICE_ID_PREMIUM_MENSUEL` | ID prix mensuel Premium | Products → Premium → Price ID |
+| `STRIPE_PRICE_ID_PREMIUM_ANNUEL` | ID prix annuel Premium | Idem |
+| `STRIPE_PRICE_ID_PREMIUM_PLUS_MENSUEL` | ID prix mensuel Premium Plus | Products → Plus → Price ID |
+| `STRIPE_PRICE_ID_PREMIUM_PLUS_ANNUEL` | ID prix annuel Premium Plus | Idem |
 | `STRIPE_WEBHOOK_SECRET` | Secret pour vérifier les webhooks | Stripe Dashboard → Developers → Webhooks → [Ton endpoint] → Signing secret |
 | `SUPABASE_SERVICE_ROLE_KEY` | Clé admin Supabase (bypass RLS) | Supabase Dashboard → Settings → API → service_role key |
 
@@ -50,28 +56,29 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000 (en dev)
 
 ## 🔵 ÉTAPE 2 : Créer les produits et prix dans Stripe
 
-### 2.1 Créer le produit Premium Mensuel
+Recommandation : **un seul produit** « Foodlane Premium » avec **deux prix récurrents** (mensuel + annuel), tous deux en **EUR**.
+
+### 2.1 Prix mensuel Premium
 
 1. Va sur [Stripe Dashboard](https://dashboard.stripe.com/)
-2. Va dans **"Products"** (ou "Produits")
-3. Clique sur **"+ Add product"** (ou "+ Ajouter un produit")
-4. Remplis :
-   - **Name** : `Foodlane Premium - Mensuel`
-   - **Description** : `Abonnement Premium mensuel à Foodlane - Accès à toutes les fonctionnalités avancées`
-5. Dans **"Pricing"**, choisis :
-   - **Pricing model** : `Recurring` (Récurrent)
-   - **Price** : `9.99` EUR
-   - **Billing period** : `Monthly` (Mensuel)
-6. Clique sur **"Save product"** (ou "Enregistrer")
-7. **COPIE LE "Price ID"** (commence par `price_...`) → c'est ton `STRIPE_PRICE_ID_MENSUEL`
+2. **Products** → **Add product** (ou ajoute un prix sur un produit existant)
+3. Prix **récurrent**, **EUR**, période **Monthly** — montant identique à l’app (voir `app/src/lib/pricingPlans.ts`, ex. **7,99 €**)
+4. Enregistre, puis copie le **Price ID** (`price_...`) → `STRIPE_PRICE_ID_PREMIUM_MENSUEL`
 
-### 2.2 Créer le produit Premium Annuel
+### 2.2 Prix annuel Premium
 
-1. Même processus, mais cette fois :
-   - **Name** : `Foodlane Premium - Annuel`
-   - **Price** : `79` EUR
-   - **Billing period** : `Yearly` (Annuel)
-2. **COPIE LE "Price ID"** → c'est ton `STRIPE_PRICE_ID_ANNUEL`
+1. Sur le **même** produit : **Add another price**
+2. **EUR**, période **Yearly**, montant aligné sur l’app (ex. **79,99 €**)
+3. Copie le **Price ID** → `STRIPE_PRICE_ID_PREMIUM_ANNUEL`
+
+### 2.3 Produit Premium Plus
+
+1. Crée un produit **Foodlane Premium Plus** (ou équivalent) avec deux prix récurrents **mensuel** et **annuel**.
+2. Copie les Price IDs → `STRIPE_PRICE_ID_PREMIUM_PLUS_MENSUEL` et `STRIPE_PRICE_ID_PREMIUM_PLUS_ANNUEL`.
+
+### 2.4 Après avoir les quatre Price IDs
+
+Enchaîne avec **`GUIDE_STRIPE_APRES_PRICE_IDS.md`** (`.env.local`, webhook, tests).
 
 ---
 
@@ -106,11 +113,13 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000 (en dev)
 
 4. **Description** : `Foodlane Premium - Webhook Supabase`
 
-5. Dans **"Events to send"**, sélectionne **EXACTEMENT** ces événements :
+5. Dans **"Events to send"**, sélectionne au minimum les événements gérés par `app/api/webhooks/stripe/route.ts` :
    - ✅ `checkout.session.completed`
+   - ✅ `customer.subscription.created`
+   - ✅ `customer.subscription.updated`
    - ✅ `customer.subscription.deleted`
-   - ✅ `customer.subscription.canceled`
-   - ✅ `customer.subscription.unpaid`
+   - ✅ `invoice.payment_succeeded`
+   - ✅ `invoice.payment_failed`
 
 6. Clique sur **"Add endpoint"**
 
@@ -130,6 +139,7 @@ Assure-toi que la table `profiles` contient bien ces colonnes :
 - `premium_end_date` (TIMESTAMPTZ)
 - `stripe_customer_id` (TEXT)
 - `stripe_subscription_id` (TEXT)
+- `subscription_tier`, `subscription_status`, `premium_started_at`, `premium_ended_at` (voir migration `supabase/migrations/020_profiles_subscription_tier_status.sql`)
 
 Si ce n'est pas le cas, exécute le SQL dans `SUPABASE_MIGRATION_PROFILES.sql` (voir le fichier pour les instructions).
 
@@ -249,7 +259,7 @@ Le code gère déjà :
 - [ ] Clé Supabase Service Role récupérée
 - [ ] Webhook créé dans Stripe Dashboard avec l'URL de production
 - [ ] Webhook Secret récupéré et ajouté dans les variables d'environnement
-- [ ] Événements sélectionnés : `checkout.session.completed`, `customer.subscription.deleted`, etc.
+- [ ] Événements webhook : `checkout.session.completed`, `customer.subscription.*`, `invoice.payment_succeeded`, `invoice.payment_failed` (voir `GUIDE_STRIPE_APRES_PRICE_IDS.md`)
 - [ ] Table Supabase vérifiée (colonnes premium présentes)
 - [ ] Paiement test effectué et vérifié dans Supabase
 - [ ] `premium_active` passe bien à `true` après paiement

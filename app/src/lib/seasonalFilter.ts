@@ -32,7 +32,6 @@ const SEASONAL_INGREDIENTS: Record<Season, string[]> = {
     "cerise", "cerises",
     "framboise", "framboises",
     "myrtille", "myrtilles",
-    "courge",
     "haricot vert", "haricots verts",
   ],
   automne: [
@@ -96,22 +95,14 @@ export function isRecipeSeasonal(recipe: { ingredients: string | null }, season:
   );
 }
 
-// Filtrer les recettes selon la saison actuelle
-export function filterRecipesBySeason<T extends { ingredients: string | null }>(
-  recipes: T[],
-  season?: Season
-): T[] {
-  const currentSeason = season || getCurrentSeason();
-
-  // Si aucune recette n'a d'ingrédients de saison, on retourne toutes les recettes
-  // Sinon, on filtre pour garder seulement celles avec des ingrédients de saison
-  const seasonalRecipes = recipes.filter((recipe) =>
-    isRecipeSeasonal(recipe, currentSeason)
-  );
-
-  // Si on trouve des recettes de saison, on les retourne
-  // Sinon, on retourne toutes les recettes (pour ne pas avoir de résultats vides)
-  return seasonalRecipes.length > 0 ? seasonalRecipes : recipes;
+/**
+ * @deprecated Préférer `filterRecipesBySeasonSmart` — même nom conservé pour l’existant.
+ * Délègue à la logique centralisée (colonne `saison` + fallback ingrédients + élargissements).
+ */
+export function filterRecipesBySeason<
+  T extends { saison?: string | null; ingredients: string | null }
+>(recipes: T[], season?: Season): T[] {
+  return filterRecipesBySeasonSmart(recipes, season);
 }
 
 // Obtenir le nom de la saison en français
@@ -189,6 +180,31 @@ export function matchesSeason(
   return normalized.includes(season);
 }
 
+/** Saisons « voisines » pour transitions (ex. fin d’hiver / début de printemps). */
+export const ADJACENT_SEASONS: Record<Season, Season[]> = {
+  printemps: ["hiver", "été"],
+  été: ["printemps", "automne"],
+  automne: ["été", "hiver"],
+  hiver: ["automne", "printemps"],
+};
+
+/**
+ * Recette étiquetée pour une saison adjacente à la période courante (sans match direct ni « toute l’année »).
+ */
+export function matchesSeasonAdjacent(
+  recipeSaison: string | null | undefined,
+  season: Season
+): boolean {
+  const raw = recipeSaison?.trim();
+  if (!raw) return false;
+  const s = normalizeRaw(raw);
+  if (s.includes("toute") || s.includes("toutes") || s.includes("annee")) return false;
+  const normalized = normalizeSeason(recipeSaison);
+  if (normalized.length === 0) return false;
+  if (normalized.includes(season)) return false;
+  return ADJACENT_SEASONS[season].some((adj) => normalized.includes(adj));
+}
+
 /**
  * Score de pertinence saisonnière (0-35).
  *
@@ -217,14 +233,7 @@ export function scoreRecipeSeasonRelevance(
     const normalized = normalizeSeason(raw);
     if (normalized.includes(season)) return 35; // match parfait
 
-    // Saison adjacente (transition saisonnière)
-    const ADJACENT: Record<Season, Season[]> = {
-      printemps: ["hiver", "été"],
-      été:       ["printemps", "automne"],
-      automne:   ["été", "hiver"],
-      hiver:     ["automne", "printemps"],
-    };
-    if (ADJACENT[season].some((adj) => normalized.includes(adj))) return 10;
+    if (ADJACENT_SEASONS[season].some((adj) => normalized.includes(adj))) return 10;
 
     return 0; // mauvaise saison
   }
@@ -234,12 +243,62 @@ export function scoreRecipeSeasonRelevance(
 }
 
 /**
+ * Retourne true si la recette possède un champ `saison` explicite dont
+ * TOUTES les saisons parsées sont hors de {saison courante ∪ saisons adjacentes}.
+ * Les recettes sans tag, ou taggées "toute l'année", ne sont jamais « explicitement hors-saison ».
+ */
+export function isExplicitlyWrongSeason(
+  recipe: { saison?: string | null },
+  season: Season
+): boolean {
+  const raw = recipe.saison?.trim();
+  if (!raw) return false;
+  const s = normalizeRaw(raw);
+  if (s.includes("toute") || s.includes("toutes") || s.includes("annee")) return false;
+  const normalized = normalizeSeason(raw);
+  if (normalized.length === 0) return false;
+  const acceptable = new Set<Season>([season, ...ADJACENT_SEASONS[season]]);
+  return !normalized.some((ns) => acceptable.has(ns));
+}
+
+/** Exclut toutes les recettes explicitement hors-saison (tag DB non-ambigu). */
+export function filterRecipesExcludeWrongSeason<
+  T extends { saison?: string | null }
+>(recipes: T[], season: Season): T[] {
+  return recipes.filter((r) => !isExplicitlyWrongSeason(r, season));
+}
+
+/**
+ * Filtre DUR pour le pool saisonnier — conserve uniquement :
+ *   - recettes taggées avec la saison courante (ex. "printemps", "printemps été")
+ *   - recettes "toute l'année"
+ *   - recettes sans tag saison (neutrales)
+ *
+ * Exclut toutes les recettes taggées avec n'importe quelle autre saison spécifique,
+ * y compris les saisons adjacentes. C'est l'exclusion absolue demandée par seasonal_preference.
+ */
+export function filterRecipesForSeasonalPool<
+  T extends { saison?: string | null; ingredients: string | null }
+>(recipes: T[], season: Season): T[] {
+  return recipes.filter((r) => {
+    const raw = r.saison?.trim();
+    if (!raw) return true; // pas de tag → neutral, on garde
+    const s = normalizeRaw(raw);
+    if (s.includes("toute") || s.includes("toutes") || s.includes("annee")) return true;
+    const normalized = normalizeSeason(raw);
+    if (normalized.length === 0) return true; // tag non parseable → neutral
+    return normalized.includes(season); // uniquement si tag contient la saison courante
+  });
+}
+
+/**
  * Filtre les recettes par saison avec fallback progressif.
  *
  * Ordre de priorité :
- *   1. Recettes dont `saison` contient la saison courante
- *   2. Recettes "toute l'année" (si step 1 vide)
- *   3. Toutes les recettes (si les deux précédents vides)
+ *   1. Recettes dont `saison` contient la saison courante, ou sans `saison` mais ingrédients de saison
+ *   2. Recettes « toute l'année »
+ *   3. Recettes saison adjacentes (colonne DB uniquement)
+ *   4. Toutes les recettes (dernier recours — évite liste vide)
  */
 export function filterRecipesBySeasonSmart<
   T extends { saison?: string | null; ingredients: string | null }
@@ -258,6 +317,11 @@ export function filterRecipesBySeasonSmart<
     return s.includes("toute") || s.includes("toutes") || s.includes("annee");
   });
   if (allYear.length > 0) return allYear;
+
+  const adjacent = recipes.filter(
+    (r) => r.saison?.trim() && matchesSeasonAdjacent(r.saison, current)
+  );
+  if (adjacent.length > 0) return adjacent;
 
   return recipes;
 }

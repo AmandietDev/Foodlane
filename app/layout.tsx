@@ -26,8 +26,8 @@ export default function RootLayout({
           <TranslationProvider>
             <AuthGuard>
               <PremiumProvider>
-                {/* Contenu principal avec marge en bas pour ne pas passer sous la barre */}
-                <div className="min-h-screen pb-32">
+                {/* Contenu : marge basse mobile (barre + pub) ; sur bureau, décalage pour le rail gauche */}
+                <div className="min-h-screen pb-36 md:pb-10 md:pl-[var(--app-nav-rail-width)]">
                   {children}
                 </div>
 

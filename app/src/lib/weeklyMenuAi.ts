@@ -1,16 +1,15 @@
 import type { Recipe } from "./recipes";
-import { filterRecipesByEquipment } from "./dietaryProfiles";
-import type { PlannedDay, PlannedMeal, PlannedWeek, PlannerPreferences } from "./weeklyPlanner";
+import type { LockedSlot, PlannedDay, PlannedMeal, PlannedWeek, PlannerPreferences } from "./weeklyPlanner";
 import { buildUserProfileForAi } from "./profileForAi";
 import {
   buildExclusionList,
-  expandEquipmentKeys,
   filterRecipesByMaxPrepTime,
   filterRecipesByStrictExclusions,
+  finalizeIncompleteWeeklyPlan,
   maxMinutesForCookingPreference,
   scoreRecipeForPlanner,
 } from "./weeklyPlanner";
-import { getCurrentSeason } from "./seasonalFilter";
+import { filterRecipesForSeasonalPool, getCurrentSeason } from "./seasonalFilter";
 import { sortMealTypesForDisplay, sortMealsByDisplayOrder } from "./mealOrder";
 import type { Locale } from "./i18n";
 import { aiOutputLanguageDirective } from "./aiLocale";
@@ -19,6 +18,14 @@ import {
   dominantKeysConflictWithDay,
   recipeDominantProteinKeys,
 } from "./proteinVariety";
+import { isRecipeCompatibleWithMealType } from "./mealCompatibility";
+import {
+  addRecipeDiversityTags,
+  wouldExceedWeekDiversityCap,
+} from "./recipeDiversity";
+import { rerankWithMMR } from "./mmrRanking";
+import { filterRecipesByStructuredDietaryRules } from "./dietaryStructured";
+import { getMainProtein, getMainCarb, getDishType } from "./recipeFields";
 
 function addDaysISO(isoDate: string, days: number): string {
   const d = new Date(isoDate + "T12:00:00");
@@ -53,55 +60,114 @@ export async function buildWeeklyPlanWithAi(
   weekStartISO: string,
   openaiKey: string,
   locale: Locale = "fr",
-  recentlyUsed?: Map<number, number>
+  recentlyUsed?: Map<number, number>,
+  recentFamilyCounts?: Map<string, number>,
+  lockedMeals?: LockedSlot[]
 ): Promise<PlannedWeek | null> {
   const exclusions = buildExclusionList(prefs);
-  let pool = filterRecipesByStrictExclusions(recipes, exclusions);
-  pool = filterRecipesByMaxPrepTime(pool, maxMinutesForCookingPreference(prefs.cooking_time_preference));
-  if (prefs.equipment_keys.length) {
-    pool = filterRecipesByEquipment(pool, expandEquipmentKeys(prefs.equipment_keys));
-  }
 
-  if (pool.length === 0) return null;
+  // Filtres durs :
+  //  1. Règles diététiques structurées (allergens / diet_tags / main_protein)
+  //  2. Regex legacy sur ingredients
+  // ⚠️ Pas de filtre équipement strict (voir commentaire dans buildWeeklyPlan).
+  let pool = filterRecipesByStructuredDietaryRules(
+    recipes,
+    prefs.dietary_filters,
+    prefs.allergy_keys
+  );
+  pool = filterRecipesByStrictExclusions(pool, exclusions);
 
   const season = getCurrentSeason();
 
-  // Score toutes les recettes filtrées, avec pénalité sur les recettes récemment utilisées
-  const scoredPool = pool
+  // Filtre saisonnier DUR : seules les recettes de la saison courante,
+  // "toute l'année" ou sans tag saison entrent dans le pool.
+  const safePool = prefs.seasonal_preference
+    ? filterRecipesForSeasonalPool(pool, season)
+    : pool;
+  const seasonPool = safePool.length > 0 ? safePool : pool;
+
+  if (seasonPool.length === 0) return null;
+
+  // ── Exclusion `recentlyUsed` PAR CRÉNEAU (cf. weeklyPlanner.ts) ────────
+  const recentIds = recentlyUsed ? new Set(recentlyUsed.keys()) : new Set<number>();
+  const workingPool: Recipe[] = (() => {
+    if (recentIds.size === 0) return seasonPool;
+    const result = new Set<Recipe>();
+    for (const mealType of prefs.meal_types) {
+      const compatibleAll = seasonPool.filter((r) =>
+        isRecipeCompatibleWithMealType(r, mealType)
+      );
+      const fresh = compatibleAll.filter((r) => !recentIds.has(r.id));
+      const threshold = prefs.planning_days * 3;
+      const chosen = fresh.length >= threshold ? fresh : compatibleAll;
+      for (const r of chosen) result.add(r);
+    }
+    return Array.from(result);
+  })();
+
+  console.log(
+    `[weeklyMenuAi] Pools : recipes=${recipes.length} ` +
+      `pool=${pool.length} seasonPool=${seasonPool.length} ` +
+      `recentlyUsed=${recentIds.size} working=${workingPool.length}`
+  );
+  const perMealAi: Record<string, number> = {};
+  for (const mt of prefs.meal_types) {
+    perMealAi[mt] = workingPool.filter((r) => isRecipeCompatibleWithMealType(r, mt)).length;
+  }
+  console.log(`[weeklyMenuAi] Compatibles par créneau dans workingPool :`, perMealAi);
+
+  // Score le pool de travail avec pénalité graduelle pour les recettes récentes.
+  const scoredPoolRaw = workingPool
     .map((r) => {
-      let score = scoreRecipeForPlanner(r, season, prefs);
+      let score = scoreRecipeForPlanner(r, season, prefs, recentFamilyCounts);
       if (recentlyUsed) {
         const menusAgo = recentlyUsed.get(r.id);
-        if (menusAgo === 0) score = Math.max(0, score - 50);      // dernier menu
-        else if (menusAgo === 1) score = Math.max(0, score - 25); // 2e menu précédent
-        else if (menusAgo === 2) score = Math.max(0, score - 10); // 3e menu précédent
+        if (menusAgo === 0) score = Math.max(0, score - 60);
+        else if (menusAgo === 1) score = Math.max(0, score - 35);
+        else if (menusAgo === 2) score = Math.max(0, score - 20);
+        else if (menusAgo === 3) score = Math.max(0, score - 10);
+        else if (menusAgo === 4) score = Math.max(0, score - 5);
       }
       return { r, score };
     })
     .sort((a, b) => b.score - a.score);
+  const scoredPool = rerankWithMMR(
+    scoredPoolRaw.map(({ r, score }) => ({ r, s: score })),
+    0.72
+  ).map(({ r, s }) => ({ r, score: s }));
 
-  // Échantillonnage stratifié sur 300 recettes réparties en 4 quartiles de score.
-  // Garantit que l'IA découvre des recettes variées, pas seulement les 120 même meilleures.
-  const CATALOG_SIZE = 300;
-  const qSize = Math.max(1, Math.ceil(scoredPool.length / 4));
-  const stratifiedSample = shuffleArray([
-    ...shuffleArray(scoredPool.slice(0, qSize)).slice(0, Math.round(CATALOG_SIZE * 0.45)),
-    ...shuffleArray(scoredPool.slice(qSize, qSize * 2)).slice(0, Math.round(CATALOG_SIZE * 0.30)),
-    ...shuffleArray(scoredPool.slice(qSize * 2, qSize * 3)).slice(0, Math.round(CATALOG_SIZE * 0.15)),
-    ...shuffleArray(scoredPool.slice(qSize * 3)).slice(0, Math.round(CATALOG_SIZE * 0.10)),
-  ]);
+  // Catalogue IA : sélection pondérée par score + forte randomisation.
+  // L'IA ne voit que des recettes fraîches (non utilisées récemment si possible).
+  const CATALOG_SIZE = 500;
+  const stratifiedSample = scoredPool.length <= CATALOG_SIZE
+    ? scoredPool
+    : scoredPool
+        .map(({ r, score }) => ({ r, score, key: Math.random() * Math.max(1, score) }))
+        .sort((a, b) => b.key - a.key)
+        .slice(0, CATALOG_SIZE)
+        .map(({ r, score }) => ({ r, score }));
 
-  const randomizedPool = shuffleArray(pool); // conservé pour le fallback de remplissage
-  const byId = new Map(pool.map((r) => [r.id, r]));
-  const catalog = stratifiedSample.map(({ r }) => ({
+  const randomizedPool = shuffleArray(workingPool); // fallback de remplissage sur le pool frais
+  const byId = new Map(seasonPool.map((r) => [r.id, r])); // lookup complet pour l'IA
+  const scoreById = new Map(scoredPool.map(({ r, score }) => [r.id, score]));
+  // Mélanger le catalogue : l'IA ne doit pas toujours voir les mêmes recettes en premier
+  const shuffledSample = shuffleArray(stratifiedSample);
+  // Catalogue enrichi : on expose à l'IA les colonnes structurées pour qu'elle
+  // puisse raisonner sur meal_slot, protéine, féculent, dish_type, etc.
+  const catalog = shuffledSample.map(({ r }) => ({
     id: r.id,
     nom_recette: r.nom_recette,
     type: r.type,
     temps_preparation_min: r.temps_preparation_min,
     difficulte: r.difficulte,
     saison: r.saison ?? null,
-    ingredients: (r.ingredients || "").slice(0, 200),
-    ...(recentlyUsed?.has(r.id) ? { recently_used: true } : {}),
+    meal_slot: r.meal_slot ?? null,
+    dish_type: r.dish_type ?? null,
+    main_protein: getMainProtein(r) || null,
+    main_carb: getMainCarb(r) || null,
+    main_vegetables: r.main_vegetables ?? null,
+    diet_tags: r.diet_tags ?? null,
+    ingredients: (r.ingredients || "").slice(0, 160),
   }));
 
   const carnivoreExplicite =
@@ -119,7 +185,7 @@ export async function buildWeeklyPlanWithAi(
 
   const seasonNames: Record<string, string> = {
     printemps: "printemps (mars-mai)",
-    ete: "été (juin-août)",
+    été: "été (juin-août)",
     automne: "automne (septembre-novembre)",
     hiver: "hiver (décembre-février)",
   };
@@ -139,16 +205,27 @@ CONTRAINTES OBLIGATOIRES :
 7. Adapter les repas à l'objectif santé et au temps de préparation disponible.
 8. Assurer un équilibre nutritionnel quotidien (protéines, fibres/légumes, glucides complexes, lipides de qualité).
 
-DIVERSITÉ (CRITIQUE) :
-- Ne jamais proposer deux recettes du même type de plat sur la semaine (ex. pas 2 gratins, pas 2 quiches, pas 2 pizzas, pas 2 tartes, pas 2 salades niçoise).
-- Varier les méthodes de cuisson : rôti, sauté, mijoté, grillé, vapeur, cru.
-- Varier les cuisines : méditerranéenne, asiatique, française, mexicaine, etc.
+DIVERSITÉ (CRITIQUE — utilise les colonnes structurées) :
+- Maximum 2 recettes avec le MÊME "main_protein" sur toute la semaine.
+- Maximum 2 recettes avec le MÊME "main_carb" sur toute la semaine.
+- Maximum 2 recettes avec le MÊME "dish_type" sur toute la semaine.
+- Ne jamais répéter le même "main_protein" sur deux repas le même jour.
+- Alterner les "cooking_method" et les "dish_type" sur des jours consécutifs.
 - Utiliser le maximum de recettes différentes du catalogue — ne jamais réutiliser la même recette deux fois.
-- Varier les féculents (riz, pâtes, quinoa, pommes de terre, etc.) au fil de la semaine.
+
+COMPATIBILITÉ CRÉNEAU (CRITIQUE) :
+- Chaque recette possède un champ "meal_slot" (ex. "petit_dejeuner|dejeuner|diner").
+- Tu DOIS choisir une recette dont "meal_slot" contient le créneau cible :
+   • breakfast → "petit_dejeuner" ou "brunch"
+   • lunch     → "dejeuner" ou "plat principal"
+   • dinner    → "diner" ou "plat principal"
+   • snack     → "collation", "gouter" ou "dessert"
+- Interdit : soupe / smoothie / boisson en petit-déjeuner (sauf si meal_slot contient "petit_dejeuner")
+- Interdit : pur dessert sucré (gâteau, smoothie, tarte sucrée) en dîner.
 
 ANTI-RÉPÉTITION (IMPORTANT) :
-- Les recettes marquées "recently_used: true" dans le catalogue ont déjà été proposées dans de récents menus.
-- Évite-les impérativement. Utilise uniquement des recettes sans ce marqueur sauf si aucune alternative n'existe.
+- Toutes les recettes du catalogue sont fraîches (non utilisées dans les menus récents).
+- Utilise le maximum de recettes différentes — ne jamais réutiliser la même recette deux fois dans la semaine.
 
 SAISON (IMPORTANT) :
 - Nous sommes en ${seasonLabel}.
@@ -161,7 +238,11 @@ PETIT-DÉJEUNER :
 - Préférence de l'utilisateur : ${breakfastPrefFr}.
 - Choisir des recettes réellement adaptées au petit-déjeuner (pas de plats du soir).
 
-Pour chaque créneau repas, choisir exactement UNE recette par son recipe_id présent dans le catalogue.
+STRUCTURE OBLIGATOIRE DU JSON :
+- Le tableau "days" doit contenir EXACTEMENT ${prefs.planning_days} entrées, une par jour, avec "day_index" allant de 0 à ${prefs.planning_days - 1} dans l’ordre.
+- Chaque jour doit avoir EXACTEMENT ${prefs.meal_types.length} repas, un par créneau : ${prefs.meal_types.join(", ")} (champ "meal_type" identique à ces valeurs).
+- Pour chaque créneau repas, choisir exactement UNE recette par son recipe_id présent dans le catalogue.
+- Évite au maximum les doublons de recipe_id sur la semaine (objectif: 0 doublon). N'autorise un doublon que s'il n'existe réellement aucune alternative compatible.
 
 Réponds UNIQUEMENT en JSON objet :
 {
@@ -220,6 +301,21 @@ Les noms de recettes du catalogue (nom_recette) restent tels quels ; ne les trad
 
     const days: PlannedDay[] = [];
     const used = new Set<number>();
+    const usageCount = new Map<number, number>();
+    const weekTagCounts = new Map<string, number>();
+    const totalSlots = prefs.planning_days * prefs.meal_types.length;
+
+    // Index des slots verrouillés par jour
+    const lockedByDay = new Map<number, Map<string, PlannedMeal>>();
+    for (const lm of lockedMeals || []) {
+      if (!lockedByDay.has(lm.day_index)) lockedByDay.set(lm.day_index, new Map());
+      lockedByDay.get(lm.day_index)!.set(lm.meal_type, {
+        meal_type: lm.meal_type as (typeof prefs.meal_types)[number],
+        recipe_id: lm.recipe_id,
+        recipe_name: lm.recipe_payload.nom_recette || "Recette",
+        recipe_payload: lm.recipe_payload as Recipe,
+      });
+    }
 
     let previousDayDominant = new Set<string>();
     for (let d = 0; d < prefs.planning_days; d++) {
@@ -228,42 +324,93 @@ Les noms de recettes du catalogue (nom_recette) restent tels quels ; ne les trad
       const slots = sortMealTypesForDisplay(prefs.meal_types);
       const dayDominant = new Set<string>();
 
+      // Pré-remplissage des slots verrouillés
+      const dayLocked = lockedByDay.get(d);
+      if (dayLocked) {
+        for (const [mt, lm] of dayLocked) {
+          if (!slots.includes(mt as (typeof prefs.meal_types)[number])) continue;
+          used.add(lm.recipe_id);
+          usageCount.set(lm.recipe_id, (usageCount.get(lm.recipe_id) || 0) + 1);
+          addRecipeDominantKeys(lm.recipe_payload as Recipe, dayDominant);
+          addRecipeDiversityTags(lm.recipe_payload as Recipe, weekTagCounts);
+          meals.push(lm);
+        }
+      }
+
       for (const mt of slots) {
+        // Slot déjà rempli par un verrou → on passe
+        if (meals.some((m) => m.meal_type === mt)) continue;
         const m = src?.meals?.find((x) => x.meal_type === mt);
         let recipe: Recipe | undefined;
 
         const aiRecipeId = Number(m?.recipe_id);
         if (Number.isFinite(aiRecipeId) && byId.has(aiRecipeId)) {
           const r0 = byId.get(aiRecipeId)!;
-          if (!dominantKeysConflictWithDay(r0, dayDominant)) {
+          if (
+            !used.has(r0.id) &&
+            isRecipeCompatibleWithMealType(r0, mt) &&
+            !dominantKeysConflictWithDay(r0, dayDominant) &&
+            !wouldExceedWeekDiversityCap(r0, weekTagCounts, totalSlots)
+          ) {
             recipe = r0;
           }
         }
 
         if (!recipe) {
-          const candidates = randomizedPool.filter((r) => !used.has(r.id));
-          recipe =
-            candidates.find((r) => {
-              if (dominantKeysConflictWithDay(r, dayDominant)) return false;
-              if (
-                (mt === "lunch" || mt === "dinner") &&
-                conflictsWithRecentProteinVariety(r, previousDayDominant)
-              ) {
-                return false;
-              }
-              return true;
-            }) || candidates[0];
+          // Fallback unifié : toujours préférer une recette unique.
+          // Contrainte dure = unicité + compatibilité type de repas.
+          // Tout le reste (protéines, dominance, diversité) = pénalités douces seulement.
+          const uniqueCandidates = randomizedPool.filter(
+            (r) => !used.has(r.id) && isRecipeCompatibleWithMealType(r, mt)
+          );
+          if (uniqueCandidates.length > 0) {
+            const ranked = uniqueCandidates
+              .map((r) => ({
+                r,
+                adjusted:
+                  (scoreById.get(r.id) || 0) +
+                  (!dominantKeysConflictWithDay(r, dayDominant) ? 10 : 0) +
+                  (!wouldExceedWeekDiversityCap(r, weekTagCounts, totalSlots) ? 8 : 0) +
+                  (!conflictsWithRecentProteinVariety(r, previousDayDominant) ? 6 : 0) -
+                  (usageCount.get(r.id) || 0) * 24 +
+                  Math.random() * 8,
+              }))
+              .sort((a, b) => b.adjusted - a.adjusted);
+            recipe = ranked[0].r;
+          }
         }
 
         if (!recipe) {
-          recipe =
-            randomizedPool.find((r) => !used.has(r.id)) ||
-            randomizedPool[Math.floor(Math.random() * randomizedPool.length)];
+          // Dernier recours : compatibilité créneau est ABSOLUE. On préfère
+          // une réutilisation d'une recette adaptée plutôt qu'un mauvais matching.
+          const fallbackPool = safePool.length > 0 ? safePool : pool;
+          const compatibleFallback = fallbackPool.filter((r) =>
+            isRecipeCompatibleWithMealType(r, mt)
+          );
+          if (compatibleFallback.length > 0) {
+            const ranked = compatibleFallback
+              .map((r) => ({
+                r,
+                adjusted:
+                  (!used.has(r.id) ? 100 : 0) +
+                  (scoreById.get(r.id) || 30) -
+                  (usageCount.get(r.id) || 0) * 22 +
+                  Math.random() * 4,
+              }))
+              .sort((a, b) => b.adjusted - a.adjusted);
+            recipe = ranked[0]?.r;
+          } else {
+            console.warn(
+              `[weeklyMenuAi] Aucune recette compatible "${mt}" — slot laissé vide. ` +
+                `Recommandation : enrichir meal_slot dans recipes_v2.`
+            );
+          }
         }
-
         if (!recipe) continue;
         used.add(recipe.id);
+        usageCount.set(recipe.id, (usageCount.get(recipe.id) || 0) + 1);
         addRecipeDominantKeys(recipe, dayDominant);
+        addRecipeDiversityTags(recipe, weekTagCounts);
         meals.push({
           meal_type: mt,
           recipe_id: recipe.id,
@@ -280,14 +427,24 @@ Les noms de recettes du catalogue (nom_recette) restent tels quels ; ne les trad
       previousDayDominant = new Set(dayDominant);
     }
 
-    return {
-      days,
-      meta: {
-        season,
-        recipes_considered: recipes.length,
-        recipes_after_filters: pool.length,
+    const scoredForFinalize = scoredPool.map(({ r, score }) => ({ r, s: score }));
+    // Pool de secours pour le finalize : pool après filtres durs (diététique,
+    // exclusions, équipement) mais SANS saisonnier ni recentlyUsed. Utilisé en
+    // ultime recours pour éviter les slots vides faute de candidats compatibles.
+    return finalizeIncompleteWeeklyPlan(
+      {
+        days,
+        meta: {
+          season,
+          recipes_considered: recipes.length,
+          recipes_after_filters: pool.length,
+        },
       },
-    };
+      prefs,
+      weekStartISO,
+      scoredForFinalize,
+      pool
+    );
   } catch (e) {
     console.error("[weeklyMenuAi]", e);
     return null;

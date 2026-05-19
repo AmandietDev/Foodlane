@@ -58,6 +58,7 @@ export default function OnboardingPage() {
       <PlannerProfileForm
         key={user.id}
         initial={initial}
+        visualVariant="foyer"
         submitLabel="Enregistrer et continuer"
         onSubmit={async ({ preferences, equipment_keys, allergy_keys, excluded_ingredients }) => {
           const res = await plannerFetch("/preferences", {

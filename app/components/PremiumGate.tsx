@@ -27,6 +27,11 @@ interface PremiumGateProps {
   featureName?: string;
   showBadge?: boolean;
   className?: string;
+  /**
+   * `premium` : accès si abonnement Premium (défaut).
+   * `dietAssistant` : accès si Premium OU `NEXT_PUBLIC_DIET_ASSISTANT_DEV_ACCESS=true` (travail sur l’assistant).
+   */
+  accessRule?: "premium" | "dietAssistant";
 }
 
 export default function PremiumGate({
@@ -36,8 +41,10 @@ export default function PremiumGate({
   featureName = "cette fonctionnalité",
   showBadge = false,
   className = "",
+  accessRule = "premium",
 }: PremiumGateProps) {
-  const { isPremium, loading } = usePremium();
+  const { isPremium, canAccessDietAssistant, loading } = usePremium();
+  const hasAccess = accessRule === "dietAssistant" ? canAccessDietAssistant : isPremium;
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
 
@@ -53,8 +60,8 @@ export default function PremiumGate({
     return null;
   }
 
-  // Si Premium : afficher le contenu
-  if (isPremium) {
+  // Si accès : afficher le contenu
+  if (hasAccess) {
     if (mode === "badge" || showBadge) {
       return (
         <div className={`relative ${className}`}>
@@ -68,7 +75,7 @@ export default function PremiumGate({
     return <>{children}</>;
   }
 
-  // Si non Premium : afficher selon le mode
+  // Si pas d'accès : afficher selon le mode
   if (mode === "page") {
     return (
       <main className="max-w-md mx-auto px-4 pt-6 pb-24">

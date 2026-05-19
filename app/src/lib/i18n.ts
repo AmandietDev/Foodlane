@@ -37,6 +37,31 @@ const translations: Translations = {
     es: "Menú",
     de: "Menü",
   },
+  /** Navigation principale (4 onglets) — préférer ces clés côté UI */
+  "nav.menus": {
+    fr: "Menus",
+    en: "Meal plans",
+    es: "Menús",
+    de: "Speisepläne",
+  },
+  "nav.recettes": {
+    fr: "Recettes",
+    en: "Recipes",
+    es: "Recetas",
+    de: "Rezepte",
+  },
+  "nav.assistant": {
+    fr: "Assistant",
+    en: "Coach",
+    es: "Asistente",
+    de: "Assistent",
+  },
+  "nav.parametres": {
+    fr: "Réglages",
+    en: "Settings",
+    es: "Ajustes",
+    de: "Einstellungen",
+  },
 
   // Menu - Onglets
   "menu.tab.account": {
@@ -514,6 +539,188 @@ const translations: Translations = {
     en: "We will get back to you as soon as possible.",
     es: "Te responderemos lo antes posible.",
     de: "Wir werden uns so schnell wie möglich bei dir melden.",
+  },
+
+  "faq.1.q": {
+    fr: "Comment Foodlane adapte-t-il les quantités des recettes ?",
+    en: "How does Foodlane adjust recipe quantities?",
+    es: "¿Cómo ajusta Foodlane las cantidades de las recetas?",
+    de: "Wie passt Foodlane die Rezeptmengen an?",
+  },
+  "faq.1.a": {
+    fr: "Le nombre de personnes du foyer (onglet Foyer ou préférences menus) est enregistré dans Supabase. Les ingrédients des menus générés et la liste de courses sont mis à l’échelle en conséquence. Pour un foyer de 5 personnes, tu peux choisir des portions pour 4, 5 ou 6.",
+    en: "Your household size (Household tab or meal preferences) is saved in Supabase. Generated menus and the grocery list scale accordingly. For a household of 5, you can choose portions for 4, 5, or 6.",
+    es: "El tamaño del hogar (pestaña Hogar o preferencias de menús) se guarda en Supabase. Los menús generados y la lista de compras se escalan. Para 5 personas, puedes elegir raciones para 4, 5 o 6.",
+    de: "Die Haushaltsgröße (Tab Haushalt oder Menü-Einstellungen) wird in Supabase gespeichert. Menüs und Einkaufsliste werden skaliert. Bei 5 Personen kannst du Portionen für 4, 5 oder 6 wählen.",
+  },
+  "faq.2.q": {
+    fr: "Où sont stockées mes préférences (foyer, allergies, équipements) ?",
+    en: "Where are my preferences (household, allergies, equipment) stored?",
+    es: "¿Dónde se guardan mis preferencias (hogar, alergias, equipamiento)?",
+    de: "Wo werden meine Einstellungen (Haushalt, Allergien, Geräte) gespeichert?",
+  },
+  "faq.2.a": {
+    fr: "Les préférences du planificateur de menus (questionnaire première connexion, page Préférences menus, synchronisation depuis l’onglet Foyer pour le nombre de personnes) sont enregistrées dans Supabase et utilisées pour la génération IA et la liste de courses.",
+    en: "Meal-planner preferences (onboarding, Meal preferences page, and household size sync from the Household tab) are stored in Supabase and used for AI generation and the grocery list.",
+    es: "Las preferencias del planificador (cuestionario inicial, página de preferencias y sincronización del hogar) están en Supabase y se usan para la IA y la lista de compras.",
+    de: "Menü-Planer-Einstellungen (Onboarding, Einstellungsseite, Haushalt-Tab) liegen in Supabase und steuern KI und Einkaufsliste.",
+  },
+  "faq.3.q": {
+    fr: "Comment la liste de courses regroupe-t-elle les ingrédients ?",
+    en: "How does the grocery list merge ingredients?",
+    es: "¿Cómo agrupa la lista de la compra los ingredientes?",
+    de: "Wie führt die Einkaufsliste Zutaten zusammen?",
+  },
+  "faq.3.a": {
+    fr: "Les ingrédients identiques (même produit, même type d’unité, ex. plusieurs recettes avec des œufs) sont additionnés en une seule ligne. Les quantités sont arrondies pour un achat réaliste (ex. grammes ronds, nombre entier de citrons ou de boîtes de thon).",
+    en: "Same ingredients (same product and unit kind, e.g. eggs from several recipes) are summed into one line. Quantities are rounded for realistic shopping (e.g. round grams, whole lemons or cans of tuna).",
+    es: "Los mismos ingredientes (misma unidad, p. ej. huevos de varias recetas) se suman en una línea. Las cantidades se redondean para comprar mejor.",
+    de: "Gleiche Zutaten (gleiche Einheit, z. B. Eier aus mehreren Rezepten) werden zu einer Zeile addiert. Mengen werden kaufnah gerundet.",
+  },
+  "faq.4.q": {
+    fr: "Puis-je utiliser l’app dans une autre langue que le français ?",
+    en: "Can I use the app in a language other than French?",
+    es: "¿Puedo usar la app en otro idioma que no sea francés?",
+    de: "Kann ich die App außer auf Französisch nutzen?",
+  },
+  "faq.4.a": {
+    fr: "Oui : choisis la langue dans les paramètres. L’interface et la liste de courses s’adaptent. Les noms de recettes en base restent souvent en français ; les consignes envoyées à l’IA tiennent compte de ta langue pour les textes générés.",
+    en: "Yes: pick a language in settings. The UI and grocery list adapt. Recipe names in the database may stay in French; AI instructions follow your language for generated text.",
+    es: "Sí: elige idioma en ajustes. La interfaz y la lista se adaptan. Los nombres de recetas pueden seguir en francés; la IA usa tu idioma en textos generados.",
+    de: "Ja: Sprache in den Einstellungen wählen. UI und Einkaufsliste passen sich an. Rezeptnamen können auf Französisch bleiben; KI-Ausgaben folgen deiner Sprache.",
+  },
+  "faq.5.q": {
+    fr: "Comment générer un menu de la semaine ?",
+    en: "How do I generate a weekly menu?",
+    es: "¿Cómo genero un menú semanal?",
+    de: "Wie erstelle ich einen Wochenplan?",
+  },
+  "faq.5.a": {
+    fr: "Depuis le tableau de bord ou la page Planifier, lance la génération : tes préférences Supabase sont lues, une proposition de repas est créée (avec IA si configurée) et une liste de courses consolidée est enregistrée.",
+    en: "From the dashboard or Plan page, start generation: your Supabase preferences are loaded, meals are proposed (with AI if configured), and a consolidated grocery list is saved.",
+    es: "Desde el tablero o Planificar, inicia la generación: se cargan tus preferencias en Supabase, se proponen comidas (con IA si aplica) y se guarda la lista de compras.",
+    de: "Über das Dashboard oder „Planen“ starten: Supabase-Einstellungen werden geladen, Mahlzeiten vorgeschlagen (optional KI), Einkaufsliste gespeichert.",
+  },
+  "faq.6.q": {
+    fr: "Comment donner mon avis ou contacter Foodlane ?",
+    en: "How can I give feedback or contact Foodlane?",
+    es: "¿Cómo envío mi opinión o contacto con Foodlane?",
+    de: "Wie gebe ich Feedback oder kontaktiere Foodlane?",
+  },
+  "faq.6.a": {
+    fr: "Dans Menu > Contact, utilise le formulaire « Donner mon avis » (satisfaction, facilité, recommandation, commentaire) ou « Nous contacter ». Tout est adressé à contact@foodlane.fr.",
+    en: "In Menu > Contact, use “Give feedback” (ratings + comment) or “Contact us”. Everything is sent to contact@foodlane.fr.",
+    es: "En Menú > Contacto, usa «Dar mi opinión» o «Contáctanos». Todo se envía a contact@foodlane.fr.",
+    de: "Unter Menü > Kontakt: „Feedback“ oder „Kontakt“. Alles geht an contact@foodlane.fr.",
+  },
+  "faq.7.q": {
+    fr: "Quelle est la différence entre l’onglet Foyer et la page Préférences menus ?",
+    en: "What is the difference between the Household tab and Meal preferences?",
+    es: "¿Qué diferencia hay entre Hogar y Preferencias de menús?",
+    de: "Unterschied Tab „Haushalt“ und Seite „Menü-Einstellungen“?",
+  },
+  "faq.7.a": {
+    fr: "L’onglet Foyer reprend une partie du profil (personnes, régimes, allergies, équipements) pour un réglage rapide ; le nombre de personnes (et portions si foyer de 5) est synchronisé avec Supabase. La page Préférences menus permet d’éditer tout le questionnaire (temps de cuisine, objectifs, repas planifiés, etc.).",
+    en: "The Household tab covers part of your profile for quick edits; household size (and portions if 5 people) syncs to Supabase. Meal preferences edits the full questionnaire (cooking time, goals, planned meals, etc.).",
+    es: "Hogar: ajuste rápido del perfil; el número de personas se sincroniza con Supabase. Preferencias de menús: cuestionario completo.",
+    de: "Haushalt: schnelle Anpassungen; Personenzahl synchron mit Supabase. Menü-Einstellungen: voller Fragebogen.",
+  },
+  "faq.8.q": {
+    fr: "Mes favoris et menus sont-ils sauvegardés dans le cloud ?",
+    en: "Are my favorites and menus saved in the cloud?",
+    es: "¿Se guardan favoritos y menús en la nube?",
+    de: "Werden Favoriten und Menüs in der Cloud gespeichert?",
+  },
+  "faq.8.a": {
+    fr: "Avec un compte connecté, les menus générés et listes de courses associées sont stockés dans Supabase. Les favoris peuvent aussi être enregistrés côté serveur selon les fonctionnalités activées ; certaines données locales peuvent coexister sur l’appareil.",
+    en: "With a signed-in account, generated menus and grocery lists are stored in Supabase. Favorites may also sync depending on features; some data may still exist locally on the device.",
+    es: "Con cuenta, menús y listas están en Supabase. Los favoritos pueden sincronizarse según la función; puede haber datos locales.",
+    de: "Mit Konto: Menüs und Einkaufslisten in Supabase. Favoriten je nach Feature; lokale Daten möglich.",
+  },
+
+  "feedback.title": {
+    fr: "Donner mon avis",
+    en: "Give feedback",
+    es: "Dar mi opinión",
+    de: "Feedback geben",
+  },
+  "feedback.subtitle": {
+    fr: "Quelques notes et ton commentaire nous aident à améliorer Foodlane.",
+    en: "A few ratings and your comment help us improve Foodlane.",
+    es: "Unas notas y tu comentario nos ayudan a mejorar Foodlane.",
+    de: "Ein paar Bewertungen und dein Kommentar helfen uns, Foodlane zu verbessern.",
+  },
+  "feedback.stars.satisfaction": {
+    fr: "Satisfaction générale",
+    en: "Overall satisfaction",
+    es: "Satisfacción general",
+    de: "Allgemeine Zufriedenheit",
+  },
+  "feedback.stars.ease": {
+    fr: "Facilité d’utilisation",
+    en: "Ease of use",
+    es: "Facilidad de uso",
+    de: "Benutzerfreundlichkeit",
+  },
+  "feedback.stars.recommend": {
+    fr: "Probabilité de recommander Foodlane",
+    en: "Likelihood to recommend Foodlane",
+    es: "Probabilidad de recomendar Foodlane",
+    de: "Wahrscheinlichkeit, Foodlane weiterzuempfehlen",
+  },
+  "feedback.comment": {
+    fr: "Ton retour (texte libre)",
+    en: "Your feedback (free text)",
+    es: "Tu comentario (texto libre)",
+    de: "Dein Feedback (freier Text)",
+  },
+  "feedback.comment.placeholder": {
+    fr: "Ce qui te plaît, ce qui pourrait être mieux…",
+    en: "What you like, what could be better…",
+    es: "Lo que te gusta, lo que mejorarías…",
+    de: "Was dir gefällt, was besser sein könnte…",
+  },
+  "feedback.email_optional": {
+    fr: "Email (optionnel, pour te recontacter)",
+    en: "Email (optional, so we can reply)",
+    es: "Email (opcional, para responderte)",
+    de: "E-Mail (optional, für Antworten)",
+  },
+  "feedback.submit": {
+    fr: "Envoyer mon avis",
+    en: "Send feedback",
+    es: "Enviar opinión",
+    de: "Feedback senden",
+  },
+  "feedback.sending": {
+    fr: "Envoi…",
+    en: "Sending…",
+    es: "Enviando…",
+    de: "Wird gesendet…",
+  },
+  "feedback.thanks.title": {
+    fr: "Merci pour ton avis !",
+    en: "Thanks for your feedback!",
+    es: "¡Gracias por tu opinión!",
+    de: "Danke für dein Feedback!",
+  },
+  "feedback.thanks.desc": {
+    fr: "Ton message a bien été transmis à l’équipe Foodlane.",
+    en: "Your message has been sent to the Foodlane team.",
+    es: "Tu mensaje se ha enviado al equipo de Foodlane.",
+    de: "Deine Nachricht wurde an das Foodlane-Team gesendet.",
+  },
+  "feedback.error.short": {
+    fr: "Écris au moins quelques mots dans le commentaire.",
+    en: "Please write at least a few words in the comment.",
+    es: "Escribe al menos unas palabras en el comentario.",
+    de: "Bitte schreibe mindestens ein paar Worte in den Kommentar.",
+  },
+  "feedback.error.send": {
+    fr: "Impossible d’envoyer pour le moment. Réessaie plus tard.",
+    en: "Could not send right now. Please try again later.",
+    es: "No se pudo enviar. Inténtalo más tarde.",
+    de: "Senden fehlgeschlagen. Bitte später erneut versuchen.",
   },
 };
 

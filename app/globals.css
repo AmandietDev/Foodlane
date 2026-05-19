@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 :root {
+  /* Largeur du rail navigation bureau (alignée sur BottomNavigation aside) */
+  --app-nav-rail-width: 14rem;
+
   /* Palette très colorée et vibrante - dégradé rose pâle à marron foncé (mode clair) */
   --background: #FFF0F0; /* Rose très pâle et lumineux */
   --foreground: #6B2E2E; /* Marron-rouge foncé pour le texte */
@@ -76,6 +79,14 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body {
+    scroll-behavior: auto;
+  }
 }
 
 /* Masquer les scrollbars tout en gardant le défilement */

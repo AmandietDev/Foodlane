@@ -1,8 +1,10 @@
 # ⚡ Configuration Rapide Stripe (5 minutes)
 
+> **Tu as déjà tes `price_...` ?** Ouvre **`GUIDE_STRIPE_APRES_PRICE_IDS.md`** pour la suite (`.env`, webhook, tests).
+
 ## 🎯 Problème actuel
 
-L'erreur indique que `STRIPE_PRICE_ID_MENSUEL` est manquant. Voici comment le configurer rapidement.
+L'erreur indique qu'un `STRIPE_PRICE_ID_PREMIUM_*` ou `STRIPE_PRICE_ID_PREMIUM_PLUS_*` est manquant. Voici comment le configurer rapidement.
 
 ---
 
@@ -15,8 +17,10 @@ L'erreur indique que `STRIPE_PRICE_ID_MENSUEL` est manquant. Voici comment le co
 ```env
 # Stripe - Configuration
 STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PRICE_ID_MENSUEL=price_...
-STRIPE_PRICE_ID_ANNUEL=price_...
+STRIPE_PRICE_ID_PREMIUM_MENSUEL=price_...
+STRIPE_PRICE_ID_PREMIUM_ANNUEL=price_...
+STRIPE_PRICE_ID_PREMIUM_PLUS_MENSUEL=price_...
+STRIPE_PRICE_ID_PREMIUM_PLUS_ANNUEL=price_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 
 # Supabase - Service Role (pour les webhooks)
@@ -44,28 +48,11 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
    - **Secret key** (commence par `sk_test_...`) - **COPIE CETTE CLÉ**
 5. Remplace `sk_test_...` dans ton `.env.local` par cette clé
 
-### 2.2 Créer le produit et récupérer `STRIPE_PRICE_ID_MENSUEL`
+### 2.2 Récupérer les quatre Price IDs
 
-1. Dans Stripe Dashboard, va dans **"Products"** (ou "Produits")
-2. Clique sur **"+ Add product"**
-3. Remplis :
-   - **Name** : `Foodlane Premium - Mensuel`
-   - **Description** : `Abonnement Premium mensuel`
-4. Dans **"Pricing"** :
-   - **Pricing model** : `Recurring` (Récurrent)
-   - **Price** : `9.99` EUR
-   - **Billing period** : `Monthly` (Mensuel)
-5. Clique sur **"Save product"**
-6. **Une fois le produit créé**, tu verras un **"Price ID"** (commence par `price_...`)
-7. **COPIE CET ID** et remplace `price_...` dans ton `.env.local` pour `STRIPE_PRICE_ID_MENSUEL`
-
-### 2.3 Créer le produit annuel et récupérer `STRIPE_PRICE_ID_ANNUEL`
-
-1. Même processus, mais cette fois :
-   - **Name** : `Foodlane Premium - Annuel`
-   - **Price** : `79` EUR
-   - **Billing period** : `Yearly` (Annuel)
-2. **COPIE LE "Price ID"** et remplace `price_...` dans ton `.env.local` pour `STRIPE_PRICE_ID_ANNUEL`
+1. **Premium** : un produit avec prix récurrents **mensuel** et **annuel** → `STRIPE_PRICE_ID_PREMIUM_MENSUEL` et `STRIPE_PRICE_ID_PREMIUM_ANNUEL`.
+2. **Premium Plus** : idem → `STRIPE_PRICE_ID_PREMIUM_PLUS_MENSUEL` et `STRIPE_PRICE_ID_PREMIUM_PLUS_ANNUEL`.
+3. Montants alignés sur `app/src/lib/pricingPlans.ts`.
 
 ---
 
@@ -123,5 +110,5 @@ Une fois tout configuré :
 
 ## 📚 Pour plus de détails
 
-Consulte `STRIPE_SUPABASE_SETUP_SIMPLE.md` pour un guide complet avec toutes les étapes détaillées.
+Consulte `STRIPE_SUPABASE_SETUP_SIMPLE.md` pour un guide complet, ou **`GUIDE_STRIPE_APRES_PRICE_IDS.md`** si tes produits Stripe sont déjà créés.
 

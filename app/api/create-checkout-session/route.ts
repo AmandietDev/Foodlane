@@ -1,51 +1,70 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import {
+  parseInterval,
+  parseTier,
+  resolveCheckoutPriceId,
+} from "../../src/lib/stripeSubscriptionEnv";
+import { supabaseAdmin } from "../../src/lib/supabaseAdmin";
+import { getUserIdFromRequest } from "../../src/lib/supabaseServer";
+import {
+  countActiveFoundingSubscribers,
+  getFoundersLimit,
+} from "../../src/lib/foundersQuota";
 
 /**
- * Route API pour créer une session Stripe Checkout
- * Redirige l'utilisateur vers Stripe pour le paiement
+ * Crée une session Stripe Checkout (abonnement).
  *
- * Body attendu :
- * - userId: string (ID utilisateur Supabase)
- * - email: string (email de l'utilisateur)
- * - plan: "monthly" | "yearly" (optionnel, défaut: "monthly")
+ * Body JSON :
+ * - userId: string
+ * - email: string
+ * - tier: "premium" | "premium_plus"
+ * - interval: "monthly" | "yearly"
+ *
+ * Le prix **fondateur** est choisi côté serveur tant qu’il reste des places
+ * (`FOODLANE_FOUNDERS_LIMIT` − comptage actif). Sinon prix standard.
  */
 export async function POST(request: NextRequest) {
   try {
-    const { userId, email, plan = "monthly" } = await request.json();
+    const body = await request.json();
+    const { userId, email, tier: tierRaw, interval: intervalRaw } = body as {
+      userId?: string;
+      email?: string;
+      tier?: string;
+      interval?: string;
+    };
 
-    // Validation des paramètres requis
     if (!userId || !email) {
-      console.error("[Checkout] Paramètres manquants:", {
-        userId: !!userId,
-        email: !!email,
-      });
-      return NextResponse.json(
-        { error: "userId et email requis" },
-        { status: 400 }
-      );
+      console.error("[Checkout] Paramètres manquants:", { userId: !!userId, email: !!email });
+      return NextResponse.json({ error: "userId et email requis" }, { status: 400 });
     }
 
-    // Validation de l'email
+    const authUserId = await getUserIdFromRequest(request);
+    if (authUserId && authUserId !== userId) {
+      return NextResponse.json({ error: "Non autorisé (session et userId incohérents)." }, { status: 403 });
+    }
+
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       console.error("[Checkout] Email invalide:", email);
+      return NextResponse.json({ error: "Email invalide" }, { status: 400 });
+    }
+
+    const tier = parseTier(tierRaw);
+    const interval = parseInterval(intervalRaw);
+
+    if (!tier) {
       return NextResponse.json(
-        { error: "Email invalide" },
+        { error: "Paramètre tier invalide.", details: 'Attendu : "premium" ou "premium_plus".' },
+        { status: 400 }
+      );
+    }
+    if (!interval) {
+      return NextResponse.json(
+        { error: "Paramètre interval invalide.", details: 'Attendu : "monthly" ou "yearly".' },
         { status: 400 }
       );
     }
 
-    // Validation stricte du plan (allowlist)
-    const allowedPlans = ["monthly", "yearly"] as const;
-    if (!allowedPlans.includes(plan as typeof allowedPlans[number])) {
-      console.error("[Checkout] Plan invalide:", plan);
-      return NextResponse.json(
-        { error: `Plan invalide. Valeurs autorisées: ${allowedPlans.join(", ")}` },
-        { status: 400 }
-      );
-    }
-
-    // Vérifier que la clé Stripe est configurée
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeSecretKey) {
       console.error("[Checkout] STRIPE_SECRET_KEY manquante");
@@ -55,33 +74,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Récupérer le prix selon le plan choisi
-    const priceId =
-      plan === "yearly"
-        ? process.env.STRIPE_PRICE_ID_ANNUEL
-        : process.env.STRIPE_PRICE_ID_MENSUEL;
+    let foundersSlotsRemaining = 0;
+    if (supabaseAdmin) {
+      const used = await countActiveFoundingSubscribers(supabaseAdmin);
+      const limit = getFoundersLimit();
+      foundersSlotsRemaining = Math.max(0, limit - used);
+    }
+
+    const { priceId, kind, missingEnvKey } = resolveCheckoutPriceId(
+      tier,
+      interval,
+      foundersSlotsRemaining
+    );
 
     if (!priceId) {
-      const missingVar =
-        plan === "yearly" ? "STRIPE_PRICE_ID_ANNUEL" : "STRIPE_PRICE_ID_MENSUEL";
-      console.error(`[Checkout] ${missingVar} manquante`);
-
-      // Message d'erreur plus détaillé pour guider l'utilisateur
-      const errorMessage =
-        plan === "yearly"
-          ? "Configuration Stripe incomplète : STRIPE_PRICE_ID_ANNUEL manquant. Consultez STRIPE_SUPABASE_SETUP_SIMPLE.md pour configurer."
-          : "Configuration Stripe incomplète : STRIPE_PRICE_ID_MENSUEL manquant. Consultez STRIPE_SUPABASE_SETUP_SIMPLE.md pour configurer.";
-
+      console.error(`[Checkout] ${missingEnvKey} manquante`);
       return NextResponse.json(
         {
-          error: errorMessage,
-          details: `Ajoutez ${missingVar} dans votre fichier .env.local avec l'ID du prix créé dans Stripe Dashboard.`,
+          error: `Configuration Stripe incomplète : ${missingEnvKey} manquant.`,
+          details: `Ajoute ${missingEnvKey} dans .env.local (Price ID Stripe pour ${tier} / ${interval}).`,
         },
         { status: 500 }
       );
     }
 
-    // 🔧 Initialiser Stripe (on laisse le SDK choisir la version d'API)
     const stripe = new Stripe(stripeSecretKey);
 
     const origin =
@@ -89,35 +105,28 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_APP_URL ||
       "http://localhost:3000";
 
+    const meta = {
+      userId,
+      email,
+      tier,
+      interval,
+      price_kind: kind,
+    };
+
     console.log(
-      `[Checkout] Création de session pour ${email} (plan: ${plan}, priceId: ${priceId})`
+      `[Checkout] Session pour ${email} — tier=${tier}, interval=${interval}, priceId=${priceId}, kind=${kind}, founderSlots=${foundersSlotsRemaining}`
     );
 
-    // Créer la session Checkout
     const session = await stripe.checkout.sessions.create({
-      customer_email: email, // Email du client (utilisé pour retrouver le profil dans le webhook)
+      customer_email: email,
       payment_method_types: ["card"],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      mode: "subscription", // Mode abonnement récurrent
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: "subscription",
       success_url: `${origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/billing/cancel`,
-      // Metadata importante : stocker l'email, userId et plan pour le webhook
-      metadata: {
-        userId: userId,
-        email: email, // Email dans les metadata pour le webhook
-        plan: plan, // Plan choisi (monthly ou yearly) pour traçabilité
-      },
+      cancel_url: `${origin}/premium?canceled=1`,
+      metadata: meta,
       subscription_data: {
-        metadata: {
-          userId: userId,
-          email: email, // Email aussi dans les metadata de l'abonnement
-          plan: plan, // Plan choisi (monthly ou yearly) pour traçabilité
-        },
+        metadata: meta,
       },
     });
 
@@ -126,6 +135,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       sessionId: session.id,
       url: session.url,
+      priceKind: kind,
     });
   } catch (error) {
     console.error("[Checkout] Erreur lors de la création de la session Stripe:", error);
