@@ -256,7 +256,67 @@ export default function MenuPage() {
     }
   }, [user?.id]);
 
-  // ── Hydratation depuis Supabase quand on entre dans l'onglet Foyer ────
+  // ── Hydratation initiale (une fois par session) : aligne foyer / préférences sans ouvrir l'onglet Foyer ────
+  const foyerInitialHydrateRef = useRef(false);
+  useEffect(() => {
+    if (!user?.id) {
+      foyerInitialHydrateRef.current = false;
+      return;
+    }
+    if (foyerInitialHydrateRef.current) return;
+    let cancelled = false;
+    foyerSyncSkipRef.current = true;
+    (async () => {
+      const res = await plannerFetch("/preferences");
+      const j = await res.json().catch(() => ({}));
+      if (cancelled || !res.ok || !j.preferences) {
+        foyerSyncSkipRef.current = false;
+        foyerInitialHydrateRef.current = true;
+        return;
+      }
+      const p = j.preferences as {
+        household_size?: number;
+        recipe_scaling_portions?: number | null;
+        dietary_filters?: string[];
+        equipment_keys?: string[];
+        allergy_keys?: string[];
+        excluded_ingredients?: string[];
+        objectives?: string[];
+      };
+
+      const h = Math.max(1, Number(p.household_size) || 1);
+      const dietaryFromSupa = filterKeysToDietaryProfiles(p.dietary_filters || []);
+      const equipFromSupa = equipmentKeysToLabels(p.equipment_keys || []);
+      const aversionsFromSupa = [
+        ...new Set([...(p.allergy_keys || []), ...(p.excluded_ingredients || [])]),
+      ].filter(Boolean);
+
+      supabaseSnapshotRef.current = {
+        objectives: p.objectives || [],
+        equipment_keys: p.equipment_keys || [],
+      };
+
+      setRecipeScalingPortionsMenu(h === 5 ? (p.recipe_scaling_portions ?? null) : null);
+      setPreferences((prev) => ({
+        ...prev,
+        nombrePersonnes: h,
+        regimesParticuliers:
+          dietaryFromSupa.length > 0 ? dietaryFromSupa : prev.regimesParticuliers,
+        aversionsAlimentaires:
+          aversionsFromSupa.length > 0 ? aversionsFromSupa : prev.aversionsAlimentaires,
+        equipements: equipFromSupa.length > 0 ? equipFromSupa : prev.equipements,
+      }));
+      foyerInitialHydrateRef.current = true;
+      window.setTimeout(() => {
+        foyerSyncSkipRef.current = false;
+      }, 450);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // ── Hydratation depuis Supabase quand on entre dans l'onglet Foyer (rafraîchir depuis le serveur) ────
   // Charge TOUS les champs synchronisables (et plus seulement household_size)
   // pour offrir une vraie mutualisation entre /menu (onglet Foyer) et
   // /preferences ("Mes préférences").
@@ -902,10 +962,36 @@ export default function MenuPage() {
                     </svg>
                   }
                   label="Supprimer le compte"
-                  onClick={() => {
-                    if (confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) {
-                      // TODO: Implémenter la suppression du compte
-                      alert("Fonctionnalité à venir");
+                  onClick={async () => {
+                    if (!confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) {
+                      return;
+                    }
+                    try {
+                      const {
+                        data: { session },
+                      } = await supabase.auth.getSession();
+                      if (!session?.access_token) {
+                        alert("Session expirée. Reconnecte-toi puis réessaie.");
+                        return;
+                      }
+                      const res = await fetch("/api/account/delete", {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${session.access_token}` },
+                      });
+                      const j = await res.json().catch(() => ({}));
+                      if (!res.ok) {
+                        alert(
+                          typeof j.error === "string" && j.error.trim()
+                            ? j.error
+                            : "La suppression du compte a échoué. Réessaie plus tard."
+                        );
+                        return;
+                      }
+                      await logout();
+                      window.location.href = "/login?deleted=1";
+                    } catch (e) {
+                      console.error("[Menu] delete account", e);
+                      alert("Erreur réseau lors de la suppression du compte.");
                     }
                   }}
                   danger

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../src/lib/supabaseClient";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
@@ -38,7 +38,6 @@ import {
 } from "../src/lib/dietaryProfiles";
 import { filterRecipesBySeason } from "../src/lib/seasonalFilter";
 import { analyzeMenu, type MenuAdvice } from "../src/lib/menuAnalysis";
-import CameraCapture from "../components/CameraCapture";
 
 const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
   { key: "petit-dejeuner", label: "Petit-déjeuner", icon: "🌅" },
@@ -72,16 +71,16 @@ export default function WeeklyMenuPage() {
   const [shoppingListData, setShoppingListData] = useState<ShoppingListItem[]>([]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [finalShoppingList, setFinalShoppingList] = useState<string[]>([]);
-  const [showCamera, setShowCamera] = useState(false);
   const [showMealAnalysis, setShowMealAnalysis] = useState(false);
   const [mealAnalysis, setMealAnalysis] = useState<any>(null);
   const [analyzingMeal, setAnalyzingMeal] = useState(false);
   const [capturedMealImage, setCapturedMealImage] = useState<string | null>(null);
-  const [showCameraForAdvice, setShowCameraForAdvice] = useState(false);
   const [showAdviceWithPhoto, setShowAdviceWithPhoto] = useState(false);
   const [adviceMealAnalysis, setAdviceMealAnalysis] = useState<any>(null);
   const [analyzingAdviceMeal, setAnalyzingAdviceMeal] = useState(false);
   const [capturedAdviceImage, setCapturedAdviceImage] = useState<string | null>(null);
+  const advicePhotoInputRef = useRef<HTMLInputElement>(null);
+  const mealPhotoInputRef = useRef<HTMLInputElement>(null);
   // Vérifier la session avec le hook réutilisable
   const { user, loading: sessionLoading } = useSupabaseSession();
   const { isPremium } = usePremium();
@@ -357,7 +356,6 @@ export default function WeeklyMenuPage() {
 
   const handleCaptureAdvicePhoto = async (imageDataUrl: string) => {
     setCapturedAdviceImage(imageDataUrl);
-    setShowCameraForAdvice(false);
     setAnalyzingAdviceMeal(true);
     setShowAdviceWithPhoto(true);
 
@@ -388,7 +386,6 @@ export default function WeeklyMenuPage() {
 
   const handleCaptureMealPhoto = async (imageDataUrl: string) => {
     setCapturedMealImage(imageDataUrl);
-    setShowCamera(false);
     setAnalyzingMeal(true);
     setShowMealAnalysis(true);
 
@@ -1052,7 +1049,7 @@ export default function WeeklyMenuPage() {
               <button
                 onClick={() => {
                   setShowAdviceModal(false);
-                  setShowCameraForAdvice(true);
+                  requestAnimationFrame(() => advicePhotoInputRef.current?.click());
                 }}
                 className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold text-sm shadow-lg flex items-center justify-center gap-2"
               >
@@ -1196,17 +1193,38 @@ export default function WeeklyMenuPage() {
         </div>
       )}
 
-      {/* Modal de prise de photo pour les conseils diététicien */}
-      {showCameraForAdvice && (
-        <CameraCapture
-          onCapture={handleCaptureAdvicePhoto}
-          onClose={() => {
-            setShowCameraForAdvice(false);
-            setCapturedAdviceImage(null);
-          }}
-          title="Photo de ton repas pour conseils"
-        />
-      )}
+      <input
+        ref={advicePhotoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            void handleCaptureAdvicePhoto(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={mealPhotoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            void handleCaptureMealPhoto(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+          e.target.value = "";
+        }}
+      />
 
       {/* Modal d'analyse de repas avec conseils diététicien (inspiré de Foodvisor) */}
       {showAdviceWithPhoto && (
@@ -1244,7 +1262,7 @@ export default function WeeklyMenuPage() {
                   <button
                     onClick={() => {
                       setShowAdviceWithPhoto(false);
-                      setShowCameraForAdvice(true);
+                      requestAnimationFrame(() => advicePhotoInputRef.current?.click());
                     }}
                     className="px-4 py-2 rounded-xl bg-green-500 text-white hover:bg-green-600"
                   >
@@ -1360,18 +1378,6 @@ export default function WeeklyMenuPage() {
         </div>
       )}
 
-      {/* Modal de prise de photo pour analyser un repas */}
-      {showCamera && (
-        <CameraCapture
-          onCapture={handleCaptureMealPhoto}
-          onClose={() => {
-            setShowCamera(false);
-            setCapturedMealImage(null);
-          }}
-          title="Photo de ton repas"
-        />
-      )}
-
       {/* Modal d'analyse du repas (inspiré de Foodvisor) */}
       {showMealAnalysis && (
         <div className="fixed inset-0 bg-[#6B2E2E]/70 z-50 flex items-center justify-center p-4">
@@ -1416,7 +1422,7 @@ export default function WeeklyMenuPage() {
                   <button
                     onClick={() => {
                       setShowMealAnalysis(false);
-                      setShowCamera(true);
+                      requestAnimationFrame(() => mealPhotoInputRef.current?.click());
                     }}
                     className="px-4 py-2 rounded-xl bg-green-500 text-white hover:bg-green-600"
                   >

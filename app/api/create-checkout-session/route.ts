@@ -13,6 +13,22 @@ import {
   getFoundersLimit,
 } from "../../src/lib/foundersQuota";
 
+/** Cookie Refgrow (dernier clic) — `cookies()` ou en-tête brut en secours. */
+async function getRefgrowRefCodeFromRequest(request: NextRequest): Promise<string | undefined> {
+  const cookieStore = await cookies();
+  const fromNext = cookieStore.get("refgrow_ref_code")?.value?.trim();
+  if (fromNext) return fromNext;
+  const raw = request.headers.get("cookie");
+  if (!raw) return undefined;
+  const m = raw.match(/(?:^|;\s*)refgrow_ref_code=([^;]+)/i);
+  if (!m?.[1]) return undefined;
+  try {
+    return decodeURIComponent(m[1]).trim();
+  } catch {
+    return m[1].trim();
+  }
+}
+
 /**
  * Crée une session Stripe Checkout (abonnement).
  *
@@ -109,8 +125,7 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_APP_URL ||
       "http://localhost:3000";
 
-    const cookieStore = await cookies();
-    const refgrowRefCode = cookieStore.get("refgrow_ref_code")?.value?.trim();
+    const refgrowRefCode = (await getRefgrowRefCodeFromRequest(request)) || undefined;
 
     const meta = {
       userId,
@@ -123,6 +138,16 @@ export async function POST(request: NextRequest) {
         : {}),
     };
 
+    if (refgrowRefCode) {
+      console.log(
+        `[Checkout] Refgrow: referral_code + client_reference_id (len=${refgrowRefCode.length}) pour attribution Stripe → Refgrow`
+      );
+    } else {
+      console.warn(
+        "[Checkout] Refgrow: aucun cookie refgrow_ref_code — les ventes ne seront pas attribuées à un parrain (vérifier ?ref= sur le même site + webhooks Stripe vers Refgrow)."
+      );
+    }
+
     console.log(
       `[Checkout] Session pour ${email} — tier=${tier}, interval=${interval}, priceId=${priceId}, kind=${kind}, founderSlots=${foundersSlotsRemaining}`
     );
@@ -132,6 +157,8 @@ export async function POST(request: NextRequest) {
       payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
+      /** Refgrow lit aussi client_reference_id (priorité après metadata session). */
+      ...(refgrowRefCode ? { client_reference_id: refgrowRefCode.slice(0, 200) } : {}),
       /** Champ « Ajouter un code promo » sur la page Checkout (coupons Stripe). */
       allow_promotion_codes: true,
       success_url: `${origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,

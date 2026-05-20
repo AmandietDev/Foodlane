@@ -122,6 +122,11 @@ export default function MenuDetailPage() {
       el.textContent = `
         @media print {
           @page { size: A4 landscape; margin: 10mm; }
+          html.menu-print-landscape, html.menu-print-landscape body {
+            height: auto !important;
+            overflow: visible !important;
+            background: #fff !important;
+          }
           html.menu-print-landscape body * {
             visibility: hidden !important;
           }
@@ -138,6 +143,7 @@ export default function MenuDetailPage() {
             margin: 0 !important;
             padding: 0 !important;
             background: #fff !important;
+            display: block !important;
           }
         }
       `;
@@ -150,7 +156,9 @@ export default function MenuDetailPage() {
     };
     window.addEventListener("afterprint", cleanup, { once: true });
     window.setTimeout(cleanup, 120_000);
-    requestAnimationFrame(() => window.print());
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => window.print());
+    });
   }, []);
 
   useEffect(() => {
@@ -407,13 +415,18 @@ export default function MenuDetailPage() {
         </section>
         </div>
 
-        <section>
+        <section id="grocery-print-root">
           <h2 className="text-lg font-semibold text-[#4a2c2c] mb-1 print:mb-3">Liste de courses</h2>
           <p className="hidden print:block text-sm text-[#4a2c2c] font-medium mb-2">{title}</p>
           <p className="text-xs text-[#7a5a5a] mb-3 print:hidden">
             Coche ce que tu as déjà ; supprime ce dont tu n’as pas besoin.
           </p>
-          <GroceryExportBar menuTitle={title} items={visibleGroceryItems} locale={getLocale()} />
+          <GroceryExportBar
+            menuTitle={title}
+            items={visibleGroceryItems}
+            locale={getLocale()}
+            printScopeRootId="grocery-print-root"
+          />
           {visibleGroceryItems.length === 0 ? (
             <p className="text-sm text-[#7a5a5a]">Aucun ingrédient agrégé.</p>
           ) : (
@@ -495,7 +508,7 @@ export default function MenuDetailPage() {
               <div className="flex items-center gap-2 shrink-0">
                 {selectedRecipe.id > 0 ? (
                   <Link
-                    href={`/recette/${selectedRecipe.id}`}
+                    href={`/recette/${selectedRecipe.id}?from=${encodeURIComponent(`/menus/${id}`)}`}
                     className="text-xs font-semibold text-[#6366f1] hover:underline"
                   >
                     Fiche complète →

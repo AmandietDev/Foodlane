@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { getLocale, setLocale, type Locale, t } from "../src/lib/i18n";
-import { loadPreferences } from "../src/lib/userPreferences";
 
 interface TranslationContextType {
   locale: Locale;
@@ -28,7 +27,7 @@ export function TranslationProvider({
     setLocale(savedLocale);
   }, []);
 
-  // Écouter les changements de localStorage pour synchroniser la langue
+  // Écouter les changements de localStorage (autres onglets) et le retour sur la fenêtre
   useEffect(() => {
     const handleStorageChange = () => {
       const newLocale = getLocale();
@@ -38,17 +37,17 @@ export function TranslationProvider({
     };
 
     window.addEventListener("storage", handleStorageChange);
-    // Écouter les changements personnalisés (même fenêtre)
-    const interval = setInterval(() => {
+    const onFocus = () => {
       const currentLocale = getLocale();
       if (currentLocale !== locale) {
         setLocaleState(currentLocale);
       }
-    }, 500);
+    };
+    window.addEventListener("focus", onFocus);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
-      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
     };
   }, [locale]);
 

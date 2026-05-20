@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSupabaseSession } from "../../hooks/useSupabaseSession";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import RecipeImage from "../../components/RecipeImage";
@@ -15,9 +15,27 @@ import {
   scaleIngredientQuantity,
 } from "../../src/lib/ingredientQuantities";
 
-export default function RecetteDetailPage() {
+function resolveBackLink(fromParam: string | null): { href: string; label: string } {
+  const raw = fromParam?.trim() || "";
+  if (
+    !raw.startsWith("/") ||
+    raw.startsWith("//") ||
+    raw.includes("://") ||
+    raw.includes("\n")
+  ) {
+    return { href: "/recettes", label: "← Recettes" };
+  }
+  const pathOnly = raw.split("?")[0] || "/recettes";
+  if (pathOnly.startsWith("/menus/")) {
+    return { href: pathOnly, label: "← Retour au menu" };
+  }
+  return { href: pathOnly, label: "← Retour" };
+}
+
+function RecetteDetailInner() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const rawId = params.id as string;
   const id = Number(rawId);
   const { user, loading: sessionLoading } = useSupabaseSession();
@@ -25,6 +43,8 @@ export default function RecetteDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [portions, setPortions] = useState(2);
+
+  const { href: backHref, label: backLabel } = resolveBackLink(searchParams.get("from"));
 
   useEffect(() => {
     if (!sessionLoading && !user) router.push("/login");
@@ -85,8 +105,8 @@ export default function RecetteDetailPage() {
       <main className="min-h-screen bg-[#FFF8F6] px-4 py-8 pb-28">
         <div className="max-w-lg mx-auto space-y-4">
           <p className="text-red-700">{error || "Recette introuvable."}</p>
-          <Link href="/recettes" className="text-sm font-semibold text-[#D44A4A] underline">
-            ← Retour aux recettes
+          <Link href={backHref} className="text-sm font-semibold text-[#D44A4A] underline">
+            {backLabel}
           </Link>
         </div>
       </main>
@@ -97,8 +117,11 @@ export default function RecetteDetailPage() {
     <main className="min-h-screen bg-[#FFF8F6] px-4 py-6 pb-28 md:pb-10">
       <div className="max-w-lg md:max-w-2xl mx-auto space-y-4">
         <div className="flex flex-wrap gap-3 text-sm">
+          <Link href={backHref} className="text-[#8A4A4A] hover:text-[#6B2E2E] font-medium">
+            {backLabel}
+          </Link>
           <Link href="/recettes" className="text-[#8A4A4A] hover:text-[#6B2E2E]">
-            ← Recettes
+            Toutes les recettes
           </Link>
           <Link href="/planifier" className="text-[#8A4A4A] hover:text-[#6B2E2E]">
             Planifier
@@ -199,5 +222,19 @@ export default function RecetteDetailPage() {
         </article>
       </div>
     </main>
+  );
+}
+
+export default function RecetteDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#FFF8F6]">
+          <LoadingSpinner message="Chargement…" />
+        </div>
+      }
+    >
+      <RecetteDetailInner />
+    </Suspense>
   );
 }

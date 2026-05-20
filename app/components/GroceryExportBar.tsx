@@ -162,14 +162,58 @@ function renderPngAndSave(menuTitle: string, items: GroceryExportItem[], locale:
   );
 }
 
+function injectPrintScopeStyles(rootId: string) {
+  const sid = "grocery-scoped-print-style";
+  let el = document.getElementById(sid) as HTMLStyleElement | null;
+  const safeId = rootId.replace(/[^a-zA-Z0-9_-]/g, "");
+  if (!safeId) return null;
+  if (!el) {
+    el = document.createElement("style");
+    el.id = sid;
+    document.head.appendChild(el);
+  }
+  el.textContent = `
+    @media print {
+      @page { size: A4; margin: 12mm; }
+      html.grocery-print-scope, html.grocery-print-scope body {
+        height: auto !important;
+        overflow: visible !important;
+        background: #fff !important;
+      }
+      html.grocery-print-scope body * {
+        visibility: hidden !important;
+      }
+      html.grocery-print-scope #${safeId},
+      html.grocery-print-scope #${safeId} * {
+        visibility: visible !important;
+      }
+      html.grocery-print-scope #${safeId} {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        display: block !important;
+      }
+    }
+  `;
+  return el;
+}
+
 export default function GroceryExportBar({
   menuTitle,
   items,
   locale = "fr",
+  /** Si défini, l’impression / PDF ne contient que ce bloc (liste de courses), pas le menu. */
+  printScopeRootId,
 }: {
   menuTitle: string;
   items: GroceryExportItem[];
   locale?: Locale;
+  printScopeRootId?: string;
 }) {
   const plain = useCallback(() => buildPlainText(menuTitle, items, locale), [menuTitle, items, locale]);
 
@@ -213,6 +257,20 @@ export default function GroceryExportBar({
 
   async function printPdf() {
     if (!(await reserveGroceryExport())) return;
+    if (printScopeRootId && typeof document !== "undefined") {
+      const el = injectPrintScopeStyles(printScopeRootId);
+      document.documentElement.classList.add("grocery-print-scope");
+      const cleanup = () => {
+        document.documentElement.classList.remove("grocery-print-scope");
+        el?.remove();
+      };
+      window.addEventListener("afterprint", cleanup, { once: true });
+      window.setTimeout(cleanup, 120_000);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => window.print());
+      });
+      return;
+    }
     window.print();
   }
 

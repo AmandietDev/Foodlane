@@ -9,7 +9,6 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import { loadPreferences } from "../src/lib/userPreferences";
 import { selectDailyTip, selectDailyChallenge, type Tip, type Challenge, type ObjectiveTag, type ContextTag } from "../src/lib/dailyTips";
 import { getTodayTips, getRecentIds, addToHistory } from "../src/lib/dailyTipsHistory";
-import CameraCapture from "../components/CameraCapture";
 import { getLocale } from "../src/lib/i18n";
 import { sessionAuthHeaders } from "../src/lib/plannerClient";
 
@@ -306,7 +305,11 @@ export default function EquilibrePage() {
       await loadWeeklyInsights();
     } catch (error) {
       console.error("[Equilibre] Erreur ajout repas:", error);
-      alert(error instanceof Error ? error.message : "Erreur lors de l'ajout du repas");
+      const msg =
+        error instanceof Error ? error.message : "Erreur lors de l'ajout du repas";
+      alert(
+        `${msg}\n\nAstuce : le repas doit être enregistré dans ton journal (bouton « Ajouter ») pour être retrouvé dans l’onglet « Ma semaine ».`
+      );
     } finally {
       setAddingMeal(false);
     }
@@ -563,7 +566,6 @@ function EquilibrePageContent({
 }: EquilibrePageContentProps) {
   const [activePart, setActivePart] = useState<"repas" | "semaine">("repas");
   const [showScanModal, setShowScanModal] = useState(false);
-  const [showCameraOrPicker, setShowCameraOrPicker] = useState<"choice" | "camera" | null>(null);
   const [scanAnalysis, setScanAnalysis] = useState<ScanAnalysis | null>(null);
   const [manualIngredients, setManualIngredients] = useState<string[]>([]);
   const [manualInput, setManualInput] = useState("");
@@ -581,7 +583,6 @@ function EquilibrePageContent({
   const dietitianNote = buildDailyDietitianNote(summary, meals, mealTypeLabels as Record<string, string>);
 
   const handleImageFromScan = async (imageDataUrl: string) => {
-    setShowCameraOrPicker(null);
     setLoadingScan(true);
     setScanError(null);
     try {
@@ -616,10 +617,15 @@ function EquilibrePageContent({
   };
 
   const handleSaveScanAsMeal = async () => {
-    if (!scanAnalysis || scanAnalysis.ingredients.length === 0) return;
+    if (!scanAnalysis) return;
     const detected = scanAnalysis.ingredients.map((i) => i.name);
     const combined = [...detected, ...manualIngredients].filter(Boolean).join(", ");
-    if (!combined.trim()) return;
+    if (!combined.trim()) {
+      alert(
+        "Le repas doit être enregistré dans ton journal (avec au moins un ingrédient ou une description) pour être retrouvé dans « Ma semaine ». Ajoute des aliments détectés ou saisis-les à la main, puis réessaie."
+      );
+      return;
+    }
     await handleAddMealWithRawText(combined);
     setShowScanModal(false);
     setScanAnalysis(null);
@@ -693,7 +699,6 @@ function EquilibrePageContent({
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="hidden"
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
@@ -709,20 +714,15 @@ function EquilibrePageContent({
               />
               <button
                 type="button"
-                onClick={() => setShowCameraOrPicker("camera")}
-                disabled={loadingScan}
-                className="w-full mb-2 py-3 px-4 rounded-xl border-2 border-dashed border-[#D44A4A]/70 bg-white/70 text-[#6B2E2E] font-semibold text-sm flex items-center justify-center gap-2"
-              >
-                {loadingScan ? <>⏳ Analyse en cours...</> : <>📷 Scanner mon assiette</>}
-              </button>
-              <button
-                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loadingScan}
-                className="w-full py-2 px-4 rounded-xl bg-white border border-[var(--beige-border)] text-[#726566] text-sm"
+                className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-[#D44A4A]/70 bg-white/70 text-[#6B2E2E] font-semibold text-sm flex items-center justify-center gap-2"
               >
-                Choisir une photo depuis la galerie
+                {loadingScan ? <>⏳ Analyse en cours...</> : <>📷 Choisir une photo (galerie ou appareil)</>}
               </button>
+              <p className="text-[10px] text-[#8A6F6F] mt-2 leading-relaxed">
+                Sur téléphone, sans attribut « appareil photo uniquement », le système te laisse ouvrir la galerie ou l’appareil photo selon ton choix.
+              </p>
             </>
           ) : (
             <div className="rounded-xl border border-[var(--beige-border)] bg-white/70 p-4 text-center">
@@ -785,6 +785,9 @@ function EquilibrePageContent({
               {addingMeal ? "..." : "Ajouter"}
             </button>
           </div>
+          <p className="text-[10px] text-[#8A6F6F] mt-2">
+            Une fois enregistré ici, le repas est pris en compte pour la journée et apparaît dans l’onglet « Ma semaine ».
+          </p>
         </div>
 
         <div className="space-y-3 mb-4">
@@ -1180,15 +1183,6 @@ function EquilibrePageContent({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Caméra pour scan assiette */}
-      {showCameraOrPicker === "camera" && (
-        <CameraCapture
-          title="Scanner mon assiette"
-          onCapture={handleImageFromScan}
-          onClose={() => setShowCameraOrPicker(null)}
-        />
       )}
 
       {scanError && (

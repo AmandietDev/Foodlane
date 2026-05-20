@@ -61,7 +61,23 @@ export async function POST(request: NextRequest) {
     const base = getAppBaseUrl(request);
     const resetLink = `${base}/reset-password?token=${token}`;
 
-    await sendPasswordResetEmail({ to: email, resetLink });
+    const sendResult = await sendPasswordResetEmail({ to: email, resetLink });
+
+    if (!sendResult.sent) {
+      console.warn("[forgot-password] envoi e-mail échoué ou non configuré:", sendResult.error || sendResult);
+      if (process.env.NODE_ENV === "development" && sendResult.devLink) {
+        return NextResponse.json({
+          ...GENERIC_OK,
+          devResetLink: sendResult.devLink,
+        });
+      }
+      return NextResponse.json({
+        ok: true,
+        emailConfigured: false,
+        message:
+          "Le compte existe mais l’envoi d’e-mail n’a pas abouti. Vérifie que RESEND_API_KEY et RESEND_FROM_EMAIL sont bien configurés sur le serveur (ex. Vercel), ou contacte le support.",
+      });
+    }
 
     return NextResponse.json(GENERIC_OK);
   } catch (e) {

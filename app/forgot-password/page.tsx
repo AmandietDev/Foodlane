@@ -26,6 +26,16 @@ export default function ForgotPasswordPage() {
         setLoading(false);
         return;
       }
+      if (j.emailConfigured === false && typeof j.message === "string") {
+        setError(j.message);
+        setLoading(false);
+        return;
+      }
+      if (typeof j.devResetLink === "string" && j.devResetLink.trim()) {
+        setError(`Mode développement — lien de réinitialisation : ${j.devResetLink}`);
+        setLoading(false);
+        return;
+      }
       setDone(true);
     } catch {
       setError("Erreur réseau. Réessaie plus tard.");
