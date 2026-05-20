@@ -7,7 +7,15 @@ import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { supabase } from "../src/lib/supabaseClient";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { loadPreferences } from "../src/lib/userPreferences";
-import { selectDailyTip, selectDailyChallenge, type Tip, type Challenge, type ObjectiveTag, type ContextTag } from "../src/lib/dailyTips";
+import {
+  selectDailyTip,
+  selectDailyChallenge,
+  type Tip,
+  type Challenge,
+  type ObjectiveTag,
+  type ContextTag,
+  type TipCategory,
+} from "../src/lib/dailyTips";
 import { getNutritionSpotlightForDate } from "../src/lib/nutritionCalendarSpotlight";
 import { getTodayTips, getRecentIds, addToHistory } from "../src/lib/dailyTipsHistory";
 import { getLocale } from "../src/lib/i18n";
@@ -72,6 +80,37 @@ function formatWeekdayFr(isoDate: string) {
     day: "numeric",
     month: "short",
   });
+}
+
+const TIP_CATEGORY_FR: Record<TipCategory, string> = {
+  nutrition: "Nutrition",
+  hydration: "Hydratation",
+  movement: "Mouvement",
+  sleep: "Sommeil",
+  stress: "Stress",
+  mindful: "Pleine conscience",
+  selfcare: "Bien-être",
+};
+
+function tipDifficultyShort(d: "easy" | "medium"): string {
+  return d === "easy" ? "Facile" : "Moyen";
+}
+
+/** Découpe le texte du conseil : 1re phrase = « action », suite = « pourquoi » (même logique que le défi). */
+function splitTipLeadAndTail(text: string): { lead: string; tail: string | null } {
+  const t = text.trim();
+  if (t.length < 45) return { lead: t, tail: null };
+  const seps = [". ", "? ", "! "] as const;
+  for (const sep of seps) {
+    const i = t.indexOf(sep);
+    if (i >= 18 && t.length - (i + sep.length) >= 18) {
+      return {
+        lead: t.slice(0, i + sep.length - 1).trim(),
+        tail: t.slice(i + sep.length).trim(),
+      };
+    }
+  }
+  return { lead: t, tail: null };
 }
 
 function DietAssistantFreePreview() {
@@ -383,13 +422,18 @@ export default function EquilibrePage() {
       const payload = (await res.json().catch(() => ({}))) as {
         error?: string;
         details?: string;
+        message?: string;
         entry?: FoodLogEntry;
         summary?: DailySummary;
       };
 
       if (!res.ok) {
-        const msg = [payload.error, payload.details].filter(Boolean).join(" — ");
-        throw new Error(msg || "Erreur lors de l'ajout du repas");
+        const technical = [payload.error, payload.details].filter(Boolean).join(" — ");
+        const friendly =
+          typeof payload.message === "string" && payload.message.trim()
+            ? payload.message.trim()
+            : "";
+        throw new Error(friendly || technical || "Erreur lors de l'ajout du repas");
       }
 
       const j = payload;
@@ -412,8 +456,14 @@ export default function EquilibrePage() {
       console.error("[Equilibre] Erreur ajout repas:", error);
       const msg =
         error instanceof Error ? error.message : "Erreur lors de l'ajout du repas";
+      const isJournalServeur =
+        /food_log_entries|Journal indisponible|journal alimentaire|001_create_food_log/i.test(msg);
       alert(
-        `${msg}\n\nAstuce : le repas doit être enregistré dans ton journal (bouton « Ajouter ») pour être retrouvé dans l’onglet « Ma semaine ».`
+        `${msg}${
+          isJournalServeur
+            ? ""
+            : "\n\nAstuce : le repas doit être enregistré dans ton journal (bouton « Ajouter ») pour être retrouvé dans l’onglet « Ma semaine »."
+        }`
       );
     } finally {
       setAddingMeal(false);
@@ -827,9 +877,23 @@ function EquilibrePageContent({
           <h2 className="text-sm font-semibold mb-2 text-[#6B2E2E] flex items-center gap-2">
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#FFE4E4] text-[#D44A4A]">✦</span>
             <span>Conseil du jour</span>
+            <span className="text-xs text-[#726566] ml-auto font-medium shrink-0">
+              {TIP_CATEGORY_FR[conseilDuJour.category] ?? conseilDuJour.category} ·{" "}
+              {tipDifficultyShort(conseilDuJour.difficulty)}
+            </span>
           </h2>
-          <p className="text-sm text-[#726566]">{conseilDuJour.text}</p>
-          <div className="mt-3 pt-3 border-t border-[#EDDCDC]/70">
+          {(() => {
+            const { lead, tail } = splitTipLeadAndTail(conseilDuJour.text);
+            return (
+              <>
+                <p className="text-sm font-medium text-[#6B2E2E] mb-1 leading-snug">{lead}</p>
+                {tail ? (
+                  <p className="text-xs text-[#726566] italic leading-relaxed mb-2">{tail}</p>
+                ) : null}
+              </>
+            );
+          })()}
+          <div className="mt-2 pt-2 border-t border-[#EDDCDC]/70">
             <p className="text-[11px] font-semibold text-[#6B2E2E] mb-1">À la une — santé & bien-être</p>
             <p className="text-xs text-[#726566] leading-relaxed">
               <span className="font-medium text-[#3E2A2A]">{nutritionSpotlight.title}</span>

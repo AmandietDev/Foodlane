@@ -82,8 +82,28 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.error("[FoodLog] Erreur insertion:", insertError);
+      const rawMsg = insertError.message || "";
+      const code = (insertError as { code?: string }).code || "";
+      const missingTable =
+        /food_log_entries/i.test(rawMsg) ||
+        /schema cache/i.test(rawMsg) ||
+        /does not exist/i.test(rawMsg) ||
+        code === "42P01";
+
+      if (missingTable) {
+        return NextResponse.json(
+          {
+            error: "Journal indisponible sur le serveur",
+            message:
+              "La table du journal alimentaire n’existe pas encore sur ton projet Supabase (ou le cache du schéma n’est pas à jour). Ouvre le dashboard Supabase → SQL Editor, colle et exécute le contenu du fichier « supabase/migrations/001_create_food_log_tables.sql » du dépôt Foodlane, puis attends 1 à 2 minutes. Si la table existe déjà : Project Settings → API → bouton pour rafraîchir le schéma, ou redémarre le projet.",
+            details: rawMsg,
+          },
+          { status: 503 }
+        );
+      }
+
       return NextResponse.json(
-        { error: "Erreur lors de l'ajout du repas", details: insertError.message },
+        { error: "Erreur lors de l'ajout du repas", details: rawMsg },
         { status: 500 }
       );
     }
