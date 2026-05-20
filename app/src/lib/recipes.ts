@@ -57,30 +57,46 @@ export type Recipe = {
   created_at: string;
 };
 
+/** Cache court en mémoire (process) pour éviter 2× chargement complet (ex. /api/recipes + /api/recipes/for-me). */
+let recipesFetchCache: { data: Recipe[]; expiresAt: number } | null = null;
+const RECIPES_FETCH_CACHE_TTL_MS = 120_000;
+
 /**
  * Fonction principale pour récupérer les recettes
  * Utilise Supabase si configuré, sinon Google Sheets (fallback)
  */
 export async function fetchRecipes(): Promise<Recipe[]> {
+  if (recipesFetchCache && Date.now() < recipesFetchCache.expiresAt) {
+    return recipesFetchCache.data;
+  }
+
   // Vérifier si Supabase est configuré
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  let recipes: Recipe[];
 
   if (supabaseUrl && supabaseKey) {
     try {
       // Utiliser Supabase
       const { fetchRecipesFromSupabase } = await import('./recipes-supabase');
-      return await fetchRecipesFromSupabase();
+      recipes = await fetchRecipesFromSupabase();
     } catch (error) {
       console.error('[Recipes] Erreur avec Supabase, fallback vers Google Sheets:', error);
       // Fallback vers Google Sheets en cas d'erreur
-      return await fetchRecipesFromSheet();
+      recipes = await fetchRecipesFromSheet();
     }
   } else {
     // Fallback vers Google Sheets si Supabase n'est pas configuré
     console.log('[Recipes] Supabase non configuré, utilisation de Google Sheets');
-    return await fetchRecipesFromSheet();
+    recipes = await fetchRecipesFromSheet();
   }
+
+  recipesFetchCache = {
+    data: recipes,
+    expiresAt: Date.now() + RECIPES_FETCH_CACHE_TTL_MS,
+  };
+  return recipes;
 }
 
 type RawRow = {

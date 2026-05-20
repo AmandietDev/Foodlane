@@ -146,7 +146,10 @@ export async function POST(request: NextRequest) {
         tip_options: summary.tip_options,
         missing_components: summary.missing_components,
         plan_for_tomorrow: summary.plan_for_tomorrow,
-        meta: summary.meta,
+        meta: {
+          ...summary.meta,
+          meal_ids: (allMeals || []).map((m) => m.id).sort(),
+        },
       }, {
         onConflict: "user_id,date"
       });

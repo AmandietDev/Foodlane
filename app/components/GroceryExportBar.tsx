@@ -174,7 +174,7 @@ function injectPrintScopeStyles(rootId: string) {
   }
   el.textContent = `
     @media print {
-      @page { size: A4; margin: 12mm; }
+      @page { size: A4; margin: 5mm 7mm; }
       html.grocery-print-scope, html.grocery-print-scope body {
         height: auto !important;
         overflow: visible !important;
@@ -197,6 +197,29 @@ function injectPrintScopeStyles(rootId: string) {
         padding: 0 !important;
         background: #fff !important;
         display: block !important;
+        font-size: 8pt !important;
+        line-height: 1.12 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      html.grocery-print-scope #${safeId} h2 {
+        font-size: 10pt !important;
+        margin: 0 0 3px !important;
+      }
+      html.grocery-print-scope #${safeId} h3 {
+        font-size: 8pt !important;
+        margin: 1px 0 0 !important;
+        font-weight: 700 !important;
+      }
+      html.grocery-print-scope #${safeId} .space-y-4 > * + * {
+        margin-top: 3px !important;
+      }
+      html.grocery-print-scope #${safeId} ul {
+        margin: 0 !important;
+      }
+      html.grocery-print-scope #${safeId} li {
+        padding: 1px 4px !important;
+        font-size: 8pt !important;
       }
     }
   `;

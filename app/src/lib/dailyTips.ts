@@ -127,6 +127,15 @@ export const TIPS: Tip[] = [
   { id: "sc_tip_6", category: "selfcare", difficulty: "easy", tags: ["general", "anytime"], text: "10 minutes de marche après le repas : digestion, humeur et régulation de l'appétit y gagnent." },
   { id: "sc_tip_7", category: "selfcare", difficulty: "easy", tags: ["general", "anytime"], text: "La cohérence cardiaque (respiration lente guidée) peut calmer le stress… et les envies liées au stress." },
   { id: "sc_tip_8", category: "selfcare", difficulty: "easy", tags: ["general", "anytime"], text: "Un livre de psycho ou de nutrition bienveillante peut renforcer tes repères — choisis un chapitre court aujourd'hui." },
+
+  // Ressources concrètes (livres, podcasts, vidéos, apprentissage)
+  { id: "n_tip_res_1", category: "nutrition", difficulty: "easy", tags: ["general", "anytime"], text: "Lecture 15 min : cherche « bienfaits légumineuses ANSES » ou fiche pédagogique légumineuses et note 2 idées (houmous, dal, chili végétarien)." },
+  { id: "n_tip_res_2", category: "nutrition", difficulty: "easy", tags: ["mindful", "anytime"], text: "Podcast : un épisode « Science VS » sur l’alimentation ou les régimes — repère 1 idée à tester cette semaine (pas 10)." },
+  { id: "n_tip_res_3", category: "nutrition", difficulty: "easy", tags: ["cook_more", "anytime"], text: "Vidéo 10 min : technique « comment ciseler du basilic / émincer une gousse d’ail » — puis applique sur ton dîner." },
+  { id: "n_tip_res_4", category: "nutrition", difficulty: "easy", tags: ["reduce_meat", "anytime"], text: "Livre piste : « Petite encyclopédie des protéines végétales » (ou équivalent) — repère 1 recette lentilles + épices pour ce week-end." },
+  { id: "m_tip_res_1", category: "movement", difficulty: "easy", tags: ["general", "at_home"], text: "Exercice : 2 séries de « chaise contre mur » (30 s + pause) — bon pour cuisses et posture si tu télétravailles." },
+  { id: "s_tip_res_1", category: "sleep", difficulty: "easy", tags: ["general", "anytime"], text: "Apprendre : cherche « lumière bleue sommeil INSERM » en 5 min de lecture — puis baisse luminosité écran 1 h avant le coucher." },
+  { id: "st_tip_res_1", category: "stress", difficulty: "easy", tags: ["general", "anytime"], text: "YouTube : « cohérence cardiaque 5 minutes guidée » — fais la séance une fois, programme-la en rappel pour demain matin." },
 ];
 
 // Base de données des défis (Challenges)
@@ -317,8 +326,8 @@ export const CHALLENGES: Challenge[] = [
   { id: "sc_ch_16", category: "selfcare", difficulty: "easy", duration_min: 5, tags: ["general", "no_equipment", "at_home"], action: "Essayer 5 minutes de méditation guidée (appli ou silence)", why: "Réduit le stress et les grignotages émotionnels" },
   { id: "sc_ch_17", category: "selfcare", difficulty: "easy", duration_min: 5, tags: ["general", "at_home"], action: "Cohérence cardiaque 5 min (respiration ~6 cycles/min)", why: "Apaise le système nerveux" },
   { id: "sc_ch_18", category: "selfcare", difficulty: "easy", duration_min: 15, tags: ["general", "anytime"], action: "Lire 15 pages d'un livre qui te fait du bien (roman ou essai)", why: "Pause cognitive et plaisir" },
-  { id: "m_ch_11", category: "movement", difficulty: "easy", duration_min: 12, tags: ["general", "outdoors"], action: "12 minutes de marche rapide sans téléphone", why: "Cardio doux + déconnexion" },
-  { id: "m_ch_12", category: "movement", difficulty: "easy", duration_min: 8, tags: ["general", "at_home"], action: "8 minutes d'étirements + ouverture thoracique", why: "Posture et confort digestif" },
+  { id: "m_ch_101", category: "movement", difficulty: "easy", duration_min: 12, tags: ["general", "outdoors"], action: "12 minutes de marche rapide sans téléphone", why: "Cardio doux + déconnexion" },
+  { id: "m_ch_102", category: "movement", difficulty: "easy", duration_min: 8, tags: ["general", "at_home"], action: "8 minutes d'étirements + ouverture thoracique", why: "Posture et confort digestif" },
   { id: "n_ch_57", category: "nutrition", difficulty: "easy", duration_min: 3, tags: ["weight_loss", "anytime"], action: "Ajouter 1 aliment riche en fibres ET 1 protéine au même repas", why: "Combo le plus efficace pour la satiété" },
 ];
 

@@ -1,5 +1,7 @@
 // Système de traduction pour l'application
 
+import { PLANNER_I18N } from "./i18nPlannerBundle";
+
 export type Locale = "fr" | "en" | "es" | "de";
 
 interface Translations {
@@ -620,10 +622,10 @@ const translations: Translations = {
     de: "Unterschied Tab „Haushalt“ und Seite „Menü-Einstellungen“?",
   },
   "faq.7.a": {
-    fr: "L’onglet Foyer reprend une partie du profil (personnes, régimes, allergies, équipements) pour un réglage rapide ; le nombre de personnes (et portions si foyer de 5) est synchronisé avec Supabase. La page Préférences menus permet d’éditer tout le questionnaire (temps de cuisine, objectifs, repas planifiés, etc.).",
-    en: "The Household tab covers part of your profile for quick edits; household size (and portions if 5 people) syncs to Supabase. Meal preferences edits the full questionnaire (cooking time, goals, planned meals, etc.).",
-    es: "Hogar: ajuste rápido del perfil; el número de personas se sincroniza con Supabase. Preferencias de menús: cuestionario completo.",
-    de: "Haushalt: schnelle Anpassungen; Personenzahl synchron mit Supabase. Menü-Einstellungen: voller Fragebogen.",
+    fr: "C’est le même questionnaire (équipements, temps de cuisine, objectifs d’utilisation, repas…). Tu peux le remplir depuis Réglages > Foyer ou depuis la page « Mes préférences » ; les données sont les mêmes sur ton compte Supabase.",
+    en: "It is the same questionnaire (equipment, cooking time, goals, meals…). You can edit it under Settings > Household or on the “My preferences” page; data is the same on your Supabase account.",
+    es: "Es el mismo cuestionario (equipos, tiempo de cocina, objetivos, comidas…). Puedes editarlo en Ajustes > Hogar o en « Mis preferencias »; los datos son los mismos en tu cuenta.",
+    de: "Es ist derselbe Fragebogen (Geräte, Kochzeit, Ziele, Mahlzeiten…). Bearbeiten unter Einstellungen > Haushalt oder „Meine Menü-Einstellungen“; dieselben Daten in Supabase.",
   },
   "faq.8.q": {
     fr: "Mes favoris et menus sont-ils sauvegardés dans le cloud ?",
@@ -722,6 +724,8 @@ const translations: Translations = {
     es: "No se pudo enviar. Inténtalo más tarde.",
     de: "Senden fehlgeschlagen. Bitte später erneut versuchen.",
   },
+
+  ...PLANNER_I18N,
 };
 
 let currentLocale: Locale = "fr";

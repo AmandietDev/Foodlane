@@ -1567,7 +1567,9 @@ export default function PlanifierPage() {
                                 onViewRecipe={() => {
                                   const rid = meal.recipe_id;
                                   if (Number.isFinite(rid) && rid > 0) {
-                                    router.push(`/recette/${rid}`);
+                                    router.push(
+                                      `/recette/${rid}?from=${encodeURIComponent("/planifier")}`
+                                    );
                                   }
                                 }}
                                 batchColor={

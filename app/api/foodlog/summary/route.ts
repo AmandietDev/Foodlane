@@ -4,6 +4,26 @@ import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
 import { requirePremium } from "../../../src/lib/premiumGuard";
 import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
 
+function sortedMealIdsFingerprint(
+  meals: { id: string }[] | null | undefined
+): string {
+  if (!meals?.length) return "";
+  return [...meals.map((m) => m.id)].sort().join("|");
+}
+
+function maxMealActivityMs(
+  meals: { created_at: string; updated_at?: string | null }[]
+): number {
+  let max = 0;
+  for (const m of meals) {
+    const c = new Date(m.created_at).getTime();
+    const u = m.updated_at ? new Date(m.updated_at).getTime() : 0;
+    if (Number.isFinite(c)) max = Math.max(max, c);
+    if (Number.isFinite(u)) max = Math.max(max, u);
+  }
+  return max;
+}
+
 /**
  * GET /api/foodlog/summary?date=YYYY-MM-DD
  * Récupère ou calcule le résumé journalier
@@ -56,9 +76,8 @@ export async function GET(request: NextRequest) {
       .eq("date", date)
       .single();
 
-    // Si le summary existe et qu'il y a des repas, le retourner
+    // Si le summary existe : ne le réutiliser que s'il correspond encore aux repas du jour
     if (existingSummary && !fetchError) {
-      // Vérifier si des repas ont été ajoutés depuis la dernière mise à jour
       const { data: meals } = await db
         .from("food_log_entries")
         .select("*")
@@ -66,19 +85,23 @@ export async function GET(request: NextRequest) {
         .eq("date", date)
         .order("created_at", { ascending: true });
 
-      if (meals && meals.length > 0) {
-        // Vérifier si le summary est à jour (dernière entrée après le summary)
-        const lastMeal = meals[meals.length - 1];
-        const summaryUpdated = new Date(existingSummary.updated_at);
-        const lastMealCreated = new Date(lastMeal.created_at);
+      if (meals?.length) {
+        const currentFp = sortedMealIdsFingerprint(meals);
+        const savedMeta = existingSummary.meta as { meal_ids?: string[] } | undefined;
+        const savedFp = Array.isArray(savedMeta?.meal_ids)
+          ? [...savedMeta.meal_ids].sort().join("|")
+          : "";
 
-        // Si le summary est récent, le retourner
-        if (summaryUpdated >= lastMealCreated) {
+        const summaryMs = new Date(existingSummary.updated_at as string).getTime();
+        const activityMs = maxMealActivityMs(meals);
+
+        if (
+          savedFp === currentFp &&
+          Number.isFinite(summaryMs) &&
+          summaryMs >= activityMs
+        ) {
           return NextResponse.json(existingSummary);
         }
-      } else {
-        // Pas de repas, retourner le summary existant ou un summary vide
-        return NextResponse.json(existingSummary);
       }
     }
 
@@ -134,7 +157,8 @@ export async function GET(request: NextRequest) {
         },
         meta: {
           components_found: [],
-          rules_triggered: ["insufficient_data"]
+          rules_triggered: ["insufficient_data"],
+          meal_ids: [],
         }
       };
 
@@ -174,7 +198,10 @@ export async function GET(request: NextRequest) {
       tip_options: summary.tip_options,
       missing_components: summary.missing_components,
       plan_for_tomorrow: summary.plan_for_tomorrow,
-      meta: summary.meta,
+      meta: {
+        ...summary.meta,
+        meal_ids: meals.map((m) => m.id).sort(),
+      },
     };
 
     const { data: savedSummary, error: saveError } = await db

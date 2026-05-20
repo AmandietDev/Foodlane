@@ -6,6 +6,34 @@ import { requirePremiumPlus } from "../../src/lib/premiumGuard";
 
 const VISION_LOCALES: Locale[] = ["fr", "en", "es", "de"];
 
+function parseDataUrlImage(imageBase64: string): { mime: string; base64: string } {
+  const raw = imageBase64.trim();
+  const m = /^data:([^;]+);base64,([\s\S]+)$/i.exec(raw);
+  if (m) {
+    const mime = m[1].toLowerCase().trim();
+    const base64 = m[2].replace(/\s/g, "");
+    if (mime.startsWith("image/")) return { mime, base64 };
+  }
+  const base64 = (raw.includes(",") ? raw.split(",").slice(1).join(",") : raw).replace(/\s/g, "");
+  return { mime: "image/jpeg", base64 };
+}
+
+function parseVisionJson(content: string): unknown {
+  const trimmed = content.trim();
+  const fenced =
+    trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim() ?? trimmed;
+  try {
+    return JSON.parse(fenced);
+  } catch {
+    const start = fenced.indexOf("{");
+    const end = fenced.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(fenced.slice(start, end + 1));
+    }
+    throw new Error("Réponse non JSON du modèle");
+  }
+}
+
 /**
  * API pour analyser une photo de repas (assistant diététique + vision).
  * Réservé au palier **Premium Plus**.
@@ -26,10 +54,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extraire le base64 pur (sans le préfixe data:image/...)
-    const base64Data = imageBase64.includes(",")
-      ? imageBase64.split(",")[1]
-      : imageBase64;
+    const { mime: imageMime, base64: base64Data } = parseDataUrlImage(imageBase64);
 
     // Vérifier si OpenAI API key est configurée
     const openaiApiKey = process.env.OPENAI_API_KEY;
@@ -121,7 +146,7 @@ ${aiOutputLanguageDirective(locale)}`;
               {
                 type: "image_url",
                 image_url: {
-                  url: `data:image/jpeg;base64,${base64Data}`,
+                  url: `data:${imageMime};base64,${base64Data}`,
                 },
               },
             ],
@@ -144,17 +169,18 @@ ${aiOutputLanguageDirective(locale)}`;
       throw new Error("Réponse vide de l'API OpenAI");
     }
 
-    // Parser le JSON de la réponse
-    let analysis;
+    let analysis: unknown;
     try {
-      // Extraire le JSON si c'est dans un bloc de code markdown
-      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
-      const jsonString = jsonMatch ? jsonMatch[1] : content;
-      analysis = JSON.parse(jsonString);
+      analysis = parseVisionJson(content);
     } catch (parseError) {
-      console.error("Erreur parsing JSON:", parseError);
-      // Fallback : essayer de parser directement
-      analysis = JSON.parse(content);
+      console.error("Erreur parsing JSON:", parseError, content.slice(0, 400));
+      return NextResponse.json(
+        {
+          error: "Impossible d’interpréter la réponse d’analyse",
+          details: parseError instanceof Error ? parseError.message : String(parseError),
+        },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json(analysis);

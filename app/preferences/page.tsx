@@ -9,8 +9,10 @@ import { DEFAULT_PLANNER_PREFERENCES } from "../src/lib/weeklyPlanner";
 import type { PlannerPreferences } from "../src/lib/weeklyPlanner";
 import PlannerProfileForm from "../components/PlannerProfileForm";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { useTranslation } from "../components/TranslationProvider";
 
 export default function PreferencesPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, loading: sessionLoading } = useSupabaseSession();
   const [initial, setInitial] = useState<PlannerPreferences>(DEFAULT_PLANNER_PREFERENCES);
@@ -43,7 +45,7 @@ export default function PreferencesPage() {
   if (sessionLoading || !user || !loaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FFF8F6]">
-        <LoadingSpinner message="Chargement…" />
+        <LoadingSpinner message={t("preferences.page.loading")} />
       </div>
     );
   }
@@ -52,20 +54,20 @@ export default function PreferencesPage() {
     <div className="min-h-screen bg-[#FFF8F6] pt-6 px-4 pb-8 md:px-8 md:pt-10">
       <div className="max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-between mb-4">
         <Link href="/tableau" className="text-sm text-[#8A4A4A]">
-          ← Retour
+          {t("preferences.page.back")}
         </Link>
       </div>
       <div className="max-w-2xl lg:max-w-3xl mx-auto mb-6">
-        <h1 className="text-2xl font-bold text-[#4a2c2c]">Mes préférences</h1>
+        <h1 className="text-2xl font-bold text-[#4a2c2c]">{t("preferences.page.title")}</h1>
         {saved && (
-          <p className="text-sm text-green-700 mt-2">Modifications enregistrées.</p>
+          <p className="text-sm text-green-700 mt-2">{t("preferences.page.saved")}</p>
         )}
       </div>
       <PlannerProfileForm
         key={user.id}
         initial={initial}
         visualVariant="foyer"
-        submitLabel="Mettre à jour"
+        submitLabel={t("preferences.submit.update")}
         onSubmit={async ({ preferences, equipment_keys, allergy_keys, excluded_ingredients }) => {
           const res = await plannerFetch("/preferences", {
             method: "PUT",

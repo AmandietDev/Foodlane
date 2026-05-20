@@ -1,22 +1,22 @@
 /**
- * Pont de synchronisation entre l'onglet "Foyer" (libellés français côté UI)
- * et les préférences Supabase utilisées par le moteur de génération de menus
- * (clés normalisées en snake_case).
+ * Pont de synchronisation entre l’UI « foyer » (libellés français côté stockage local)
+ * et les préférences Supabase du planificateur (clés snake_case).
  *
  * Champs synchronisés :
  *  - household_size               ↔ nombrePersonnes
- *  - recipe_scaling_portions     ↔ recipeScalingPortionsMenu
- *  - dietary_filters             ↔ regimesParticuliers (libellés FR)
+ *  - recipe_scaling_portions      ↔ portions (foyer de 5)
+ *  - dietary_filters              ↔ regimesParticuliers (libellés FR)
  *  - excluded_ingredients         ↔ aversionsAlimentaires (texte libre)
- *  - equipment_keys              ↔ equipements (libellés FR)
- *  - objectives                  ↔ objectifsUsage (NUTRITION_GOALS) + flag batch dédié
+ *  - equipment_keys               ↔ equipements (libellés FR)
+ *  - objectives (planner)         ↔ objectifsUsage (ids nutrition pour l’assistant)
  *
- * Note : la liste UI des `objectifsUsage` (NUTRITION_GOALS) ne recoupe pas
- * directement les `OBJECTIVE_OPTIONS` du planner. On préserve donc les deux
- * mondes côte à côte côté Supabase : la clé `"batch"` est ajoutée/retirée en
- * fonction d'un toggle dédié ; les autres objectifs nutrition (perte de poids,
- * etc.) restent gérés ailleurs.
+ * `buildSupabasePayloadFromFoyer` reste disponible pour d’éventuels outils legacy ;
+ * l’onglet Foyer de l’app utilise désormais le même `PlannerProfileForm` que
+ * « Mes préférences » et enregistre via `PUT /api/planner/preferences`.
  */
+
+import type { PlannerPreferences } from "./weeklyPlanner";
+import type { UserPreferences } from "./userPreferences";
 
 // ── Régimes alimentaires ────────────────────────────────────────────────
 // UI Foyer ("DietaryProfile" français) → clés Supabase
@@ -178,5 +178,50 @@ export function buildSupabasePayloadFromFoyer(
     excluded_ingredients: ui.aversionsAlimentaires.map((s) => s.trim()).filter(Boolean),
     equipment_keys,
     objectives: [...objectivesSet],
+  };
+}
+
+/** Objectifs planner → identifiants « objectifs nutrition » pour l’assistant (localStorage). */
+export function plannerObjectivesToNutritionGoalIds(objectives: string[]): string[] {
+  const out = new Set<string>();
+  for (const o of objectives) {
+    if (o === "perte_poids") out.add("weight-loss");
+    if (o === "prise_masse") out.add("muscle-gain");
+    if (o === "vegetarien_plus") out.add("vegetarian");
+    if (
+      o === "equilibre" ||
+      o === "mieux_manger" ||
+      o === "charge_mentale" ||
+      o === "gain_temps" ||
+      o === "batch" ||
+      o === "famille" ||
+      o === "autre"
+    ) {
+      out.add("rebalancing");
+    }
+  }
+  if (out.size === 0) out.add("rebalancing");
+  return [...out];
+}
+
+/** Met à jour les préférences locales (assistant, UI) après sauvegarde planner Supabase. */
+export function mergeUserPreferencesFromPlanner(
+  prev: UserPreferences,
+  p: PlannerPreferences
+): UserPreferences {
+  const dietaryLabels = filterKeysToDietaryProfiles(p.dietary_filters || []);
+  const equipLabels = equipmentKeysToLabels(p.equipment_keys || []);
+  const aversions = [...new Set([...(p.allergy_keys || []), ...(p.excluded_ingredients || [])])].filter(
+    Boolean
+  );
+  return {
+    ...prev,
+    nombrePersonnes: Math.max(1, Number(p.household_size) || 1),
+    regimesParticuliers:
+      dietaryLabels.length > 0 ? (dietaryLabels as string[]) : prev.regimesParticuliers,
+    aversionsAlimentaires:
+      aversions.length > 0 ? aversions : prev.aversionsAlimentaires,
+    equipements: equipLabels.length > 0 ? equipLabels : prev.equipements,
+    objectifsUsage: plannerObjectivesToNutritionGoalIds(p.objectives || []),
   };
 }

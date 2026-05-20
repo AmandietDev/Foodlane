@@ -10,6 +10,7 @@ import {
   scoreRecipeForPlanner,
   type PlannerGenerateInput,
   type LockedSlot,
+  type PlannedWeek,
 } from "../../../src/lib/weeklyPlanner";
 import { DEFAULT_PLANNER_PREFERENCES } from "../../../src/lib/weeklyPlanner";
 import { rowToPlannerPreferences, type UserPreferencesRow } from "../../../src/lib/plannerServer";
@@ -26,6 +27,28 @@ import { FREE_MENU_GENERATIONS_PER_MONTH } from "../../../src/lib/freemiumLimits
 import { monthPeriodKey, tryConsumeFreemiumQuota } from "../../../src/lib/usageQuotasServer";
 
 const AI_LOCALES: Locale[] = ["fr", "en", "es", "de"];
+
+/** Pour la semaine calendaire en cours : ne pas garder de repas sur les jours déjà passés. */
+function stripMealsOnPastDays(plan: PlannedWeek, weekStartISO: string): void {
+  const parts = weekStartISO.split("-");
+  if (parts.length !== 3) return;
+  const y = Number(parts[0]);
+  const mo = Number(parts[1]);
+  const d = Number(parts[2]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return;
+  const monday = new Date(y, mo - 1, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const mondayOnly = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate());
+  if (today < mondayOnly) return;
+  for (const day of plan.days) {
+    const cell = new Date(mondayOnly);
+    cell.setDate(mondayOnly.getDate() + day.day_index);
+    if (cell < today) {
+      day.meals = [];
+    }
+  }
+}
 
 function parseAiLocale(x: unknown): Locale {
   return typeof x === "string" && AI_LOCALES.includes(x as Locale) ? (x as Locale) : "fr";
@@ -300,6 +323,8 @@ export async function POST(request: NextRequest) {
       lockedSlots,
     });
   }
+
+  stripMealsOnPastDays(plan, weekStart);
 
   const title = `Menu semaine du ${weekStart}`;
 

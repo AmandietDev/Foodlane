@@ -9,6 +9,7 @@ import { plannerFetch } from "../src/lib/plannerClient";
 import FavoritesRecipesHero from "../components/FavoritesRecipesHero";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { FreeTierAdSlot } from "../components/ads/FreeTierAdSlot";
+import { useTranslation } from "../components/TranslationProvider";
 
 type MenuRow = {
   id: string;
@@ -20,6 +21,7 @@ type MenuRow = {
 
 export default function TableauPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user, loading: sessionLoading } = useSupabaseSession();
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [onboardingDone, setOnboardingDone] = useState(false);
@@ -52,7 +54,7 @@ export default function TableauPage() {
     let cancelled = false;
     (async () => {
       setMenusLoading(true);
-      const res = await plannerFetch("/menus");
+      const res = await plannerFetch("/menus?saved_only=1");
       const j = await res.json().catch(() => ({}));
       if (!cancelled) {
         setMenus(Array.isArray(j.menus) ? j.menus : []);
@@ -67,7 +69,7 @@ export default function TableauPage() {
   if (sessionLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <LoadingSpinner message="Chargement…" />
+        <LoadingSpinner message={t("preferences.page.loading")} />
       </div>
     );
   }
@@ -75,7 +77,7 @@ export default function TableauPage() {
   if (prefsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <LoadingSpinner message="Préparation de ton espace…" />
+        <LoadingSpinner message={t("dashboard.loading_space")} />
       </div>
     );
   }
@@ -84,7 +86,7 @@ export default function TableauPage() {
     router.replace("/onboarding");
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <LoadingSpinner message="Redirection…" />
+        <LoadingSpinner message={t("dashboard.redirect_onboarding")} />
       </div>
     );
   }
@@ -100,11 +102,10 @@ export default function TableauPage() {
       <div className="max-w-lg md:max-w-3xl lg:max-w-4xl mx-auto space-y-6 md:space-y-8">
         <header className="space-y-1">
           <h1 className="text-[2rem] leading-tight font-bold text-[#4a2c2c]">
-            Bonjour{firstName ? `, ${firstName}` : ""} !
+            {t("dashboard.hello")}
+            {firstName ? `, ${firstName}` : ""} !
           </h1>
-          <p className="text-base text-[#7A3A3A] font-medium">
-            Génère ton menu de la semaine.
-          </p>
+          <p className="text-base text-[#7A3A3A] font-medium">{t("dashboard.subtitle")}</p>
         </header>
 
         <FreeTierAdSlot placement="tableau_inline" oncePerSession className="max-w-xl mx-auto" />
@@ -125,13 +126,13 @@ export default function TableauPage() {
             />
             <div className="absolute bottom-0 left-0 right-0 p-4 pt-12">
               <p className="text-xs font-semibold uppercase tracking-wide text-white/85 mb-1">
-                Planning et courses
+                {t("dashboard.card.planning")}
               </p>
               <h3 className="text-[1.65rem] leading-tight font-bold text-white drop-shadow-md">
-                Génération de menus
+                {t("dashboard.card.gen_title")}
               </h3>
               <p className="text-sm text-white mt-1.5 leading-snug max-w-[300px] drop-shadow-sm">
-                Menu personnalisé selon tes envies et préférences, avec liste de courses incluse.
+                {t("dashboard.card.gen_desc")}
               </p>
             </div>
           </div>
@@ -141,21 +142,27 @@ export default function TableauPage() {
                 href="/preferences"
                 className="inline-flex items-center rounded-full border border-[#E8A0A0] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B2E2E]"
               >
-                ⚙️ Mes préférences
+                {t("dashboard.prefs_link")}
+              </Link>
+              <Link
+                href="#mon-carnet-menus"
+                className="inline-flex items-center rounded-full border border-[#E8A0A0] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B2E2E] hover:bg-[#fff8f8] transition-colors"
+              >
+                {t("dashboard.carnet_link")}
               </Link>
               <Link
                 href="/favoris"
                 className="inline-flex items-center rounded-full border border-[#E8A0A0] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B2E2E] hover:bg-[#fff8f8] transition-colors"
-                aria-label="Recettes favorites"
+                aria-label={t("dashboard.aria_favorites")}
               >
-                Favoris
+                {t("dashboard.favorites_link")}
               </Link>
             </div>
             <Link
               href="/planifier"
               className="mt-4 block w-full rounded-2xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white text-center font-semibold py-3.5 transition-colors"
             >
-              Lancer la génération du menu
+              {t("dashboard.cta_generate")}
             </Link>
           </div>
         </section>
@@ -164,7 +171,7 @@ export default function TableauPage() {
           <Link
             href="/preferences"
             className="block rounded-2xl border border-[#E8A0A0] overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white text-center"
-            aria-label="Mes préférences — équipements, régimes, foyer"
+            aria-label={t("dashboard.aria_prefs_card")}
           >
             <div className="relative h-36 w-full bg-white sm:h-40">
               <Image
@@ -180,10 +187,8 @@ export default function TableauPage() {
               <span className="text-lg block mb-1" aria-hidden>
                 ⚙️
               </span>
-              <div className="font-semibold text-[#4a2c2c]">Mes préférences</div>
-              <p className="text-xs text-[#7a5a5a] mt-1">
-                Équipements, régimes, foyer…
-              </p>
+              <div className="font-semibold text-[#4a2c2c]">{t("dashboard.prefs_card_title")}</div>
+              <p className="text-xs text-[#7a5a5a] mt-1">{t("dashboard.prefs_card_desc")}</p>
             </div>
           </Link>
         <FavoritesRecipesHero className="w-full" />
@@ -192,7 +197,7 @@ export default function TableauPage() {
         <Link
           href="/recettes"
           className="block rounded-2xl border border-[#E8A0A0] overflow-hidden shadow-sm hover:shadow-md transition-shadow text-left"
-          aria-label="Parcourir les recettes — explorer par ingrédients, sucré ou salé"
+          aria-label={t("dashboard.aria_recipes_card")}
         >
           <div className="relative min-h-[14rem] h-64 w-full bg-white sm:min-h-[15rem] sm:h-72">
             <Image
@@ -209,25 +214,26 @@ export default function TableauPage() {
             />
             <div className="absolute bottom-0 left-0 right-0 p-4 pt-12">
               <p className="text-xs font-semibold uppercase tracking-wide text-white/90 mb-1">
-                Cuisine et inspirations
+                {t("dashboard.recipes_kicker")}
               </p>
               <h3 className="text-[1.65rem] leading-tight font-bold text-white drop-shadow-md">
-                Parcourir les recettes
+                {t("dashboard.recipes_title")}
               </h3>
               <p className="text-sm text-white mt-1.5 leading-snug max-w-[300px] drop-shadow-sm">
-                Explore par ingrédients, sucré, salé ou sans filtre. Ajoute en favori ou à une collection depuis la liste.
+                {t("dashboard.recipes_desc")}
               </p>
             </div>
           </div>
         </Link>
 
-        <section>
-          <h2 className="text-lg font-semibold text-[#4a2c2c] mb-3">Mes menus enregistrés</h2>
+        <section id="mon-carnet-menus" className="scroll-mt-24">
+          <h2 className="text-lg font-semibold text-[#4a2c2c] mb-1">{t("dashboard.carnet_section_title")}</h2>
+          <p className="text-xs text-[#7a5a5a] mb-3">{t("dashboard.carnet_section_hint")}</p>
           {menusLoading ? (
-            <p className="text-sm text-[#7a5a5a]">Chargement…</p>
+            <p className="text-sm text-[#7a5a5a]">{t("dashboard.carnet_loading")}</p>
           ) : menus.length === 0 ? (
             <p className="text-sm text-[#7a5a5a] rounded-xl border border-dashed border-[#E8A0A0] p-6 text-center">
-              Aucun menu pour l’instant. Lance une génération pour commencer.
+              {t("dashboard.carnet_empty")}
             </p>
           ) : (
             <ul className="space-y-2">
@@ -238,7 +244,7 @@ export default function TableauPage() {
                     className="flex justify-between items-center rounded-xl border border-[#E8D5D5] bg-white px-4 py-3 text-sm"
                   >
                     <span className="font-medium text-[#4a2c2c]">{m.title}</span>
-                    <span className="text-[#9a7a7a]">Voir →</span>
+                    <span className="text-[#9a7a7a]">{t("dashboard.carnet_view")}</span>
                   </Link>
                 </li>
               ))}

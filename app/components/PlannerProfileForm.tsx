@@ -11,6 +11,7 @@ import {
   MEAL_TYPE_OPTIONS,
   OBJECTIVE_OPTIONS,
 } from "../src/lib/plannerConstants";
+import { useTranslation } from "./TranslationProvider";
 
 type Props = {
   initial: PlannerPreferences;
@@ -31,6 +32,7 @@ export default function PlannerProfileForm({
   onSubmit,
   visualVariant = "default",
 }: Props) {
+  const { t } = useTranslation();
   const [cooking_time_preference, setCooking] = useState(initial.cooking_time_preference);
   const [household_size, setHousehold] = useState(initial.household_size);
   const [recipe_scaling_portions, setRecipeScalingPortions] = useState<number | null>(
@@ -100,7 +102,7 @@ export default function PlannerProfileForm({
     try {
       const customTrim = customGoalText.trim().slice(0, 150);
       if (objectives.includes("autre") && !customTrim) {
-        setError("Décris ton objectif en quelques mots, ou choisis une autre option.");
+        setError(t("planner.err.custom_goal"));
         return;
       }
 
@@ -180,8 +182,8 @@ export default function PlannerProfileForm({
       )}
 
       <section className={sectionClass}>
-        <h2 className={titleClass}>Équipements disponibles</h2>
-        <p className={mutedClass}>On n’affichera pas de recettes impossibles à réaliser.</p>
+        <h2 className={titleClass}>{t("planner.section.equipment")}</h2>
+        <p className={mutedClass}>{t("planner.section.equipment_desc")}</p>
         <div className="flex flex-wrap gap-2">
           {EQUIPMENT_OPTIONS.map((eq) => (
             <button
@@ -190,14 +192,14 @@ export default function PlannerProfileForm({
               className={`${chip} ${equipment_keys.includes(eq.key) ? chipOn : chipOff}`}
               onClick={() => toggle(equipment_keys, eq.key, setEquipment)}
             >
-              {eq.label}
+              {t(`planner.eq.${eq.key}`)}
             </button>
           ))}
         </div>
       </section>
 
       <section className={sectionClass}>
-        <h2 className={titleClass}>Temps de cuisine souhaité</h2>
+        <h2 className={titleClass}>{t("planner.section.cooking_time")}</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {COOKING_TIME_OPTIONS.map((o) => (
             <label
@@ -218,14 +220,14 @@ export default function PlannerProfileForm({
                 checked={cooking_time_preference === o.key}
                 onChange={() => setCooking(o.key)}
               />
-              <span className="text-sm">{o.label}</span>
+              <span className="text-sm">{t(`planner.ct.${o.key}`)}</span>
             </label>
           ))}
         </div>
       </section>
 
       <section className={sectionClass}>
-        <h2 className={titleClass}>Niveau en cuisine</h2>
+        <h2 className={titleClass}>{t("planner.section.skill")}</h2>
         <div className="flex flex-wrap gap-2">
           {COOKING_SKILL_OPTIONS.map((o) => (
             <button
@@ -234,17 +236,15 @@ export default function PlannerProfileForm({
               className={`${chip} ${cooking_skill_level === o.key ? chipOn : chipOff}`}
               onClick={() => setCookingSkill(o.key)}
             >
-              {o.label}
+              {t(`planner.sk.${o.key}`)}
             </button>
           ))}
         </div>
       </section>
 
       <section className={sectionClass}>
-        <h2 className={titleClass}>Objectifs d’utilisation</h2>
-        <p className={mutedClass}>
-          « Autre » est exclusif : il désélectionne les autres options (et inversement).
-        </p>
+        <h2 className={titleClass}>{t("planner.section.objectives")}</h2>
+        <p className={mutedClass}>{t("planner.section.objectives_hint")}</p>
         <div className="flex flex-wrap gap-2">
           {OBJECTIVE_OPTIONS.map((o) => (
             <button
@@ -253,18 +253,18 @@ export default function PlannerProfileForm({
               className={`${chip} ${objectives.includes(o.key) ? chipOn : chipOff}`}
               onClick={() => toggleObjective(o.key)}
             >
-              {o.label}
+              {t(`planner.obj.${o.key}`)}
             </button>
           ))}
         </div>
         {objectives.includes("autre") && (
           <div>
             <label className={`block text-sm font-medium mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)]" : "text-[#5c3d3d]"}`}>
-              Décris ton objectif en quelques mots…
+              {t("planner.section.custom_goal")}
             </label>
             <textarea
               className={`${inputClass} min-h-[80px]`}
-              placeholder="Ex. : mieux gérer mes repas post-grossesse…"
+              placeholder={t("planner.section.custom_goal_ph")}
               maxLength={150}
               value={customGoalText}
               onChange={(e) => setCustomGoalText(e.target.value.slice(0, 150))}
@@ -275,7 +275,7 @@ export default function PlannerProfileForm({
       </section>
 
       <section className={sectionClass}>
-        <h2 className={titleClass}>Contraintes alimentaires</h2>
+        <h2 className={titleClass}>{t("planner.section.dietary")}</h2>
         <div className="flex flex-wrap gap-2">
           {DIETARY_FILTER_OPTIONS.map((o) => (
             <button
@@ -284,48 +284,46 @@ export default function PlannerProfileForm({
               className={`${chip} ${dietary_filters.includes(o.key) ? chipOn : chipOff}`}
               onClick={() => toggle(dietary_filters, o.key, setDietary)}
             >
-              {o.label}
+              {t(`planner.diet.${o.key}`)}
             </button>
           ))}
         </div>
         <div>
           <label className={`block text-sm font-medium mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)]" : "text-[#5c3d3d]"}`}>
-            Autres (texte libre : cuisines préférées, contraintes spécifiques…)
+            {t("planner.section.dietary_other")}
           </label>
           <input
             className={inputClass}
             value={world_cuisines}
             onChange={(e) => setWorld(e.target.value)}
-            placeholder="ex: cuisine italienne, pas de coriandre, végétarien le week-end"
+            placeholder={t("planner.section.dietary_other_ph")}
           />
         </div>
       </section>
 
       <section className={sectionClass}>
-        <h2 className={titleClass}>Allergies &amp; exclusions</h2>
-        <p className={mutedClass}>
-          Liste libre (séparateurs : virgule ou point-virgule). Appliqué comme contrainte stricte.
-        </p>
+        <h2 className={titleClass}>{t("planner.section.allergies")}</h2>
+        <p className={mutedClass}>{t("planner.section.allergies_desc")}</p>
         <textarea
           className={`${inputClass} min-h-[72px]`}
-          placeholder="Allergies : ex. céleri, moutarde"
+          placeholder={t("planner.section.allergies_ph1")}
           value={allergiesText}
           onChange={(e) => setAllergiesText(e.target.value)}
         />
         <textarea
           className={`${inputClass} min-h-[72px]`}
-          placeholder="Aliments à éviter / détestés"
+          placeholder={t("planner.section.allergies_ph2")}
           value={excludedText}
           onChange={(e) => setExcludedText(e.target.value)}
         />
       </section>
 
       <section className={sectionClass}>
-        <h2 className={titleClass}>Composition du foyer</h2>
+        <h2 className={titleClass}>{t("planner.section.household")}</h2>
         <div className="grid grid-cols-3 gap-3">
           <label className="text-sm">
             <span className={`block mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)] font-medium" : "text-[#7a5a5a]"}`}>
-              Personnes
+              {t("planner.field.people")}
             </span>
             <input
               type="number"
@@ -341,7 +339,7 @@ export default function PlannerProfileForm({
           </label>
           <label className="text-sm">
             <span className={`block mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)] font-medium" : "text-[#7a5a5a]"}`}>
-              Adultes
+              {t("planner.field.adults")}
             </span>
             <input
               type="number"
@@ -353,7 +351,7 @@ export default function PlannerProfileForm({
           </label>
           <label className="text-sm">
             <span className={`block mb-1 ${visualVariant === "foyer" ? "text-[var(--foreground)] font-medium" : "text-[#7a5a5a]"}`}>
-              Enfants
+              {t("planner.field.children")}
             </span>
             <input
               type="number"
@@ -367,7 +365,7 @@ export default function PlannerProfileForm({
         {household_size === 5 && (
           <div>
             <span className={`block text-sm mb-2 ${visualVariant === "foyer" ? "text-[var(--foreground)] font-medium" : "text-[#7a5a5a]"}`}>
-              Portions pour les recettes et la liste de courses (foyer de 5)
+              {t("planner.field.portions5")}
             </span>
             <div className="flex flex-wrap gap-2">
               {([4, 5, 6] as const).map((n) => {
@@ -379,22 +377,22 @@ export default function PlannerProfileForm({
                     className={`${chip} ${active ? chipOn : chipOff}`}
                     onClick={() => setRecipeScalingPortions(n === 5 ? null : n)}
                   >
-                    {n} pers.
+                    {n} {t("planner.field.pers_suffix")}
                   </button>
                 );
               })}
             </div>
             <p className={`text-xs mt-1 ${mutedClass}`}>
-              Par défaut 5 portions ; choisis 4 ou 6 si tu préfères cuisiner ou acheter pour un autre nombre.
+              {t("planner.field.portions5_hint")}
             </p>
           </div>
         )}
       </section>
 
       <section className={sectionClass}>
-        <h2 className={titleClass}>Organisation des repas</h2>
+        <h2 className={titleClass}>{t("planner.section.meals")}</h2>
         <div>
-          <span className={`block text-sm mb-2 ${mutedClass}`}>Jours à planifier (1–14)</span>
+          <span className={`block text-sm mb-2 ${mutedClass}`}>{t("planner.field.planning_days")}</span>
           <input
             type="number"
             min={1}
@@ -405,7 +403,7 @@ export default function PlannerProfileForm({
           />
         </div>
         <div>
-          <span className={`block text-sm mb-2 ${mutedClass}`}>Repas concernés</span>
+          <span className={`block text-sm mb-2 ${mutedClass}`}>{t("planner.field.meal_types")}</span>
           <div className="flex flex-wrap gap-2">
             {MEAL_TYPE_OPTIONS.map((m) => (
               <button
@@ -414,7 +412,7 @@ export default function PlannerProfileForm({
                 className={`${chip} ${meal_types.includes(m.key) ? chipOn : chipOff}`}
                 onClick={() => toggle(meal_types, m.key, setMealTypes)}
               >
-                {m.label}
+                {t(`planner.meal.${m.key}`)}
               </button>
             ))}
           </div>
@@ -426,12 +424,12 @@ export default function PlannerProfileForm({
             checked={seasonal_preference}
             onChange={(e) => setSeasonal(e.target.checked)}
           />
-          Privilégier les recettes de saison
+          {t("planner.field.seasonal")}
         </label>
 
         {meal_types.includes("breakfast") && (
           <div>
-            <span className={`block text-sm mb-2 ${mutedClass}`}>Petit-déjeuner préféré</span>
+            <span className={`block text-sm mb-2 ${mutedClass}`}>{t("planner.field.breakfast_pref")}</span>
             <div className="flex flex-wrap gap-2">
               {BREAKFAST_PREFERENCE_OPTIONS.map((o) => (
                 <button
@@ -440,7 +438,7 @@ export default function PlannerProfileForm({
                   className={`${chip} ${breakfast_preference === o.key ? chipOn : chipOff}`}
                   onClick={() => setBreakfastPref(o.key)}
                 >
-                  {o.label}
+                  {t(`planner.bf.${o.key}`)}
                 </button>
               ))}
             </div>
@@ -457,7 +455,7 @@ export default function PlannerProfileForm({
             : "bg-[#6B2E2E]"
         }`}
       >
-        {saving ? "Enregistrement…" : submitLabel}
+        {saving ? t("planner.submit.saving") : submitLabel}
       </button>
     </form>
   );

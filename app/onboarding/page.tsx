@@ -8,8 +8,10 @@ import { DEFAULT_PLANNER_PREFERENCES } from "../src/lib/weeklyPlanner";
 import type { PlannerPreferences } from "../src/lib/weeklyPlanner";
 import PlannerProfileForm from "../components/PlannerProfileForm";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { useTranslation } from "../components/TranslationProvider";
 
 export default function OnboardingPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, loading: sessionLoading } = useSupabaseSession();
   const [initial, setInitial] = useState<PlannerPreferences>(DEFAULT_PLANNER_PREFERENCES);
@@ -41,7 +43,7 @@ export default function OnboardingPage() {
   if (sessionLoading || !user || !loaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FFF8F6]">
-        <LoadingSpinner message="Chargement du questionnaire…" />
+        <LoadingSpinner message={t("onboarding.page.loading")} />
       </div>
     );
   }
@@ -49,17 +51,14 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-[#FFF8F6] pt-6 px-4 pb-8">
       <div className="max-w-2xl mx-auto mb-6">
-        <h1 className="text-2xl font-bold text-[#4a2c2c]">Personnalisons ton expérience</h1>
-        <p className="text-sm text-[#7a5a5a] mt-2">
-          Ces informations alimentent le générateur de menus et la liste de courses. Tu pourras tout modifier
-          plus tard.
-        </p>
+        <h1 className="text-2xl font-bold text-[#4a2c2c]">{t("onboarding.page.title")}</h1>
+        <p className="text-sm text-[#7a5a5a] mt-2">{t("onboarding.page.subtitle")}</p>
       </div>
       <PlannerProfileForm
         key={user.id}
         initial={initial}
         visualVariant="foyer"
-        submitLabel="Enregistrer et continuer"
+        submitLabel={t("onboarding.submit.continue")}
         onSubmit={async ({ preferences, equipment_keys, allergy_keys, excluded_ingredients }) => {
           const res = await plannerFetch("/preferences", {
             method: "PUT",

@@ -29,6 +29,9 @@ function resolveBackLink(fromParam: string | null): { href: string; label: strin
   if (pathOnly.startsWith("/menus/")) {
     return { href: pathOnly, label: "← Retour au menu" };
   }
+  if (pathOnly === "/planifier") {
+    return { href: "/planifier", label: "← Retour au planning menu" };
+  }
   return { href: pathOnly, label: "← Retour" };
 }
 

@@ -112,7 +112,7 @@ export default function MenuDetailPage() {
     setLoading(false);
   }, [id]);
 
-  /** Impression / PDF paysage : uniquement le planning (pas la liste de courses). */
+  /** Impression paysage : tout le planning sur une page A4 (sans la liste de courses). */
   const printMenuLandscape = useCallback(() => {
     const sid = "menu-landscape-print-style";
     let el = document.getElementById(sid) as HTMLStyleElement | null;
@@ -121,7 +121,7 @@ export default function MenuDetailPage() {
       el.id = sid;
       el.textContent = `
         @media print {
-          @page { size: A4 landscape; margin: 10mm; }
+          @page { size: A4 landscape; margin: 6mm 8mm; }
           html.menu-print-landscape, html.menu-print-landscape body {
             height: auto !important;
             overflow: visible !important;
@@ -144,6 +144,36 @@ export default function MenuDetailPage() {
             padding: 0 !important;
             background: #fff !important;
             display: block !important;
+            font-size: 9pt !important;
+            line-height: 1.15 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          html.menu-print-landscape #menu-print-root h1 {
+            font-size: 13pt !important;
+            margin: 0 0 4px !important;
+            line-height: 1.1 !important;
+          }
+          html.menu-print-landscape #menu-print-root h2 {
+            font-size: 10pt !important;
+            margin: 2px 0 3px !important;
+          }
+          html.menu-print-landscape #menu-print-root .space-y-4 > * + * {
+            margin-top: 5px !important;
+          }
+          html.menu-print-landscape #menu-print-root .rounded-2xl {
+            padding: 5px 7px !important;
+            border-radius: 8px !important;
+            box-shadow: none !important;
+          }
+          html.menu-print-landscape #menu-print-root ul.space-y-3 > li {
+            padding-top: 3px !important;
+            padding-bottom: 0 !important;
+          }
+          html.menu-print-landscape #menu-print-root img {
+            max-width: 36px !important;
+            max-height: 36px !important;
+            object-fit: cover !important;
           }
         }
       `;
@@ -303,17 +333,10 @@ export default function MenuDetailPage() {
             <button
               type="button"
               onClick={printMenuLandscape}
+              title="Impression paysage : dans la fenêtre d’impression, choisis « Enregistrer au format PDF » si besoin."
               className="rounded-xl border border-[#6B2E2E] text-[#6B2E2E] bg-white text-sm font-semibold px-4 py-2 hover:bg-[#FFF0F0] transition-colors"
             >
-              Imprimer le menu
-            </button>
-            <button
-              type="button"
-              onClick={printMenuLandscape}
-              title="Dans la fenêtre d'impression, choisis « Enregistrer au format PDF » comme destination."
-              className="rounded-xl border border-[#6B2E2E] text-[#6B2E2E] bg-white text-sm font-semibold px-4 py-2 hover:bg-[#FFF0F0] transition-colors"
-            >
-              PDF paysage
+              Imprimer le menu (paysage)
             </button>
             </div>
             {saveError ? (

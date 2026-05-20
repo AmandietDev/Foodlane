@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { usePremium } from "../contexts/PremiumContext";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
@@ -8,6 +8,7 @@ import { supabase } from "../src/lib/supabaseClient";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { loadPreferences } from "../src/lib/userPreferences";
 import { selectDailyTip, selectDailyChallenge, type Tip, type Challenge, type ObjectiveTag, type ContextTag } from "../src/lib/dailyTips";
+import { getNutritionSpotlightForDate, type NutritionSpotlight } from "../src/lib/nutritionCalendarSpotlight";
 import { getTodayTips, getRecentIds, addToHistory } from "../src/lib/dailyTipsHistory";
 import { getLocale } from "../src/lib/i18n";
 import { sessionAuthHeaders } from "../src/lib/plannerClient";
@@ -23,6 +24,7 @@ interface FoodLogEntry {
   satiety_after?: number;
   mood_energy?: number;
   created_at: string;
+  updated_at?: string;
 }
 
 interface DailySummary {
@@ -43,6 +45,33 @@ interface DailySummary {
 interface WeeklyInsights {
   patterns: Record<string, string>;
   one_action: string;
+}
+
+/** Lundi–dimanche de la semaine civile courante (ISO date locale via UTC string, aligné au reste de la page). */
+function getMondayWeekBoundsISO(now = new Date()) {
+  const dayOfWeek = now.getDay();
+  const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+  const monday = new Date(now);
+  monday.setDate(diff);
+  const weekStart = monday.toISOString().split("T")[0];
+  const end = new Date(monday);
+  end.setDate(end.getDate() + 6);
+  const weekEnd = end.toISOString().split("T")[0];
+  return { weekStart, weekEnd };
+}
+
+function formatWeekdayFr(isoDate: string) {
+  const p = isoDate.split("-");
+  if (p.length !== 3) return isoDate;
+  const y = Number(p[0]);
+  const mo = Number(p[1]);
+  const da = Number(p[2]);
+  if (!y || !mo || !da) return isoDate;
+  return new Date(y, mo - 1, da).toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
 }
 
 function DietAssistantFreePreview() {
@@ -133,6 +162,9 @@ export default function EquilibrePage() {
   const [pendingMealId, setPendingMealId] = useState<string | null>(null);
   const [conseilDuJour, setConseilDuJour] = useState<Tip | null>(null);
   const [defiDuJour, setDefiDuJour] = useState<Challenge | null>(null);
+  const [nutritionSpotlight, setNutritionSpotlight] = useState<NutritionSpotlight | null>(null);
+  const [weekMeals, setWeekMeals] = useState<FoodLogEntry[]>([]);
+  const [weekMealsLoading, setWeekMealsLoading] = useState(false);
 
   useEffect(() => {
     if (sessionLoading || premiumLoading) return;
@@ -141,22 +173,34 @@ export default function EquilibrePage() {
     if (!canAccessDietAssistant) return;
     void loadTodayData(todayStr);
     void loadWeeklyInsights();
+    void loadWeekMeals();
     void generateDailyTips().catch((error) => {
       console.error("[Equilibre] Erreur génération conseils/défis:", error);
     });
   }, [sessionLoading, premiumLoading, canAccessDietAssistant]);
 
   async function generateDailyTips() {
+    setNutritionSpotlight(getNutritionSpotlightForDate(new Date()));
     const preferences = loadPreferences();
-    
-    // Convertir les objectifs utilisateur en ObjectiveTag
+
     const userObjectives: ObjectiveTag[] = [];
     const objectifsUsage = preferences.objectifsUsage || [];
-    if (objectifsUsage.includes("Perte de poids")) userObjectives.push("weight_loss");
-    if (objectifsUsage.includes("Prise de masse")) userObjectives.push("muscle_gain");
-    if (objectifsUsage.includes("Réduire la viande")) userObjectives.push("reduce_meat");
-    if (objectifsUsage.includes("Cuisiner plus")) userObjectives.push("cook_more");
-    if (objectifsUsage.includes("Meilleure énergie")) userObjectives.push("better_energy");
+    const add = (x: ObjectiveTag) => {
+      if (!userObjectives.includes(x)) userObjectives.push(x);
+    };
+    for (const x of objectifsUsage) {
+      if (x === "weight-loss" || x === "Perte de poids") add("weight_loss");
+      if (x === "muscle-gain" || x === "Prise de masse") add("muscle_gain");
+      if (x === "vegetarian" || x === "Réduire la viande") add("reduce_meat");
+      if (x === "rebalancing" || x === "Cuisiner plus") add("cook_more");
+      if (x === "energy" || x === "Meilleure énergie") add("better_energy");
+      if (x === "perte_poids") add("weight_loss");
+      if (x === "prise_masse") add("muscle_gain");
+      if (x === "vegetarien_plus") add("reduce_meat");
+      if (x === "mieux_manger" || x === "equilibre" || x === "charge_mentale" || x === "gain_temps" || x === "batch" || x === "famille" || x === "autre") {
+        add("cook_more");
+      }
+    }
     if (userObjectives.length === 0) userObjectives.push("general");
     
     // Déterminer le contexte (simplifié pour l'instant, peut être affiné)
@@ -190,19 +234,20 @@ export default function EquilibrePage() {
   }
 
 
-  async function loadTodayData(date: string) {
-    setLoading(true);
+  async function loadTodayData(date: string, opts?: { silent?: boolean }) {
+    const silent = Boolean(opts?.silent);
+    if (!silent) setLoading(true);
     try {
       // Charger les repas du jour
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
-        setLoading(false);
         return;
       }
 
       const { data: mealsData, error: mealsError } = await supabase
         .from("food_log_entries")
         .select("*")
+        .eq("user_id", session.user.id)
         .eq("date", date)
         .order("created_at", { ascending: true });
 
@@ -231,21 +276,16 @@ export default function EquilibrePage() {
     } catch (error) {
       console.error("[Equilibre] Erreur:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
-  async function loadWeeklyInsights() {
+  const loadWeeklyInsights = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
 
-      const d = new Date();
-      const dayOfWeek = d.getDay();
-      const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Lundi de la semaine
-      const monday = new Date(d);
-      monday.setDate(diff);
-      const weekStart = monday.toISOString().split("T")[0];
+      const { weekStart } = getMondayWeekBoundsISO();
 
       const res = await fetch(`/api/foodlog/weekly?week_start=${weekStart}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -257,7 +297,42 @@ export default function EquilibrePage() {
     } catch (error) {
       console.error("[Equilibre] Erreur chargement insights:", error);
     }
-  }
+  }, []);
+
+  const loadWeekMeals = useCallback(async () => {
+    setWeekMealsLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setWeekMeals([]);
+        return;
+      }
+      const { weekStart, weekEnd } = getMondayWeekBoundsISO();
+      const { data, error } = await supabase
+        .from("food_log_entries")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .gte("date", weekStart)
+        .lte("date", weekEnd)
+        .order("date", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (error) {
+        console.error("[Equilibre] Erreur chargement repas de la semaine:", error);
+        setWeekMeals([]);
+        return;
+      }
+      setWeekMeals(data || []);
+    } catch (e) {
+      console.error("[Equilibre] loadWeekMeals:", e);
+      setWeekMeals([]);
+    } finally {
+      setWeekMealsLoading(false);
+    }
+  }, []);
+
+  const reloadWeekData = useCallback(async () => {
+    await Promise.all([loadWeeklyInsights(), loadWeekMeals()]);
+  }, [loadWeeklyInsights, loadWeekMeals]);
 
   async function handleAddMeal() {
     if (!mealInput.trim()) return;
@@ -297,12 +372,26 @@ export default function EquilibrePage() {
       });
 
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Erreur lors de l'ajout");
+        const errorBody = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errorBody.error || "Erreur lors de l'ajout");
       }
 
-      await loadTodayData(today);
-      await loadWeeklyInsights();
+      const j = (await res.json()) as { entry?: FoodLogEntry; summary?: DailySummary };
+
+      if (j.summary) setSummary(j.summary);
+      if (j.entry) {
+        setMeals((prev) => {
+          const next = prev.filter((m) => m.id !== j.entry!.id);
+          next.push(j.entry!);
+          next.sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+          return next;
+        });
+      }
+
+      await loadTodayData(today, { silent: true });
+      await reloadWeekData();
     } catch (error) {
       console.error("[Equilibre] Erreur ajout repas:", error);
       const msg =
@@ -317,14 +406,19 @@ export default function EquilibrePage() {
 
   async function handleDeleteMeal(entryId: string) {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
       const { error } = await supabase
         .from("food_log_entries")
         .delete()
-        .eq("id", entryId);
+        .eq("id", entryId)
+        .eq("user_id", session.user.id);
 
       if (error) throw error;
 
       await loadTodayData(today);
+      await reloadWeekData();
     } catch (error) {
       console.error("[Equilibre] Erreur suppression:", error);
       alert("Erreur lors de la suppression");
@@ -340,17 +434,22 @@ export default function EquilibrePage() {
     if (!pendingMealId || hungerBefore === null || satietyAfter === null) return;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
       const { error } = await supabase
         .from("food_log_entries")
         .update({
           hunger_before: hungerBefore,
           satiety_after: satietyAfter,
         })
-        .eq("id", pendingMealId);
+        .eq("id", pendingMealId)
+        .eq("user_id", session.user.id);
 
       if (error) throw error;
 
       await loadTodayData(today);
+      await reloadWeekData();
       setShowFeelingModal(false);
       setPendingMealId(null);
       setHungerBefore(null);
@@ -407,6 +506,10 @@ export default function EquilibrePage() {
       meals={meals}
       summary={summary}
       weeklyInsights={weeklyInsights}
+      weekMeals={weekMeals}
+      weekMealsLoading={weekMealsLoading}
+      nutritionSpotlight={nutritionSpotlight}
+      onWeekTabOpen={reloadWeekData}
       currentMeal={currentMeal}
       mealInput={mealInput}
       setMealInput={setMealInput}
@@ -448,6 +551,10 @@ interface EquilibrePageContentProps {
   meals: FoodLogEntry[];
   summary: DailySummary | null;
   weeklyInsights: WeeklyInsights | null;
+  weekMeals: FoodLogEntry[];
+  weekMealsLoading: boolean;
+  nutritionSpotlight: NutritionSpotlight | null;
+  onWeekTabOpen: () => Promise<void>;
   currentMeal: "breakfast" | "lunch" | "dinner" | "snack";
   mealInput: string;
   setMealInput: (value: string) => void;
@@ -536,6 +643,10 @@ function EquilibrePageContent({
   meals,
   summary,
   weeklyInsights,
+  weekMeals,
+  weekMealsLoading,
+  nutritionSpotlight,
+  onWeekTabOpen,
   currentMeal,
   mealInput,
   setMealInput,
@@ -574,6 +685,21 @@ function EquilibrePageContent({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showFullDietitianAnalysis, setShowFullDietitianAnalysis] = useState(false);
 
+  useEffect(() => {
+    if (activePart !== "semaine") return;
+    void onWeekTabOpen();
+  }, [activePart, onWeekTabOpen]);
+
+  const weekMealsByDay = useMemo(() => {
+    const map = new Map<string, FoodLogEntry[]>();
+    for (const e of weekMeals) {
+      const arr = map.get(e.date) || [];
+      arr.push(e);
+      map.set(e.date, arr);
+    }
+    return map;
+  }, [weekMeals]);
+
   const mealTypeLabels = {
     breakfast: "Petit-déjeuner",
     lunch: "Déjeuner",
@@ -594,11 +720,21 @@ function EquilibrePageContent({
         body: JSON.stringify({ imageBase64: imageDataUrl, locale: getLocale() }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          details?: string;
+          message?: string;
+        };
         if (res.status === 403 && err.error === "premium_plus_required" && typeof err.message === "string") {
           throw new Error(err.message);
         }
-        throw new Error(err.error || "Erreur lors de l'analyse");
+        const base =
+          typeof err.error === "string" && err.error.trim()
+            ? err.error.trim()
+            : "Erreur lors de l'analyse";
+        const detail =
+          typeof err.details === "string" && err.details.trim() ? ` — ${err.details.trim()}` : "";
+        throw new Error(base + detail);
       }
       const data = await res.json();
       setScanAnalysis({
@@ -678,6 +814,28 @@ function EquilibrePageContent({
             <span>Conseil du jour</span>
           </h2>
           <p className="text-sm text-[#726566]">{conseilDuJour.text}</p>
+        </section>
+      )}
+
+      {nutritionSpotlight && (
+        <section className="mb-4 rounded-2xl border border-[#C9E2F0] bg-[#F4FAFF] backdrop-blur-md p-4 shadow-sm">
+          <h2 className="text-sm font-semibold mb-2 text-[#1E4D6B] flex items-center gap-2">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#1E6B8C]">
+              📌
+            </span>
+            <span>Actualité & idée d’action</span>
+          </h2>
+          <p className="text-xs font-semibold text-[#1E4D6B] mb-1">{nutritionSpotlight.title}</p>
+          <p className="text-sm text-[#4A6572] leading-relaxed mb-3">{nutritionSpotlight.hook}</p>
+          <p className="text-[11px] font-semibold text-[#1E4D6B] mb-1.5">Concrètement aujourd’hui</p>
+          <ul className="space-y-1.5">
+            {nutritionSpotlight.ideas.map((idea, idx) => (
+              <li key={idx} className="text-xs text-[#4A6572] flex gap-2">
+                <span className="text-[#1E6B8C] shrink-0">→</span>
+                <span>{idea}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -1205,9 +1363,48 @@ function EquilibrePageContent({
               L’équilibre sur plusieurs jours compte plus qu’un repas parfait.
             </p>
             <p className="text-xs text-[#726566] mt-2">
-              Ici tu retrouves les tendances de ta semaine et une action simple pour progresser.
+              Ici tu retrouves les repas enregistrés sur la semaine, les tendances et une action simple pour progresser.
             </p>
           </div>
+
+          <section className="rounded-2xl border border-white/70 bg-white/60 backdrop-blur-md p-4 shadow-sm">
+            <h2 className="text-lg font-bold text-[#6B2E2E] mb-2">Repas enregistrés cette semaine</h2>
+            {weekMealsLoading ? (
+              <p className="text-sm text-[#726566]">Chargement…</p>
+            ) : weekMeals.length === 0 ? (
+              <p className="text-sm text-[#726566] leading-relaxed">
+                Aucun repas sur cette semaine pour l’instant. Ajoute un repas depuis l’onglet « Mon repas » : il apparaîtra
+                ici automatiquement.
+              </p>
+            ) : (
+              <ul className="space-y-4">
+                {[...weekMealsByDay.entries()]
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([date, entries]) => (
+                    <li key={date}>
+                      <p className="text-xs font-semibold text-[#6B2E2E] mb-1 capitalize">
+                        {formatWeekdayFr(date)}
+                      </p>
+                      <ul className="space-y-2">
+                        {entries.map((e) => (
+                          <li
+                            key={e.id}
+                            className="text-sm text-[#726566] rounded-lg bg-white/85 border border-[#EDDCDC]/80 px-3 py-2"
+                          >
+                            <span className="font-medium text-[#3E2A2A]">
+                              {(mealTypeLabels as Record<string, string>)[e.meal_type] || e.meal_type}
+                            </span>
+                            <span className="text-[#B0A0A0]"> · </span>
+                            {e.raw_text}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </section>
+
           {weeklyInsights ? (
             <section className="rounded-2xl border border-white/70 bg-white/60 backdrop-blur-md p-4 shadow-sm">
               <h2 className="text-lg font-bold text-[#6B2E2E] mb-3">Cette semaine</h2>

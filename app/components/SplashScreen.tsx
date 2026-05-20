@@ -34,13 +34,6 @@ export default function SplashScreen() {
     // localStorage.setItem(SPLASH_PLAYED_KEY, "true");
   };
 
-  const handleSkip = () => {
-    if (videoRef.current) {
-      videoRef.current.pause();
-    }
-    setShowSplash(false);
-  };
-
   if (!showSplash) {
     return null;
   }
@@ -59,14 +52,6 @@ export default function SplashScreen() {
         <source src="/ouverture.mp4" type="video/mp4" />
         Votre navigateur ne supporte pas la lecture de vidéos.
       </video>
-      
-      {/* Bouton pour passer la vidéo */}
-      <button
-        onClick={handleSkip}
-        className="absolute top-4 right-4 px-4 py-2 rounded-lg bg-black/50 hover:bg-black/70 text-white text-sm font-semibold transition-colors backdrop-blur-sm"
-      >
-        Passer
-      </button>
     </div>
   );
 }

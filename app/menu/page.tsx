@@ -20,43 +20,17 @@ import {
 import { onSubscriptionStateChanged } from "../src/lib/subscriptionSyncEvents";
 import { setLocale, getLocale, type Locale } from "../src/lib/i18n";
 import { plannerFetch } from "../src/lib/plannerClient";
-import {
-  buildSupabasePayloadFromFoyer,
-  equipmentKeysToLabels,
-  filterKeysToDietaryProfiles,
-} from "../src/lib/foyerPreferencesSync";
+import { mergeUserPreferencesFromPlanner } from "../src/lib/foyerPreferencesSync";
 import { useTranslation } from "../components/TranslationProvider";
 import UserFeedback from "../components/UserFeedback";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  ALL_DIETARY_PROFILES,
-  isDietaryProfileAvailable,
-  DIETARY_PROFILE_ICONS,
-  type DietaryProfile,
-} from "../src/lib/dietaryProfiles";
-import { type NutritionGoal, NUTRITION_GOALS } from "../src/lib/nutritionGoals";
 import { useSwipeBack } from "../hooks/useSwipeBack";
 import { usePremium } from "../contexts/PremiumContext";
 import { formatDateFrDMY } from "../src/lib/subscriptionDisplay";
-
-// Liste des équipements disponibles
-const AVAILABLE_EQUIPMENTS = [
-  "Four",
-  "Micro-ondes",
-  "Plaques de cuisson",
-  "Casserole",
-  "Poêle",
-  "Mixeur",
-  "Robot mixeur",
-  "Mixeur plongeant",
-  "Robot cuiseur",
-  "Friteuse",
-  "Airfryer",
-  "Autocuiseur",
-  "Blender",
-  "Grille-pain",
-];
+import PlannerProfileForm from "../components/PlannerProfileForm";
+import { DEFAULT_PLANNER_PREFERENCES } from "../src/lib/weeklyPlanner";
+import type { PlannerPreferences } from "../src/lib/weeklyPlanner";
 
 type MenuSection =
   | "profil"
@@ -83,20 +57,6 @@ const EQUIPEMENTS = [
   "Mixeur plongeant",
   "Grille-pain",
   "Lave-vaisselle",
-];
-
-const OBJECTIFS_USAGE = [
-  "Limiter le gaspillage alimentaire",
-  "Manger plus équilibré",
-  "Diminuer la charge mentale",
-  "Faciliter mon organisation",
-  "Découvrir des recettes",
-  "Manger moins de viande",
-  "Manger plus de légumes",
-  "Payer moins cher",
-  "Cuisiner plus rapidement",
-  "Varier les repas",
-  "Manger plus sainement",
 ];
 
 export default function MenuPage() {
@@ -130,20 +90,14 @@ export default function MenuPage() {
   const [activeTab, setActiveTab] = useState<"compte" | "parametres" | "notifications" | "foyer" | "contact" | "abonnement" | null>(null);
   const [activeSection, setActiveSection] = useState<MenuSection>(null);
   const [showLegalDoc, setShowLegalDoc] = useState<LegalDocType>(null);
-  const [allergiesInput, setAllergiesInput] = useState("");
   const [recipeScalingPortionsMenu, setRecipeScalingPortionsMenu] = useState<number | null>(null);
+  const [foyerPlannerPrefs, setFoyerPlannerPrefs] = useState<PlannerPreferences>(DEFAULT_PLANNER_PREFERENCES);
+  const [foyerPlannerLoaded, setFoyerPlannerLoaded] = useState(false);
   const [upgradeToPlusLoading, setUpgradeToPlusLoading] = useState(false);
   const [cancelSubscriptionLoading, setCancelSubscriptionLoading] = useState(false);
   // Flag interne anti-boucle : true pendant qu'on hydrate l'UI depuis Supabase
   // (sinon le useEffect de sauvegarde se déclencherait juste après la lecture).
   const foyerSyncSkipRef = useRef(true);
-  // Snapshot des champs Supabase non éditables dans l'onglet Foyer (mais qu'on
-  // doit préserver lors d'un PUT pour ne pas écraser le reste : équipements
-  // spécialisés, objectifs nutrition stockés en localStorage, etc.).
-  const supabaseSnapshotRef = useRef<{
-    objectives: string[];
-    equipment_keys: string[];
-  }>({ objectives: [], equipment_keys: [] });
 
   const portalReturnHandledRef = useRef(false);
 
@@ -274,38 +228,10 @@ export default function MenuPage() {
         foyerInitialHydrateRef.current = true;
         return;
       }
-      const p = j.preferences as {
-        household_size?: number;
-        recipe_scaling_portions?: number | null;
-        dietary_filters?: string[];
-        equipment_keys?: string[];
-        allergy_keys?: string[];
-        excluded_ingredients?: string[];
-        objectives?: string[];
-      };
-
-      const h = Math.max(1, Number(p.household_size) || 1);
-      const dietaryFromSupa = filterKeysToDietaryProfiles(p.dietary_filters || []);
-      const equipFromSupa = equipmentKeysToLabels(p.equipment_keys || []);
-      const aversionsFromSupa = [
-        ...new Set([...(p.allergy_keys || []), ...(p.excluded_ingredients || [])]),
-      ].filter(Boolean);
-
-      supabaseSnapshotRef.current = {
-        objectives: p.objectives || [],
-        equipment_keys: p.equipment_keys || [],
-      };
-
-      setRecipeScalingPortionsMenu(h === 5 ? (p.recipe_scaling_portions ?? null) : null);
-      setPreferences((prev) => ({
-        ...prev,
-        nombrePersonnes: h,
-        regimesParticuliers:
-          dietaryFromSupa.length > 0 ? dietaryFromSupa : prev.regimesParticuliers,
-        aversionsAlimentaires:
-          aversionsFromSupa.length > 0 ? aversionsFromSupa : prev.aversionsAlimentaires,
-        equipements: equipFromSupa.length > 0 ? equipFromSupa : prev.equipements,
-      }));
+      const full = j.preferences as PlannerPreferences;
+      const h = Math.max(1, Number(full.household_size) || 1);
+      setRecipeScalingPortionsMenu(h === 5 ? (full.recipe_scaling_portions ?? null) : null);
+      setPreferences((prev) => mergeUserPreferencesFromPlanner(prev, full));
       foyerInitialHydrateRef.current = true;
       window.setTimeout(() => {
         foyerSyncSkipRef.current = false;
@@ -316,121 +242,34 @@ export default function MenuPage() {
     };
   }, [user?.id]);
 
-  // ── Hydratation depuis Supabase quand on entre dans l'onglet Foyer (rafraîchir depuis le serveur) ────
-  // Charge TOUS les champs synchronisables (et plus seulement household_size)
-  // pour offrir une vraie mutualisation entre /menu (onglet Foyer) et
-  // /preferences ("Mes préférences").
+  /** Onglet Foyer : même formulaire que /preferences, rechargé depuis le serveur. */
   useEffect(() => {
     if (!user?.id || activeTab !== "foyer") return;
     let cancelled = false;
     foyerSyncSkipRef.current = true;
+    setFoyerPlannerLoaded(false);
     (async () => {
       const res = await plannerFetch("/preferences");
       const j = await res.json().catch(() => ({}));
       if (cancelled || !res.ok || !j.preferences) {
         foyerSyncSkipRef.current = false;
+        setFoyerPlannerLoaded(true);
         return;
       }
-      const p = j.preferences as {
-        household_size?: number;
-        recipe_scaling_portions?: number | null;
-        dietary_filters?: string[];
-        equipment_keys?: string[];
-        allergy_keys?: string[];
-        excluded_ingredients?: string[];
-        objectives?: string[];
-      };
-
-      const h = Math.max(1, Number(p.household_size) || 1);
-      const dietaryFromSupa = filterKeysToDietaryProfiles(p.dietary_filters || []);
-      const equipFromSupa = equipmentKeysToLabels(p.equipment_keys || []);
-      // Les "aversions/allergies" texte libre : on prend l'union (allergy_keys
-      // = mots-clés normalisés + excluded_ingredients = ingrédients libres).
-      const aversionsFromSupa = [
-        ...new Set([...(p.allergy_keys || []), ...(p.excluded_ingredients || [])]),
-      ].filter(Boolean);
-
-      // Snapshot des champs Supabase à préserver lors d'un futur PUT
-      supabaseSnapshotRef.current = {
-        objectives: p.objectives || [],
-        equipment_keys: p.equipment_keys || [],
-      };
-
-      setRecipeScalingPortionsMenu(h === 5 ? (p.recipe_scaling_portions ?? null) : null);
-      setPreferences((prev) => ({
-        ...prev,
-        nombrePersonnes: h,
-        // Régimes : on remplace par les valeurs Supabase (source de vérité),
-        // sauf si Supabase est vide et que l'utilisateur en a localement
-        // (cas d'un compte qui n'a jamais ouvert /preferences).
-        regimesParticuliers:
-          dietaryFromSupa.length > 0 ? dietaryFromSupa : prev.regimesParticuliers,
-        aversionsAlimentaires:
-          aversionsFromSupa.length > 0 ? aversionsFromSupa : prev.aversionsAlimentaires,
-        equipements: equipFromSupa.length > 0 ? equipFromSupa : prev.equipements,
-      }));
+      const full = j.preferences as PlannerPreferences;
+      setFoyerPlannerPrefs(full);
+      const h = Math.max(1, Number(full.household_size) || 1);
+      setRecipeScalingPortionsMenu(h === 5 ? (full.recipe_scaling_portions ?? null) : null);
+      setPreferences((prev) => mergeUserPreferencesFromPlanner(prev, full));
+      setFoyerPlannerLoaded(true);
       window.setTimeout(() => {
         foyerSyncSkipRef.current = false;
-      }, 450);
+      }, 300);
     })();
     return () => {
       cancelled = true;
     };
   }, [user?.id, activeTab]);
-
-  // ── Sauvegarde automatique (debounce) vers Supabase ───────────────────
-  // À chaque modif d'un champ synchronisable de l'onglet Foyer, on persiste
-  // dans `user_preferences` + tables associées, pour que /preferences et le
-  // moteur de génération de menus voient immédiatement les changements.
-  useEffect(() => {
-    if (!user?.id || activeTab !== "foyer" || foyerSyncSkipRef.current) return;
-    const timer = window.setTimeout(() => {
-      const payload = buildSupabasePayloadFromFoyer(
-        {
-          nombrePersonnes: preferences.nombrePersonnes,
-          regimesParticuliers: preferences.regimesParticuliers as string[],
-          aversionsAlimentaires: preferences.aversionsAlimentaires,
-          equipements: preferences.equipements,
-          objectifsUsage: preferences.objectifsUsage as string[],
-        },
-        supabaseSnapshotRef.current,
-        // Pour l'instant on conserve la valeur batch existante en base.
-        // Un toggle dédié pourra être ajouté plus tard dans l'UI Foyer.
-        supabaseSnapshotRef.current.objectives.includes("batch")
-      );
-      // Met à jour le snapshot localement pour rester cohérent en cas de
-      // modifications successives sans rechargement.
-      supabaseSnapshotRef.current = {
-        objectives: payload.objectives,
-        equipment_keys: payload.equipment_keys,
-      };
-
-      plannerFetch("/preferences", {
-        method: "PUT",
-        body: JSON.stringify({
-          preferences: {
-            household_size: payload.household_size,
-            recipe_scaling_portions:
-              preferences.nombrePersonnes === 5 ? recipeScalingPortionsMenu : null,
-            dietary_filters: payload.dietary_filters,
-            objectives: payload.objectives,
-          },
-          equipment_keys: payload.equipment_keys,
-          excluded_ingredients: payload.excluded_ingredients,
-        }),
-      }).catch(() => {});
-    }, 650);
-    return () => window.clearTimeout(timer);
-  }, [
-    user?.id,
-    activeTab,
-    preferences.nombrePersonnes,
-    preferences.regimesParticuliers,
-    preferences.aversionsAlimentaires,
-    preferences.equipements,
-    preferences.objectifsUsage,
-    recipeScalingPortionsMenu,
-  ]);
 
   // Geste de balayage pour revenir en arrière dans les sections
   useSwipeBack(() => {
@@ -500,19 +339,6 @@ export default function MenuPage() {
     value: UserPreferences[K]
   ) {
     setPreferences((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function toggleArrayPreference(
-    key: "regimesParticuliers" | "aversionsAlimentaires" | "equipements" | "objectifsUsage",
-    value: string
-  ) {
-    setPreferences((prev) => {
-      const current = prev[key] as string[];
-      const newArray = current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value];
-      return { ...prev, [key]: newArray };
-    });
   }
 
   function handleLogin(e: React.FormEvent) {
@@ -3186,247 +3012,60 @@ export default function MenuPage() {
 
       {activeTab === "foyer" && (
         <section className="px-4 py-6 space-y-4">
-          {/* Foyer */}
           <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Foyer
-            </h2>
-            <div>
-              <label className="block text-sm font-medium text-[var(--foreground)] mb-1">
-                Nombre de personnes dans le foyer *
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={preferences.nombrePersonnes}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value, 10) || 1;
-                  updatePreference("nombrePersonnes", n);
-                  if (n !== 5) setRecipeScalingPortionsMenu(null);
-                }}
-                className="w-full px-3 py-2 rounded-lg border border-[var(--beige-border)] bg-white text-[var(--foreground)]"
-              />
-            </div>
-            {preferences.nombrePersonnes === 5 && (
-              <div className="mt-3">
-                <span className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                  Portions pour recettes et liste de courses
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {([4, 5, 6] as const).map((n) => {
-                    const active = (recipeScalingPortionsMenu ?? 5) === n;
-                    return (
-                      <button
-                        key={n}
-                        type="button"
-                        className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                          active
-                            ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)] font-medium text-[var(--foreground)]"
-                            : "border-[var(--beige-border)] bg-white text-[var(--foreground)]"
-                        }`}
-                        onClick={() => setRecipeScalingPortionsMenu(n === 5 ? null : n)}
-                      >
-                        {n} pers.
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  Enregistré dans Supabase avec ton profil menus.
-                </p>
-              </div>
-            )}
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">{t("menu.foyer.title")}</h2>
+            <p className="text-sm text-[var(--text-secondary)] mb-3">{t("menu.foyer.intro")}</p>
+            <Link
+              href="/preferences"
+              className="inline-flex text-sm font-semibold text-[#6B2E2E] underline hover:no-underline"
+            >
+              {t("menu.foyer.link_prefs")}
+            </Link>
           </div>
-
-          {/* Alimentation particulière */}
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Alimentation particulière
-            </h2>
-            <div className="space-y-2">
-              {ALL_DIETARY_PROFILES.map((profile) => {
-                const isAvailable = isDietaryProfileAvailable(
-                  profile,
-                  subscriptionTier
+          {!foyerPlannerLoaded ? (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner message={t("menu.foyer.loading")} />
+            </div>
+          ) : (
+            <PlannerProfileForm
+              key={`foyer-plan-${user?.id ?? "anon"}`}
+              initial={foyerPlannerPrefs}
+              visualVariant="foyer"
+              submitLabel={t("preferences.submit.update")}
+              onSubmit={async ({
+                preferences: plannerPrefs,
+                equipment_keys,
+                allergy_keys,
+                excluded_ingredients,
+              }) => {
+                const res = await plannerFetch("/preferences", {
+                  method: "PUT",
+                  body: JSON.stringify({
+                    preferences: {
+                      ...plannerPrefs,
+                      recipe_scaling_portions:
+                        Math.max(1, plannerPrefs.household_size) === 5
+                          ? plannerPrefs.recipe_scaling_portions
+                          : null,
+                    },
+                    equipment_keys,
+                    allergy_keys,
+                    excluded_ingredients,
+                  }),
+                });
+                if (!res.ok) {
+                  const err = await res.json().catch(() => ({}));
+                  throw new Error(err.error || "Erreur");
+                }
+                setFoyerPlannerPrefs(plannerPrefs);
+                const h = Math.max(1, plannerPrefs.household_size || 1);
+                setRecipeScalingPortionsMenu(
+                  h === 5 ? (plannerPrefs.recipe_scaling_portions ?? null) : null
                 );
-                const isSelected = (
-                  preferences.regimesParticuliers as DietaryProfile[]
-                ).includes(profile);
-
-                return (
-                  <label
-                    key={profile}
-                    className={`flex items-center gap-2 p-3 rounded-lg border ${
-                      isSelected
-                        ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
-                        : "border-[var(--beige-border)] bg-white"
-                    } ${
-                      !isAvailable
-                        ? "opacity-60 cursor-not-allowed"
-                        : "cursor-pointer"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        if (!isAvailable) {
-                          alert(
-                            "👑 Ce régime est réservé aux utilisateurs premium. Passe à premium pour y accéder."
-                          );
-                          router.push("/premium");
-                          return;
-                        }
-                        toggleArrayPreference("regimesParticuliers", profile);
-                      }}
-                      disabled={!isAvailable}
-                      className="w-4 h-4 text-[var(--beige-accent)] rounded disabled:opacity-50"
-                    />
-                    <span className="text-lg">
-                      {DIETARY_PROFILE_ICONS[profile]}
-                    </span>
-                    <span className={`flex-1 font-medium ${
-                      !isAvailable ? "text-[#726566]" : "text-[#2A2523]"
-                    }`}>
-                      {profile}
-                    </span>
-                    {!isAvailable && (
-                      <span className="flex items-center gap-1 text-xs text-[#D44A4A] font-semibold">
-                        <span>👑</span>
-                        <span>Réservé aux premium</span>
-                      </span>
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Allergies/Aversions */}
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Allergies / Aversions alimentaires
-            </h2>
-            <div className="flex gap-2 mb-3">
-              <input
-                type="text"
-                value={allergiesInput}
-                onChange={(e) => setAllergiesInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    const trimmed = allergiesInput.trim();
-                    if (trimmed && !preferences.aversionsAlimentaires.includes(trimmed)) {
-                      toggleArrayPreference("aversionsAlimentaires", trimmed);
-                      setAllergiesInput("");
-                    }
-                  }
-                }}
-                placeholder="Ex: arachides, fruits de mer..."
-                className="flex-1 px-3 py-2 rounded-lg border border-[var(--beige-border)] bg-white text-[var(--foreground)]"
-              />
-              <button
-                onClick={() => {
-                  const trimmed = allergiesInput.trim();
-                  if (trimmed && !preferences.aversionsAlimentaires.includes(trimmed)) {
-                    toggleArrayPreference("aversionsAlimentaires", trimmed);
-                    setAllergiesInput("");
-                  }
-                }}
-                className="px-4 py-2 bg-[var(--beige-accent)] text-white rounded-lg hover:bg-[var(--beige-accent-hover)] transition-colors"
-              >
-                Ajouter
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {preferences.aversionsAlimentaires.map((allergy) => (
-                <span
-                  key={allergy}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-[var(--beige-rose-light)] text-[var(--foreground)] rounded-full text-sm"
-                >
-                  {allergy}
-                  <button
-                    onClick={() => toggleArrayPreference("aversionsAlimentaires", allergy)}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Équipements disponibles */}
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Équipements disponibles
-            </h2>
-            <div className="grid grid-cols-2 gap-2">
-              {AVAILABLE_EQUIPMENTS.map((equipment) => {
-                const isSelected = preferences.equipements.includes(equipment);
-                return (
-                  <label
-                    key={equipment}
-                    className={`flex items-center gap-2 p-2 rounded-lg border ${
-                      isSelected
-                        ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
-                        : "border-[var(--beige-border)] bg-white"
-                    } cursor-pointer`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        toggleArrayPreference("equipements", equipment);
-                      }}
-                      className="w-4 h-4 text-[var(--beige-accent)] rounded"
-                    />
-                    <span className="text-sm text-[#2A2523] font-medium">
-                      {equipment}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Objectifs d'utilisation */}
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-3">
-              Objectifs d'utilisation de l'app
-            </h2>
-            <div className="space-y-2">
-              {Object.values(NUTRITION_GOALS).map((goal) => {
-                const isSelected = (
-                  preferences.objectifsUsage as NutritionGoal[]
-                ).includes(goal.id);
-
-                return (
-                  <label
-                    key={goal.id}
-                    className={`flex items-center gap-2 p-3 rounded-lg border ${
-                      isSelected
-                        ? "border-[var(--beige-accent)] bg-[var(--beige-rose-light)]"
-                        : "border-[var(--beige-border)] bg-white"
-                    } cursor-pointer`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        toggleArrayPreference("objectifsUsage", goal.id);
-                      }}
-                      className="w-4 h-4 text-[var(--beige-accent)] rounded"
-                    />
-                    <span className="text-lg">{goal.icon}</span>
-                    <span className="flex-1 text-[#2A2523] font-medium">
-                      {goal.title}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+                setPreferences((prev) => mergeUserPreferencesFromPlanner(prev, plannerPrefs));
+              }}
+            />
+          )}
         </section>
       )}
 
