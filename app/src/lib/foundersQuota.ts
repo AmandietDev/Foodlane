@@ -1,13 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/** Limite par défaut si `FOODLANE_FOUNDERS_LIMIT` est absent ou invalide (offre de lancement). */
+export const DEFAULT_FOUNDERS_LIMIT = 1000;
+
 /**
  * Limite configurable des places « fondateur » (abonnements payants au tarif lancement).
- * Variable : FOODLANE_FOUNDERS_LIMIT (défaut 100).
+ * Variable : FOODLANE_FOUNDERS_LIMIT (défaut {@link DEFAULT_FOUNDERS_LIMIT}).
  */
 export function getFoundersLimit(): number {
   const raw = process.env.FOODLANE_FOUNDERS_LIMIT;
-  const n = raw ? parseInt(raw, 10) : 100;
-  if (!Number.isFinite(n) || n < 1) return 100;
+  const n = raw ? parseInt(raw, 10) : DEFAULT_FOUNDERS_LIMIT;
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_FOUNDERS_LIMIT;
   return Math.min(n, 1_000_000);
 }
 

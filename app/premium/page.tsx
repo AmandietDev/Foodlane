@@ -23,6 +23,7 @@ import {
   formatEur,
   yearlySavingsPercent,
 } from "../src/lib/pricingPlans";
+import { DEFAULT_FOUNDERS_LIMIT } from "../src/lib/foundersQuota";
 import { FREE_DIETITIAN_TEXT_ANALYSES_PER_MONTH } from "../src/lib/freemiumLimits";
 import type { SubscriptionTier } from "../src/lib/stripeSubscriptionEnv";
 
@@ -60,7 +61,7 @@ export default function PremiumPage() {
         setPricingCtx({
           showFounderPricing: Boolean(j.showFounderPricing),
           founderSlotsRemaining: Number(j.founderSlotsRemaining) || 0,
-          foundersLimit: Number(j.foundersLimit) || 100,
+          foundersLimit: Number(j.foundersLimit) || DEFAULT_FOUNDERS_LIMIT,
           foundersUsed: Number(j.foundersUsed) || 0,
           betaWhitelistConfigured: Boolean(j.betaWhitelistConfigured),
         })
@@ -69,7 +70,7 @@ export default function PremiumPage() {
         setPricingCtx({
           showFounderPricing: false,
           founderSlotsRemaining: 0,
-          foundersLimit: 100,
+          foundersLimit: DEFAULT_FOUNDERS_LIMIT,
           foundersUsed: 0,
         })
       );
@@ -330,7 +331,9 @@ export default function PremiumPage() {
 
         {pricingCtx?.showFounderPricing && (
           <div className="mt-5 rounded-2xl border border-[#E8A0A0] bg-[#FFF8F6] p-4 text-left shadow-sm">
-            <p className="text-sm font-bold text-[#4a2c2c]">Offre limitée — tarif à vie</p>
+            <p className="text-sm font-bold text-[#4a2c2c]">
+              Offre de lancement — les {pricingCtx.foundersLimit} premiers
+            </p>
             <p className="mt-1 text-xs leading-relaxed text-[#6B2E2E]">
               Tarif à vie pour les{" "}
               <strong className="text-[#4a2c2c]">{pricingCtx.foundersLimit}</strong> premiers abonnements payants —{" "}
@@ -344,7 +347,7 @@ export default function PremiumPage() {
 
         {!pricingCtx?.showFounderPricing && pricingCtx && pricingCtx.foundersUsed >= pricingCtx.foundersLimit && (
           <p className="mt-4 text-xs text-[var(--text-muted)]">
-            L’offre à tarif à vie est close — tarifs standards affichés. Merci aux premiers abonnés pour leur
+            L’offre de lancement est close — tarifs standards affichés. Merci aux premiers abonnés pour leur
             confiance.
           </p>
         )}
@@ -514,7 +517,7 @@ export default function PremiumPage() {
           <p className="mt-2 text-center text-xs text-white/85">{premiumSecondaryLine}</p>
           {useFounderPrices && (
             <p className="mt-2 text-center text-[11px] font-semibold tracking-wide text-amber-100">
-              Tarif à vie
+              Offre de lancement · tarif à vie
             </p>
           )}
           <ul className="mt-6 flex flex-1 flex-col gap-3 text-sm text-white/95">
@@ -597,7 +600,7 @@ export default function PremiumPage() {
           <p className="mt-2 text-xs text-[var(--beige-text-muted)]">{plusSecondaryLine}</p>
           {useFounderPrices && (
             <p className="mt-2 text-center text-[11px] font-semibold tracking-wide text-[#C03A3A]">
-              Tarif à vie
+              Offre de lancement · tarif à vie
             </p>
           )}
           <ul className="mt-6 flex flex-1 flex-col gap-3 text-sm text-[var(--text-secondary)]">
