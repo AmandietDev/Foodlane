@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseMeal } from "../../../src/lib/foodParser";
+import { parseMeal, coerceParsedMeal } from "../../../src/lib/foodParser";
 import { analyzeDaily, MealEntry } from "../../../src/lib/dailyAnalyzer";
 import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
 import { requirePremium } from "../../../src/lib/premiumGuard";
@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parser le repas
-    const parsed = parseMeal(raw_text);
+    // Parser le repas (structure toujours cohérente pour JSONB + analyse)
+    const parsed = coerceParsedMeal(parseMeal(raw_text));
     const confidence = parsed.items.length > 0
       ? Math.round(parsed.items.reduce((sum, item) => sum + item.confidence, 0) / parsed.items.length)
       : 0;
@@ -117,9 +117,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Convertir les repas en format MealEntry pour l'analyse
-    const mealEntries: MealEntry[] = (allMeals || []).map(m => ({
+    const mealEntries: MealEntry[] = (allMeals || []).map((m) => ({
       meal_type: m.meal_type as "breakfast" | "lunch" | "dinner" | "snack",
-      parsed: m.parsed,
+      parsed: coerceParsedMeal(m.parsed),
       hunger_before: m.hunger_before || undefined,
       satiety_after: m.satiety_after || undefined,
     }));
@@ -132,7 +132,30 @@ export async function POST(request: NextRequest) {
       behavioral_preferences: (profile?.behavioral_preferences as string[]) || [],
     };
 
-    const summary = analyzeDaily(mealEntries, context);
+    let summary: ReturnType<typeof analyzeDaily>;
+    try {
+      summary = analyzeDaily(mealEntries, context);
+    } catch (analyzeErr) {
+      console.error("[FoodLog] analyzeDaily:", analyzeErr);
+      summary = {
+        score: 55,
+        strengths: ["Ton repas est bien enregistré."],
+        priority_tip:
+          "L’analyse détaillée n’a pas pu être calculée pour cette journée (données inattendues). Continue à noter tes repas : le prochain résumé sera affiné automatiquement.",
+        tip_options: [],
+        missing_components: [],
+        plan_for_tomorrow: {
+          breakfast: [],
+          lunch: [],
+          dinner: [],
+          snack: [],
+        },
+        meta: {
+          components_found: [],
+          rules_triggered: ["analysis_fallback"],
+        },
+      };
+    }
 
     // Sauvegarder ou mettre à jour le daily_summary
     const { error: summaryError } = await supabaseAdmin

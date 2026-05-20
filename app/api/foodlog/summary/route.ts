@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeDaily, MealEntry } from "../../../src/lib/dailyAnalyzer";
+import { coerceParsedMeal } from "../../../src/lib/foodParser";
 import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
 import { requirePremium } from "../../../src/lib/premiumGuard";
 import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
@@ -171,9 +172,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Convertir les repas en format MealEntry
-    const mealEntries: MealEntry[] = meals.map(m => ({
+    const mealEntries: MealEntry[] = meals.map((m) => ({
       meal_type: m.meal_type as "breakfast" | "lunch" | "dinner" | "snack",
-      parsed: m.parsed,
+      parsed: coerceParsedMeal(m.parsed),
       hunger_before: m.hunger_before || undefined,
       satiety_after: m.satiety_after || undefined,
     }));
@@ -186,7 +187,30 @@ export async function GET(request: NextRequest) {
       behavioral_preferences: (profile?.behavioral_preferences as string[]) || [],
     };
 
-    const summary = analyzeDaily(mealEntries, context);
+    let summary: ReturnType<typeof analyzeDaily>;
+    try {
+      summary = analyzeDaily(mealEntries, context);
+    } catch (analyzeErr) {
+      console.error("[FoodLog] GET summary analyzeDaily:", analyzeErr);
+      summary = {
+        score: 55,
+        strengths: ["Repas du jour pris en compte."],
+        priority_tip:
+          "Résumé temporairement simplifié. Si le problème persiste, vérifie que tes repas sont bien décrits en texte.",
+        tip_options: [],
+        missing_components: [],
+        plan_for_tomorrow: {
+          breakfast: [],
+          lunch: [],
+          dinner: [],
+          snack: [],
+        },
+        meta: {
+          components_found: [],
+          rules_triggered: ["analysis_fallback"],
+        },
+      };
+    }
 
     // Sauvegarder le summary
     const summaryToSave = {

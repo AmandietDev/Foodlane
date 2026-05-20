@@ -34,11 +34,21 @@ function matchesType(recipeType: string | null, type: TypeFilter): boolean {
   return t.includes("sale") || t.includes("salé");
 }
 
-function parseCommonFoodTerms(input: string): string[] {
-  return input
+/** Découpe une chaîne (URL ou collage) en libellés d’ingrédients, sans doublon (insensible à la casse / accents). */
+function splitIngredientPhrasesFromRaw(raw: string): string[] {
+  const parts = raw
     .split(/[,;\n]+/)
-    .map((x) => normalize(x))
+    .map((x) => x.trim())
     .filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    const n = normalize(p);
+    if (!n || seen.has(n)) continue;
+    seen.add(n);
+    out.push(p);
+  }
+  return out;
 }
 
 export default function RecettesPage() {
@@ -51,9 +61,15 @@ export default function RecettesPage() {
   const [allRecipes, setAllRecipes] = useState<RecipeWithPersonalization[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const [commonFoodsInput, setCommonFoodsInput] = useState(
-    searchParams.get("foods") || searchParams.get("ingredients") || searchParams.get("q") || ""
-  );
+  const [ingredientTags, setIngredientTags] = useState<string[]>(() => {
+    const raw =
+      searchParams.get("foods") ||
+      searchParams.get("ingredients") ||
+      searchParams.get("q") ||
+      "";
+    return splitIngredientPhrasesFromRaw(raw);
+  });
+  const [ingredientDraft, setIngredientDraft] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(
     searchParams.get("type") === "sweet" || searchParams.get("type") === "savory"
       ? (searchParams.get("type") as TypeFilter)
@@ -152,8 +168,31 @@ export default function RecettesPage() {
     };
   }, [user]);
 
+  const addIngredientFromDraft = () => {
+    const trimmed = ingredientDraft.trim();
+    if (!trimmed) return;
+    const candidates = splitIngredientPhrasesFromRaw(trimmed);
+    if (candidates.length === 0) return;
+    setIngredientTags((prev) => {
+      const seen = new Set(prev.map((p) => normalize(p)));
+      const next = [...prev];
+      for (const p of candidates) {
+        const n = normalize(p);
+        if (!n || seen.has(n)) continue;
+        seen.add(n);
+        next.push(p);
+      }
+      return next;
+    });
+    setIngredientDraft("");
+  };
+
+  const removeIngredientTag = (index: number) => {
+    setIngredientTags((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const filtered = useMemo(() => {
-    const terms = parseCommonFoodTerms(commonFoodsInput);
+    const terms = ingredientTags.map((t) => normalize(t)).filter(Boolean);
     const hasTerms = terms.length > 0;
     const hasTypeFilter = typeFilter !== "all";
     const season = getCurrentSeason();
@@ -193,7 +232,7 @@ export default function RecettesPage() {
     });
 
     return out;
-  }, [recipes, allRecipes, commonFoodsInput, typeFilter]);
+  }, [recipes, allRecipes, ingredientTags, typeFilter]);
 
   if (sessionLoading || !user || loading) {
     return (
@@ -226,13 +265,51 @@ export default function RecettesPage() {
           </div>
 
           <div className="mt-4">
-            <input
-              type="text"
-              value={commonFoodsInput}
-              onChange={(e) => setCommonFoodsInput(e.target.value)}
-              placeholder="Aliments / ingrédients communs (ex: oeufs, tomate, poulet)"
-              className="w-full rounded-xl border border-[var(--beige-border)] bg-white px-3 py-2 text-sm text-[var(--text-primary)]"
-            />
+            <p className="text-xs text-[var(--text-secondary)] mb-2">
+              Ajoute un ingrédient à la fois : tape son nom puis <strong>Entrée</strong> ou clique sur <strong>Ajouter</strong>.
+              Les recettes se filtrent dès qu’un tag est présent ; avec plusieurs tags, tous doivent apparaître dans la recette.
+            </p>
+            <div className="rounded-xl border border-[var(--beige-border)] bg-white p-2 flex flex-wrap gap-2 items-center">
+              {ingredientTags.map((tag, index) => (
+                <span
+                  key={`${normalize(tag)}-${index}`}
+                  className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full bg-[#FFF0F0] border border-[#E8C4C4] text-sm text-[var(--text-primary)]"
+                >
+                  <span>{tag}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeIngredientTag(index)}
+                    className="h-6 w-6 rounded-full text-[var(--text-secondary)] hover:bg-[#D44A4A]/15 hover:text-[#6B2E2E] flex items-center justify-center text-base leading-none"
+                    aria-label={`Retirer ${tag}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <div className="flex flex-1 min-w-[min(100%,12rem)] gap-2 items-stretch">
+                <input
+                  type="text"
+                  value={ingredientDraft}
+                  onChange={(e) => setIngredientDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addIngredientFromDraft();
+                    }
+                  }}
+                  placeholder="Ex. œufs, tomate, poulet…"
+                  className="flex-1 min-w-0 rounded-lg border border-[var(--beige-border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--beige-accent)]"
+                />
+                <button
+                  type="button"
+                  onClick={addIngredientFromDraft}
+                  disabled={!ingredientDraft.trim()}
+                  className="shrink-0 px-3 py-2 rounded-lg text-sm font-semibold bg-[var(--beige-accent)] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-95"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="mt-3 flex gap-2">
@@ -257,7 +334,8 @@ export default function RecettesPage() {
             <button
               type="button"
               onClick={() => {
-                setCommonFoodsInput("");
+                setIngredientTags([]);
+                setIngredientDraft("");
                 setTypeFilter("all");
               }}
               className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-[var(--beige-border)] text-[var(--text-secondary)]"

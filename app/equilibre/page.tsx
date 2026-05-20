@@ -8,7 +8,7 @@ import { supabase } from "../src/lib/supabaseClient";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { loadPreferences } from "../src/lib/userPreferences";
 import { selectDailyTip, selectDailyChallenge, type Tip, type Challenge, type ObjectiveTag, type ContextTag } from "../src/lib/dailyTips";
-import { getNutritionSpotlightForDate, type NutritionSpotlight } from "../src/lib/nutritionCalendarSpotlight";
+import { getNutritionSpotlightForDate } from "../src/lib/nutritionCalendarSpotlight";
 import { getTodayTips, getRecentIds, addToHistory } from "../src/lib/dailyTipsHistory";
 import { getLocale } from "../src/lib/i18n";
 import { sessionAuthHeaders } from "../src/lib/plannerClient";
@@ -147,7 +147,13 @@ export default function EquilibrePage() {
   const { user, loading: sessionLoading } = useSupabaseSession();
   const { loading: premiumLoading, canAccessDietAssistant, subscriptionTier } = usePremium();
   const [loading, setLoading] = useState(true);
-  const [today, setToday] = useState<string>("");
+  const [today, setToday] = useState<string>(() => {
+    try {
+      return new Date().toISOString().split("T")[0];
+    } catch {
+      return "";
+    }
+  });
   const [meals, setMeals] = useState<FoodLogEntry[]>([]);
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [weeklyInsights, setWeeklyInsights] = useState<WeeklyInsights | null>(null);
@@ -162,7 +168,6 @@ export default function EquilibrePage() {
   const [pendingMealId, setPendingMealId] = useState<string | null>(null);
   const [conseilDuJour, setConseilDuJour] = useState<Tip | null>(null);
   const [defiDuJour, setDefiDuJour] = useState<Challenge | null>(null);
-  const [nutritionSpotlight, setNutritionSpotlight] = useState<NutritionSpotlight | null>(null);
   const [weekMeals, setWeekMeals] = useState<FoodLogEntry[]>([]);
   const [weekMealsLoading, setWeekMealsLoading] = useState(false);
 
@@ -180,7 +185,6 @@ export default function EquilibrePage() {
   }, [sessionLoading, premiumLoading, canAccessDietAssistant]);
 
   async function generateDailyTips() {
-    setNutritionSpotlight(getNutritionSpotlightForDate(new Date()));
     const preferences = loadPreferences();
 
     const userObjectives: ObjectiveTag[] = [];
@@ -355,28 +359,40 @@ export default function EquilibrePage() {
         return;
       }
 
+      const mealDate =
+        today && /^\d{4}-\d{2}-\d{2}$/.test(today)
+          ? today
+          : new Date().toISOString().split("T")[0];
+
       const res = await fetch("/api/foodlog/add", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          date: today,
+          date: mealDate,
           meal_type: currentMeal,
           raw_text: rawText.trim(),
           hunger_before: hungerBefore || undefined,
           satiety_after: satietyAfter || undefined,
-          userId: session.user.id,
         }),
       });
 
+      const payload = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        details?: string;
+        entry?: FoodLogEntry;
+        summary?: DailySummary;
+      };
+
       if (!res.ok) {
-        const errorBody = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(errorBody.error || "Erreur lors de l'ajout");
+        const msg = [payload.error, payload.details].filter(Boolean).join(" — ");
+        throw new Error(msg || "Erreur lors de l'ajout du repas");
       }
 
-      const j = (await res.json()) as { entry?: FoodLogEntry; summary?: DailySummary };
+      const j = payload;
 
       if (j.summary) setSummary(j.summary);
       if (j.entry) {
@@ -390,7 +406,7 @@ export default function EquilibrePage() {
         });
       }
 
-      await loadTodayData(today, { silent: true });
+      await loadTodayData(mealDate, { silent: true });
       await reloadWeekData();
     } catch (error) {
       console.error("[Equilibre] Erreur ajout repas:", error);
@@ -508,7 +524,6 @@ export default function EquilibrePage() {
       weeklyInsights={weeklyInsights}
       weekMeals={weekMeals}
       weekMealsLoading={weekMealsLoading}
-      nutritionSpotlight={nutritionSpotlight}
       onWeekTabOpen={reloadWeekData}
       currentMeal={currentMeal}
       mealInput={mealInput}
@@ -553,7 +568,6 @@ interface EquilibrePageContentProps {
   weeklyInsights: WeeklyInsights | null;
   weekMeals: FoodLogEntry[];
   weekMealsLoading: boolean;
-  nutritionSpotlight: NutritionSpotlight | null;
   onWeekTabOpen: () => Promise<void>;
   currentMeal: "breakfast" | "lunch" | "dinner" | "snack";
   mealInput: string;
@@ -645,7 +659,6 @@ function EquilibrePageContent({
   weeklyInsights,
   weekMeals,
   weekMealsLoading,
-  nutritionSpotlight,
   onWeekTabOpen,
   currentMeal,
   mealInput,
@@ -699,6 +712,8 @@ function EquilibrePageContent({
     }
     return map;
   }, [weekMeals]);
+
+  const nutritionSpotlight = useMemo(() => getNutritionSpotlightForDate(new Date()), []);
 
   const mealTypeLabels = {
     breakfast: "Petit-déjeuner",
@@ -814,28 +829,14 @@ function EquilibrePageContent({
             <span>Conseil du jour</span>
           </h2>
           <p className="text-sm text-[#726566]">{conseilDuJour.text}</p>
-        </section>
-      )}
-
-      {nutritionSpotlight && (
-        <section className="mb-4 rounded-2xl border border-[#C9E2F0] bg-[#F4FAFF] backdrop-blur-md p-4 shadow-sm">
-          <h2 className="text-sm font-semibold mb-2 text-[#1E4D6B] flex items-center gap-2">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#1E6B8C]">
-              📌
-            </span>
-            <span>Actualité & idée d’action</span>
-          </h2>
-          <p className="text-xs font-semibold text-[#1E4D6B] mb-1">{nutritionSpotlight.title}</p>
-          <p className="text-sm text-[#4A6572] leading-relaxed mb-3">{nutritionSpotlight.hook}</p>
-          <p className="text-[11px] font-semibold text-[#1E4D6B] mb-1.5">Concrètement aujourd’hui</p>
-          <ul className="space-y-1.5">
-            {nutritionSpotlight.ideas.map((idea, idx) => (
-              <li key={idx} className="text-xs text-[#4A6572] flex gap-2">
-                <span className="text-[#1E6B8C] shrink-0">→</span>
-                <span>{idea}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-3 pt-3 border-t border-[#EDDCDC]/70">
+            <p className="text-[11px] font-semibold text-[#6B2E2E] mb-1">À la une — santé & bien-être</p>
+            <p className="text-xs text-[#726566] leading-relaxed">
+              <span className="font-medium text-[#3E2A2A]">{nutritionSpotlight.title}</span>
+              {" — "}
+              {nutritionSpotlight.hook}
+            </p>
+          </div>
         </section>
       )}
 
@@ -1131,8 +1132,22 @@ function EquilibrePageContent({
                 </span>
               )}
             </h2>
+            {!conseilDuJour ? (
+              <p className="text-xs text-[#726566] mb-3 leading-relaxed">
+                <span className="font-semibold text-[#6B2E2E]">À la une — santé & bien-être : </span>
+                <span className="font-medium text-[#3E2A2A]">{nutritionSpotlight.title}</span>
+                {" — "}
+                {nutritionSpotlight.hook}
+              </p>
+            ) : null}
             <p className="text-sm font-medium text-[#6B2E2E] mb-1">{defiDuJour.action}</p>
             <p className="text-xs text-[#726566] italic">{defiDuJour.why}</p>
+            {nutritionSpotlight.ideas[0] ? (
+              <p className="mt-2 pt-2 border-t border-[#EDDCDC]/70 text-[11px] text-[#726566] leading-relaxed not-italic">
+                <span className="font-semibold text-[#6B2E2E]">Piste actu : </span>
+                {nutritionSpotlight.ideas[0]}
+              </p>
+            ) : null}
           </section>
         )}
 

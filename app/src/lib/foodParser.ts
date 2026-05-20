@@ -250,6 +250,63 @@ export function parseMeal(rawText: string): ParsedMeal {
   };
 }
 
+/**
+ * Normalise un `parsed` venant de la base (objet, JSON string, ou données partielles)
+ * pour éviter les plantages dans l’analyse journalière (components manquants, etc.).
+ */
+export function coerceParsedMeal(raw: unknown): ParsedMeal {
+  const emptyComponents: ParsedMeal["components"] = {
+    protein: [],
+    veggie: [],
+    carb: [],
+    fat: [],
+    dairy: [],
+    fruit: [],
+    treat: [],
+  };
+  const empty: ParsedMeal = {
+    items: [],
+    components: { ...emptyComponents },
+    notes: [],
+    detected_allergens: [],
+    diet_flags: [],
+  };
+
+  let parsed: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch {
+      return empty;
+    }
+  }
+  if (!parsed || typeof parsed !== "object") return empty;
+
+  const p = parsed as Record<string, unknown>;
+  const comp = p.components as Record<string, unknown> | undefined;
+  const components: ParsedMeal["components"] = { ...emptyComponents };
+  if (comp && typeof comp === "object") {
+    (Object.keys(emptyComponents) as (keyof typeof emptyComponents)[]).forEach((k) => {
+      const v = comp[k as string];
+      if (Array.isArray(v)) {
+        components[k] = v.filter((x) => typeof x === "string") as string[];
+      }
+    });
+  }
+
+  const items = Array.isArray(p.items) ? (p.items as ParsedMeal["items"]) : [];
+
+  return {
+    items,
+    components,
+    notes: Array.isArray(p.notes) ? (p.notes as string[]) : [],
+    detected_allergens: Array.isArray(p.detected_allergens)
+      ? (p.detected_allergens as string[])
+      : [],
+    diet_flags: Array.isArray(p.diet_flags) ? (p.diet_flags as string[]) : [],
+  };
+}
+
 // Fonction utilitaire pour obtenir la catégorie d'un aliment
 export function getFoodCategory(foodName: string): string {
   const normalized = normalizeText(foodName);
