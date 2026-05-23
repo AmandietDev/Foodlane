@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
 import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
-import { fetchRecipes } from "../../../src/lib/recipes";
+import { getCachedRecipes } from "../../../src/lib/recipesServerCache";
 import {
   buildExclusionList,
   filterRecipesByStrictExclusions,
@@ -17,8 +17,6 @@ import type { Recipe } from "../../../src/lib/recipes";
 
 export const dynamic = "force-dynamic";
 
-let recipesCache: { at: number; data: Recipe[] } | null = null;
-const RECIPES_TTL_MS = 5 * 60 * 1000;
 
 const MAX_RESULTS = 60;
 
@@ -86,15 +84,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Recettes
-  const now = Date.now();
-  const allRecipes =
-    recipesCache && now - recipesCache.at < RECIPES_TTL_MS
-      ? recipesCache.data
-      : await fetchRecipes().then((data) => {
-          recipesCache = { at: now, data };
-          return data;
-        });
+  const allRecipes = await getCachedRecipes();
 
   // Disliked recipes
   const { data: dislikedRows } = await supabaseAdmin

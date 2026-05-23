@@ -3,6 +3,24 @@ import { supabase } from "./supabase";
 import type { Recipe } from "./recipes";
 import { deriveRecipeFeatures } from "./recipeFeatures";
 
+/**
+ * Colonnes nécessaires au moteur de planification.
+ * `instructions` est délibérément absent : il n'est jamais utilisé pour le
+ * scoring ou le filtrage et représente ~40% du payload total.
+ * La fiche détail recette (/api/recipes/[id]) continue d'utiliser SELECT *.
+ */
+const PLANNING_SELECT = [
+  "id", "type", "difficulte", "temps_preparation_min", "categorie_temps",
+  "nombre_personnes", "nom_recette", "description_courte", "saison",
+  "meal_slot", "dish_type", "main_protein", "main_carb", "main_vegetables",
+  "allergens", "igredient_tags", "diet_tags",
+  "family", "cooking_method", "texture", "meal_subtype",
+  "ingredients", "ingredients_quantites",
+  "equipements", "equipements_necessaires",
+  "calories", "calories_par_portion",
+  "image_url", "created_at",
+].join(", ");
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapSupabaseRowToRecipe(row: any): Recipe {
   const ingredientsRaw = row.ingredients_quantites ?? row.ingredients ?? null;
@@ -47,7 +65,7 @@ export function mapSupabaseRowToRecipe(row: any): Recipe {
 
     ingredients: ingredientsRaw,
     ingredients_quantites: row.ingredients_quantites ?? null,
-    instructions: row.instructions ?? null,
+    instructions: row.instructions ?? null, // null pour fetchRecipesFromSupabase (non chargé)
     equipements: equipementsRaw,
     equipements_necessaires: row.equipements_necessaires ?? null,
     calories: caloriesRaw,
@@ -70,65 +88,32 @@ export async function fetchRecipeByIdFromSupabase(id: number): Promise<Recipe | 
 }
 
 /**
- * Récupère toutes les recettes depuis Supabase
+ * Récupère toutes les recettes depuis Supabase en une seule requête.
+ *
+ * Optimisations vs version précédente :
+ *  - SELECT limité aux colonnes utiles (pas d'instructions → ~40% de payload en moins)
+ *  - range(0, 4999) : une seule requête HTTP au lieu d'une boucle paginée (2×)
  */
 export async function fetchRecipesFromSupabase(): Promise<Recipe[]> {
-  try {
-    console.log("[Recipes] Récupération des recettes depuis Supabase (pagination)...");
+  const t0 = Date.now();
+  const { data, error } = await supabase
+    .from("recipes_v2")
+    .select(PLANNING_SELECT)
+    .order("id", { ascending: true })
+    .range(0, 4999);
 
-    const PAGE_SIZE = 1000;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let allRows: any[] = [];
-    let from = 0;
-
-    while (true) {
-      const { data, error } = await supabase
-        .from("recipes_v2")
-        .select("*")
-        .order("id", { ascending: true })
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (error) {
-        console.error("[Recipes] Erreur Supabase:", error);
-        throw new Error(`Erreur lors de la récupération des recettes: ${error.message}`);
-      }
-
-      if (!data || data.length === 0) break;
-
-      allRows = allRows.concat(data);
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-
-    const data = allRows;
-
-    if (data.length === 0) {
-      console.warn("[Recipes] Aucune recette trouvée dans Supabase");
-      return [];
-    }
-
-    const recipes: Recipe[] = data.map((row) => mapSupabaseRowToRecipe(row));
-
-    const sweetCount = recipes.filter((r) => {
-      const type = (r.type?.toLowerCase() || "").trim();
-      return type.includes("sucré") || type.includes("sucree") || type.includes("sucr");
-    }).length;
-    const savoryCount = recipes.filter((r) => {
-      const type = (r.type?.toLowerCase() || "").trim();
-      return type.includes("salé") || type.includes("sale") || type.includes("sal");
-    }).length;
-
-    console.log(
-      `[Recipes] ${recipes.length} recettes récupérées depuis Supabase (${sweetCount} sucrées, ${savoryCount} salées)`
-    );
-
-    return recipes;
-  } catch (error) {
-    console.error("[Recipes] Erreur lors de la récupération des recettes depuis Supabase:", error);
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error("Erreur inconnue lors de la récupération des recettes depuis Supabase");
+  if (error) {
+    console.error("[Recipes] Erreur Supabase:", error.message);
+    throw new Error(`Erreur Supabase: ${error.message}`);
   }
+
+  if (!data || data.length === 0) {
+    console.warn("[Recipes] Aucune recette trouvée dans Supabase");
+    return [];
+  }
+
+  const recipes: Recipe[] = data.map((row) => mapSupabaseRowToRecipe(row));
+  console.log(`[Recipes] ${recipes.length} recettes chargées depuis Supabase en ${Date.now() - t0}ms`);
+  return recipes;
 }
 

@@ -339,8 +339,7 @@ export default function PremiumPage() {
               <strong className="text-[#4a2c2c]">{pricingCtx.foundersLimit}</strong> premiers abonnements payants —{" "}
               <strong className="text-[#4a2c2c]">{pricingCtx.founderSlotsRemaining}</strong> place
               {pricingCtx.founderSlotsRemaining > 1 ? "s" : ""} restante
-              {pricingCtx.founderSlotsRemaining > 1 ? "s" : ""}. Ensuite, affichage automatique des tarifs
-              standards uniquement (sans changer le prix des membres déjà inscrits).
+              {pricingCtx.founderSlotsRemaining > 1 ? "s" : ""}.
             </p>
           </div>
         )}

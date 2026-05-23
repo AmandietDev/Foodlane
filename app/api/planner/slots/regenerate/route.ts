@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserIdFromRequest } from "../../../../src/lib/supabaseServer";
 import { supabaseAdmin } from "../../../../src/lib/supabaseAdmin";
-import { fetchRecipes, type Recipe } from "../../../../src/lib/recipes";
+import { type Recipe } from "../../../../src/lib/recipes";
+import { getCachedRecipes } from "../../../../src/lib/recipesServerCache";
 import {
   buildExclusionList,
   filterRecipesByStrictExclusions,
@@ -18,8 +19,6 @@ import { monthPeriodKey, tryConsumeFreemiumQuota } from "../../../../src/lib/usa
 
 export const dynamic = "force-dynamic";
 
-let recipesCache: { at: number; data: Recipe[] } | null = null;
-const RECIPES_TTL_MS = 5 * 60 * 1000;
 
 function pickWeightedRandom<T>(items: { item: T; weight: number }[]): T | null {
   const total = items.reduce((acc, cur) => acc + Math.max(0, cur.weight), 0);
@@ -95,15 +94,7 @@ export async function POST(request: NextRequest) {
     prefs = rowToPlannerPreferences(row as UserPreferencesRow, equipment || [], allergies || [], excluded || []);
   }
 
-  // Fetch recipes (with cache)
-  const now = Date.now();
-  const allRecipes =
-    recipesCache && now - recipesCache.at < RECIPES_TTL_MS
-      ? recipesCache.data
-      : await fetchRecipes().then((data) => {
-          recipesCache = { at: now, data };
-          return data;
-        });
+  const allRecipes = await getCachedRecipes();
 
   // Disliked recipes
   const { data: dislikedRows } = await supabaseAdmin

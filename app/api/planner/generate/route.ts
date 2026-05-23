@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
 import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
-import { fetchRecipes } from "../../../src/lib/recipes";
+import { getCachedRecipes } from "../../../src/lib/recipesServerCache";
 import {
   buildWeeklyPlan,
   buildExclusionList,
@@ -56,8 +56,6 @@ function parseAiLocale(x: unknown): Locale {
 
 export const dynamic = "force-dynamic";
 
-let recipesCache: { at: number; data: Awaited<ReturnType<typeof fetchRecipes>> } | null = null;
-const RECIPES_TTL_MS = 5 * 60 * 1000;
 const FALLBACK_RECIPE_IMAGE_URL = "/menu-generation-collage.png";
 const AI_MENU_TIMEOUT_MS = 24000;
 
@@ -200,14 +198,7 @@ export async function POST(request: NextRequest) {
     .eq("user_id", userId);
   const dislikedIds = new Set<number>((dislikedRows || []).map((r) => Number(r.recipe_id)));
 
-  const now = Date.now();
-  let allRecipes =
-    recipesCache && now - recipesCache.at < RECIPES_TTL_MS
-      ? recipesCache.data
-      : await fetchRecipes().then((data) => {
-          recipesCache = { at: now, data };
-          return data;
-        });
+  let allRecipes = await getCachedRecipes();
 
   // Exclure les recettes non aimées
   const recipes = dislikedIds.size > 0

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
@@ -8,7 +8,6 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import RecipeImage from "../components/RecipeImage";
 import type { Recipe } from "../src/lib/recipes";
 import { plannerAuthHeaders } from "../src/lib/plannerClient";
-import { getCurrentSeason, scoreRecipeSeasonRelevance } from "../src/lib/seasonalFilter";
 import { addFavorite, loadFavorites, removeFavorite } from "../src/lib/favorites";
 import { addRecipeToCollection, loadCollections, type Collection } from "../src/lib/collections";
 
@@ -19,22 +18,16 @@ type RecipeWithPersonalization = Recipe & {
 
 type TypeFilter = "all" | "sweet" | "savory";
 
+const PAGE_SIZE = 24;
+
 function normalize(value: string): string {
   return value
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .trim();
 }
 
-function matchesType(recipeType: string | null, type: TypeFilter): boolean {
-  if (type === "all") return true;
-  const t = normalize(recipeType || "");
-  if (type === "sweet") return t.includes("sucre") || t.includes("sucré");
-  return t.includes("sale") || t.includes("salé");
-}
-
-/** Découpe une chaîne (URL ou collage) en libellés d’ingrédients, sans doublon (insensible à la casse / accents). */
 function splitIngredientPhrasesFromRaw(raw: string): string[] {
   const parts = raw
     .split(/[,;\n]+/)
@@ -56,10 +49,17 @@ export default function RecettesPage() {
   const searchParams = useSearchParams();
   const { user, loading: sessionLoading } = useSupabaseSession();
 
-  const [loading, setLoading] = useState(true);
-  const [recipes, setRecipes] = useState<RecipeWithPersonalization[]>([]);
-  const [allRecipes, setAllRecipes] = useState<RecipeWithPersonalization[]>([]);
+  // Personalized recipes (from /api/recipes/for-me, shown when no filter active)
+  const [personalizedRecipes, setPersonalizedRecipes] = useState<RecipeWithPersonalization[]>([]);
+  const [loadingPersonalized, setLoadingPersonalized] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Server-side paginated search results (shown when filter active)
+  const [searchResults, setSearchResults] = useState<RecipeWithPersonalization[]>([]);
+  const [searchHasMore, setSearchHasMore] = useState(false);
+  const [searchPage, setSearchPage] = useState(1);
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   const [ingredientTags, setIngredientTags] = useState<string[]>(() => {
     const raw =
@@ -80,6 +80,8 @@ export default function RecettesPage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionModalRecipe, setCollectionModalRecipe] = useState<RecipeWithPersonalization | null>(null);
   const [favBusyId, setFavBusyId] = useState<number | null>(null);
+
+  const isFilterActive = ingredientTags.length > 0 || typeFilter !== "all";
 
   async function refreshFavoritesAndCollections() {
     const [favs, cols] = await Promise.all([loadFavorites(), loadCollections()]);
@@ -104,61 +106,34 @@ export default function RecettesPage() {
     if (!sessionLoading && !user) router.push("/login");
   }, [sessionLoading, user, router]);
 
+  // Load personalized recipes on mount (no bulk all-recipes load)
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
 
     async function loadPersonalizedRecipes() {
-      setLoading(true);
+      setLoadingPersonalized(true);
       setError(null);
-
       try {
         const auth = await plannerAuthHeaders();
-
-        const [forMeRes, allRes] = await Promise.all([
-          fetch("/api/recipes/for-me", {
-            headers: {
-              "Content-Type": "application/json",
-              ...auth,
-            },
-          }),
-          fetch("/api/recipes"),
-        ]);
-
-        const [forMeJson, allJson] = await Promise.all([
-          forMeRes.json().catch(() => ({})),
-          allRes.json().catch(() => ({})),
-        ]);
-
+        const res = await fetch("/api/recipes/for-me", {
+          headers: { "Content-Type": "application/json", ...auth },
+        });
+        const json = await res.json().catch(() => ({}));
         if (cancelled) return;
-
-        const allLoaded =
-          allRes.ok && Array.isArray(allJson.recipes)
-            ? (allJson.recipes as RecipeWithPersonalization[])
-            : [];
-        setAllRecipes(allLoaded);
-
-        if (forMeRes.ok && Array.isArray(forMeJson.recipes) && forMeJson.recipes.length > 0) {
-          setRecipes(forMeJson.recipes as RecipeWithPersonalization[]);
-        } else if (allLoaded.length > 0) {
-          setRecipes(allLoaded);
-        } else {
-          setRecipes([]);
-        }
-
-        if (!forMeRes.ok && forMeRes.status !== 403 && allLoaded.length === 0) {
+        if (res.ok && Array.isArray(json.recipes) && json.recipes.length > 0) {
+          setPersonalizedRecipes(json.recipes as RecipeWithPersonalization[]);
+        } else if (res.status !== 403) {
           setError(
-            typeof forMeJson.error === "string"
-              ? forMeJson.error
-              : "Impossible de charger les recettes personnalisées."
+            typeof json.error === "string"
+              ? json.error
+              : "Impossible de charger les recettes."
           );
         }
       } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Erreur de chargement.");
-        }
+        if (!cancelled) setError(e instanceof Error ? e.message : "Erreur de chargement.");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadingPersonalized(false);
       }
     }
 
@@ -167,6 +142,53 @@ export default function RecettesPage() {
       cancelled = true;
     };
   }, [user]);
+
+  // Paginated server-side search — called on filter changes or "Voir plus"
+  const fetchSearchPage = useCallback(
+    async (page: number, tags: string[], type: TypeFilter, append: boolean) => {
+      if (searchAbortRef.current) searchAbortRef.current.abort();
+      const ctrl = new AbortController();
+      searchAbortRef.current = ctrl;
+
+      setLoadingSearch(true);
+      try {
+        const urlParams = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+        if (type !== "all") urlParams.set("type", type);
+        if (tags.length > 0) urlParams.set("query", tags.join(","));
+
+        const res = await fetch(`/api/recipes?${urlParams}`, { signal: ctrl.signal });
+        if (!res.ok) return;
+        const json = await res.json();
+        const incoming = (json.recipes || []) as RecipeWithPersonalization[];
+        setSearchResults((prev) => (append ? [...prev, ...incoming] : incoming));
+        setSearchHasMore(!!json.hasMore);
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") console.error("[RecettesPage] search error:", e);
+      } finally {
+        setLoadingSearch(false);
+      }
+    },
+    []
+  );
+
+  // Reset + re-search when filters change
+  useEffect(() => {
+    if (!user) return;
+    if (!isFilterActive) {
+      setSearchResults([]);
+      setSearchPage(1);
+      setSearchHasMore(false);
+      return;
+    }
+    setSearchPage(1);
+    void fetchSearchPage(1, ingredientTags, typeFilter, false);
+  }, [user, ingredientTags, typeFilter, isFilterActive, fetchSearchPage]);
+
+  function loadMoreSearchResults() {
+    const next = searchPage + 1;
+    setSearchPage(next);
+    void fetchSearchPage(next, ingredientTags, typeFilter, true);
+  }
 
   const addIngredientFromDraft = () => {
     const trimmed = ingredientDraft.trim();
@@ -191,53 +213,27 @@ export default function RecettesPage() {
     setIngredientTags((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const filtered = useMemo(() => {
-    const terms = ingredientTags.map((t) => normalize(t)).filter(Boolean);
-    const hasTerms = terms.length > 0;
-    const hasTypeFilter = typeFilter !== "all";
-    const season = getCurrentSeason();
+  // Sort search results: personalized recipes bubble to the top
+  const personalizedIds = useMemo(
+    () => new Set(personalizedRecipes.map((r) => r.id)),
+    [personalizedRecipes]
+  );
 
-    // Sans filtre: vue personnalisée.
-    // Avec filtre/terme: recherche sur toute la base pour éviter les faux "0 résultat".
-    const personalizationIds = new Set(recipes.map((r) => r.id));
-    const personalizationScore = new Map(recipes.map((r, idx) => [r.id, idx]));
-    const source =
-      hasTerms || hasTypeFilter
-        ? (allRecipes.length ? allRecipes : recipes)
-        : (recipes.length ? recipes : allRecipes);
-
-    const out = source.filter((recipe) => {
-      if (!matchesType(recipe.type, typeFilter)) return false;
-
-      if (hasTerms) {
-        const haystack = normalize(
-          `${recipe.nom_recette || ""} ${recipe.description_courte || ""} ${recipe.ingredients || ""}`
-        );
-        const allMatch = terms.every((needle) => haystack.includes(needle));
-        if (!allMatch) return false;
-      }
-
-      return true;
+  const displayedRecipes = useMemo(() => {
+    if (!isFilterActive) return personalizedRecipes;
+    if (personalizedIds.size === 0) return searchResults;
+    return [...searchResults].sort((a, b) => {
+      const aP = personalizedIds.has(a.id) ? 0 : 1;
+      const bP = personalizedIds.has(b.id) ? 0 : 1;
+      return aP - bP;
     });
+  }, [isFilterActive, personalizedRecipes, searchResults, personalizedIds]);
 
-    // Maintenir l'adaptation profil : les recettes personnalisées remontent en premier.
-    out.sort((a, b) => {
-      const aIn = personalizationIds.has(a.id) ? 1 : 0;
-      const bIn = personalizationIds.has(b.id) ? 1 : 0;
-      if (aIn !== bIn) return bIn - aIn;
-      const ai = personalizationScore.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-      const bi = personalizationScore.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-      if (ai !== bi) return ai - bi;
-      return scoreRecipeSeasonRelevance(b, season) - scoreRecipeSeasonRelevance(a, season);
-    });
-
-    return out;
-  }, [recipes, allRecipes, ingredientTags, typeFilter]);
-
-  if (sessionLoading || !user || loading) {
+  // Full-page spinner only for the initial personalized load (when no filter active)
+  if (sessionLoading || !user || (!isFilterActive && loadingPersonalized)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <LoadingSpinner message="Chargement des recettes…" />
+        <LoadingSpinner message="Chargement des recettes&hellip;" />
       </div>
     );
   }
@@ -246,13 +242,13 @@ export default function RecettesPage() {
     <main className="min-h-screen bg-[var(--background)] px-4 pt-6 pb-24">
       <div className="max-w-3xl mx-auto space-y-4">
         <Link href="/tableau" className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)]">
-          ← Retour
+          &larr; Retour
         </Link>
 
         <section className="rounded-2xl border border-[var(--beige-border)] bg-white p-4">
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Parcourir les recettes</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Exploration personnalisée selon ton profil (régimes, allergies, équipements), avec filtres sucré/salé,
+            Exploration personnalisée selon ton profil (régimes, allergies, équipements), avec filtres sucré/salé
             et aliments communs. Tu peux aussi explorer sans aucun filtre.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -266,8 +262,9 @@ export default function RecettesPage() {
 
           <div className="mt-4">
             <p className="text-xs text-[var(--text-secondary)] mb-2">
-              Ajoute un ingrédient à la fois : tape son nom puis <strong>Entrée</strong> ou clique sur <strong>Ajouter</strong>.
-              Les recettes se filtrent dès qu’un tag est présent ; avec plusieurs tags, tous doivent apparaître dans la recette.
+              Ajoute un ingrédient à la fois : tape son nom puis <strong>Entrée</strong> ou clique sur{" "}
+              <strong>Ajouter</strong>. Les recettes se filtrent dès qu&apos;un tag est présent ; avec plusieurs
+              tags, tous doivent apparaître dans la recette.
             </p>
             <div className="rounded-xl border border-[var(--beige-border)] bg-white p-2 flex flex-wrap gap-2 items-center">
               {ingredientTags.map((tag, index) => (
@@ -282,7 +279,7 @@ export default function RecettesPage() {
                     className="h-6 w-6 rounded-full text-[var(--text-secondary)] hover:bg-[#D44A4A]/15 hover:text-[#6B2E2E] flex items-center justify-center text-base leading-none"
                     aria-label={`Retirer ${tag}`}
                   >
-                    ×
+                    &times;
                   </button>
                 </span>
               ))}
@@ -297,7 +294,7 @@ export default function RecettesPage() {
                       addIngredientFromDraft();
                     }
                   }}
-                  placeholder="Ex. œufs, tomate, poulet…"
+                  placeholder="Ex. oeufs, tomate, poulet..."
                   className="flex-1 min-w-0 rounded-lg border border-[var(--beige-border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--beige-accent)]"
                 />
                 <button
@@ -350,75 +347,104 @@ export default function RecettesPage() {
         ) : null}
 
         <section className="space-y-3">
-          <p className="text-sm text-[var(--text-secondary)]">
-            {filtered.length} recette{filtered.length > 1 ? "s" : ""} trouvée{filtered.length > 1 ? "s" : ""}.
-          </p>
+          {isFilterActive ? (
+            <p className="text-sm text-[var(--text-secondary)]">
+              {loadingSearch && searchResults.length === 0
+                ? "Recherche en cours…"
+                : `${displayedRecipes.length} recette${displayedRecipes.length > 1 ? "s" : ""} trouvée${displayedRecipes.length > 1 ? "s" : ""}${searchHasMore ? " (et plus)" : ""}.`}
+            </p>
+          ) : (
+            <p className="text-sm text-[var(--text-secondary)]">
+              {displayedRecipes.length} recette{displayedRecipes.length > 1 ? "s" : ""} suggérée{displayedRecipes.length > 1 ? "s" : ""} pour toi.
+            </p>
+          )}
 
-          {filtered.length === 0 ? (
+          {isFilterActive && loadingSearch && searchResults.length === 0 ? (
+            <div className="flex justify-center py-8">
+              <LoadingSpinner message="Recherche en cours…" />
+            </div>
+          ) : displayedRecipes.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--beige-border)] p-5 text-sm text-[var(--text-secondary)]">
-              Aucune recette ne correspond à ces critères. Essaie sans filtre ou avec moins d’aliments saisis.
+              {isFilterActive
+                ? "Aucune recette ne correspond à ces critères. Essaie sans filtre ou avec moins d’aliments saisis."
+                : "Aucune recommandation disponible. Utilise les filtres pour explorer toutes les recettes."}
             </div>
           ) : (
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {filtered.map((recipe) => {
-                const isFav = favoriteIds.has(recipe.id);
-                return (
-                <li key={recipe.id} className="rounded-xl border border-[var(--beige-border)] bg-white p-3 flex flex-col">
-                  <Link href={`/recette/${recipe.id}`} className="block flex-1">
-                  <div className="h-36 rounded-lg overflow-hidden bg-[#f8f2f2]">
-                    <RecipeImage
-                      imageUrl={recipe.image_url || undefined}
-                      alt={recipe.nom_recette || "Recette"}
-                      className="w-full h-full"
-                    />
-                  </div>
-                  <h3 className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
-                    {recipe.nom_recette || "Recette"}
-                  </h3>
-                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                    {recipe.type || "Type non renseigné"} • {recipe.temps_preparation_min || "?"} min •{" "}
-                    {recipe.nombre_personnes || "?"} pers
-                  </p>
-                  </Link>
-                  <div className="mt-2 flex gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      disabled={favBusyId === recipe.id}
-                      onClick={async () => {
-                        setFavBusyId(recipe.id);
-                        try {
-                          if (isFav) {
-                            await removeFavorite(recipe.id);
-                          } else {
-                            await addFavorite(recipe);
-                          }
-                          await refreshFavoritesAndCollections();
-                        } catch (e) {
-                          alert(e instanceof Error ? e.message : "Impossible de mettre à jour les favoris.");
-                        } finally {
-                          setFavBusyId(null);
-                        }
-                      }}
-                      className={`flex-1 min-w-[7rem] px-2 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                        isFav
-                          ? "bg-[var(--beige-accent)] text-white border-[var(--beige-accent)]"
-                          : "bg-white text-[var(--text-primary)] border-[var(--beige-border)] hover:border-[var(--beige-accent)]"
-                      }`}
-                    >
-                      {isFav ? "Favori ✓" : "Favori"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCollectionModalRecipe(recipe)}
-                      className="flex-1 min-w-[7rem] px-2 py-1.5 rounded-lg text-xs font-semibold border border-[var(--beige-border)] bg-white text-[var(--text-primary)] hover:border-[var(--beige-accent)]"
-                    >
-                      Collection
-                    </button>
-                  </div>
-                </li>
-              );
-              })}
-            </ul>
+            <>
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {displayedRecipes.map((recipe) => {
+                  const isFav = favoriteIds.has(recipe.id);
+                  return (
+                    <li key={recipe.id} className="rounded-xl border border-[var(--beige-border)] bg-white p-3 flex flex-col">
+                      <Link href={`/recette/${recipe.id}`} className="block flex-1">
+                        <div className="h-36 rounded-lg overflow-hidden bg-[#f8f2f2]">
+                          <RecipeImage
+                            imageUrl={recipe.image_url || undefined}
+                            alt={recipe.nom_recette || "Recette"}
+                            className="w-full h-full"
+                          />
+                        </div>
+                        <h3 className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+                          {recipe.nom_recette || "Recette"}
+                        </h3>
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                          {recipe.type || "Type non renseigné"} &bull; {recipe.temps_preparation_min || "?"} min &bull;{" "}
+                          {recipe.nombre_personnes || "?"} pers
+                        </p>
+                      </Link>
+                      <div className="mt-2 flex gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          disabled={favBusyId === recipe.id}
+                          onClick={async () => {
+                            setFavBusyId(recipe.id);
+                            try {
+                              if (isFav) {
+                                await removeFavorite(recipe.id);
+                              } else {
+                                await addFavorite(recipe);
+                              }
+                              await refreshFavoritesAndCollections();
+                            } catch (e) {
+                              alert(e instanceof Error ? e.message : "Impossible de mettre à jour les favoris.");
+                            } finally {
+                              setFavBusyId(null);
+                            }
+                          }}
+                          className={`flex-1 min-w-[7rem] px-2 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                            isFav
+                              ? "bg-[var(--beige-accent)] text-white border-[var(--beige-accent)]"
+                              : "bg-white text-[var(--text-primary)] border-[var(--beige-border)] hover:border-[var(--beige-accent)]"
+                          }`}
+                        >
+                          {isFav ? "Favori ✓" : "Favori"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCollectionModalRecipe(recipe)}
+                          className="flex-1 min-w-[7rem] px-2 py-1.5 rounded-lg text-xs font-semibold border border-[var(--beige-border)] bg-white text-[var(--text-primary)] hover:border-[var(--beige-accent)]"
+                        >
+                          Collection
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {isFilterActive && searchHasMore && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={loadMoreSearchResults}
+                    disabled={loadingSearch}
+                    className="px-6 py-2.5 rounded-xl text-sm font-semibold border border-[var(--beige-border)] bg-white text-[var(--text-primary)] hover:border-[var(--beige-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingSearch ? "Chargement…" : "Voir plus"}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </section>
       </div>
@@ -432,7 +458,7 @@ export default function RecettesPage() {
             </p>
             {collections.length === 0 ? (
               <p className="text-sm text-[var(--text-secondary)] mb-3">
-                Tu n’as pas encore de collection. Crée-en une depuis la page Favoris.
+                Tu n&apos;as pas encore de collection. Crée-en une depuis la page Favoris.
               </p>
             ) : (
               <ul className="max-h-48 overflow-y-auto space-y-1 mb-3">
@@ -478,4 +504,3 @@ export default function RecettesPage() {
     </main>
   );
 }
-
