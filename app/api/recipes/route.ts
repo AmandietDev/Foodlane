@@ -13,22 +13,47 @@ const LIST_SELECT = [
   "created_at",
 ].join(", ");
 
+// Maximum recipes fetched from DB when terms are present (for relevance ranking)
+const MAX_SEARCH_FETCH = 500;
+
 function sanitizeTerm(s: string): string {
-  // Remove characters that could break the PostgREST filter string syntax
   return s.replace(/[,()'"]/g, " ").trim().slice(0, 100);
 }
 
+function normalizeStr(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+}
+
 /**
- * GET /api/recipes?page=1&limit=24&type=sweet&query=poulet,tomate
+ * Score a recipe for a list of search terms.
+ * Title match scores highest, then description, then ingredients.
+ * Returns 0 if no term matches (recipe should be excluded).
+ */
+function scoreRecipe(r: Record<string, unknown>, terms: string[]): number {
+  const nom = normalizeStr(String(r.nom_recette || ""));
+  const desc = normalizeStr(String(r.description_courte || ""));
+  const ing = normalizeStr(String(r.ingredients_quantites || r.ingredients || ""));
+  let score = 0;
+  for (const term of terms) {
+    const t = normalizeStr(term);
+    if (!t) continue;
+    // Exact word in title scores more than substring
+    const nomWord = new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(nom);
+    if (nomWord) score += 12;
+    else if (nom.includes(t)) score += 8;
+    if (desc.includes(t)) score += 4;
+    if (ing.includes(t)) score += 2;
+  }
+  return score;
+}
+
+/**
+ * GET /api/recipes?page=1&limit=24&type=sweet&query=pomme,cannelle
  *
- * Returns a paginated, server-side filtered list of recipes.
- * Payload is lightweight (no instructions, no equipements).
+ * With query terms: fetches up to 500 matching recipes (ANY term),
+ * ranks by relevance (title > description > ingredients), returns sorted page.
  *
- * Query params:
- *   page    — 1-based page number (default: 1)
- *   limit   — recipes per page, max 48 (default: 24)
- *   type    — "sweet" | "savory" (default: both)
- *   query   — comma-separated ingredient/name terms, all must match (AND)
+ * Without query terms: standard paginated query ordered by id.
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -53,20 +78,47 @@ export async function GET(request: NextRequest) {
       if (typeParam === "sweet") q = q.ilike("type", "%sucr%");
       else if (typeParam === "savory") q = q.ilike("type", "%sal%");
 
-      // Each term is ANDed: recipe must contain all terms (in any of the searched columns)
-      for (const term of terms) {
-        q = q.or(
-          `nom_recette.ilike.%${term}%,ingredients_quantites.ilike.%${term}%,ingredients.ilike.%${term}%,description_courte.ilike.%${term}%`
+      if (terms.length > 0) {
+        // ANY-term OR filter — broad match; we rank by relevance in JS below
+        const anyFilter = terms
+          .flatMap((t) => [
+            `nom_recette.ilike.%${t}%`,
+            `ingredients_quantites.ilike.%${t}%`,
+            `ingredients.ilike.%${t}%`,
+            `description_courte.ilike.%${t}%`,
+          ])
+          .join(",");
+        q = q.or(anyFilter);
+
+        const { data, error } = await q.range(0, MAX_SEARCH_FETCH - 1);
+        if (error) throw error;
+
+        // Rank by relevance: more matches + better positions = higher score
+        const ranked = (data as Record<string, unknown>[])
+          .map((r) => ({ r, score: scoreRecipe(r, terms) }))
+          .filter(({ score }) => score > 0)
+          .sort((a, b) => b.score - a.score);
+
+        const slice = ranked.slice(offset, offset + limit);
+        const recipes = slice.map(({ r }) => ({
+          ...r,
+          calories: (r.calories_par_portion ?? r.calories) as number | null,
+          created_at: (r.created_at as string) ?? new Date().toISOString(),
+        }));
+
+        return NextResponse.json(
+          { recipes, hasMore: ranked.length > offset + limit, page, limit },
+          { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
         );
       }
 
+      // No search terms: standard paginated query ordered by id
       const { data, error } = await q
         .order("id", { ascending: true })
         .range(offset, offset + limit - 1);
-
       if (error) throw error;
 
-      const recipes = (data || []).map((r: Record<string, unknown>) => ({
+      const recipes = (data as Record<string, unknown>[]).map((r) => ({
         ...r,
         calories: (r.calories_par_portion ?? r.calories) as number | null,
         created_at: (r.created_at as string) ?? new Date().toISOString(),
@@ -74,20 +126,34 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(
         { recipes, hasMore: recipes.length === limit, page, limit },
-        {
-          headers: {
-            "Cache-Control": "public, s-maxage=300, stale-while-revalidate=1800",
-          },
-        }
+        { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=1800" } }
       );
     } catch (err) {
       console.error("[API /recipes] Supabase error:", err);
     }
   }
 
-  // CSV fallback — slice for pagination
+  // CSV fallback — scoring and filtering done in JS
   try {
-    const all = await fetchRecipesFromSheet();
+    let all = await fetchRecipesFromSheet();
+
+    if (typeParam === "sweet")
+      all = all.filter((r) => normalizeStr(r.type || "").includes("sucr"));
+    else if (typeParam === "savory")
+      all = all.filter((r) => normalizeStr(r.type || "").includes("sal"));
+
+    if (terms.length > 0) {
+      const scored = all
+        .map((r) => ({ r, score: scoreRecipe(r as unknown as Record<string, unknown>, terms) }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score);
+      const slice = scored.slice(offset, offset + limit).map(({ r }) => r);
+      return NextResponse.json(
+        { recipes: slice, hasMore: scored.length > offset + limit, page, limit },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
     const slice = all.slice(offset, offset + limit);
     return NextResponse.json(
       { recipes: slice, hasMore: offset + limit < all.length, page, limit },

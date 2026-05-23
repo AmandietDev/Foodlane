@@ -34,11 +34,18 @@ export async function GET(
     return NextResponse.json({ error: "Menu introuvable" }, { status: 404 });
   }
 
-  const { data: days, error: daysErr } = await supabaseAdmin
-    .from("weekly_menu_days")
-    .select("*")
-    .eq("weekly_menu_id", id)
-    .order("day_index", { ascending: true });
+  const [{ data: days, error: daysErr }, { data: groceryList }] = await Promise.all([
+    supabaseAdmin
+      .from("weekly_menu_days")
+      .select("*")
+      .eq("weekly_menu_id", id)
+      .order("day_index", { ascending: true }),
+    supabaseAdmin
+      .from("grocery_lists")
+      .select("id, title, created_at, updated_at")
+      .eq("weekly_menu_id", id)
+      .maybeSingle(),
+  ]);
 
   if (daysErr) {
     return NextResponse.json({ error: daysErr.message }, { status: 500 });
@@ -104,12 +111,6 @@ export async function GET(
     ...d,
     meals: sortMealsByDisplayOrder((meals[d.id as string] || []) as { meal_type: string }[]),
   }));
-
-  const { data: groceryList, error: gErr } = await supabaseAdmin
-    .from("grocery_lists")
-    .select("id, title, created_at, updated_at")
-    .eq("weekly_menu_id", id)
-    .maybeSingle();
 
   let grocery_items: unknown[] = [];
   if (groceryList?.id) {

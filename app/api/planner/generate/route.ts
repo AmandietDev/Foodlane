@@ -167,87 +167,79 @@ export async function POST(request: NextRequest) {
 
   const weekStart = body.week_start_date || mondayISO();
 
-  const { data: row } = await supabaseAdmin
-    .from("user_preferences")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
+  // Single round-trip: all user data + recipes fetched in parallel
+  const [
+    { data: prefRow },
+    { data: equipData },
+    { data: allergyData },
+    { data: excludedData },
+    { data: dislikedData },
+    { data: recentMenus },
+    { data: featureRows },
+    allRecipes,
+  ] = await Promise.all([
+    supabaseAdmin.from("user_preferences").select("*").eq("user_id", userId).maybeSingle(),
+    supabaseAdmin.from("user_equipment").select("equipment_key").eq("user_id", userId),
+    supabaseAdmin.from("user_allergies").select("allergy_key").eq("user_id", userId),
+    supabaseAdmin.from("user_excluded_ingredients").select("ingredient_name").eq("user_id", userId),
+    supabaseAdmin.from("user_disliked_recipes").select("recipe_id").eq("user_id", userId),
+    supabaseAdmin
+      .from("weekly_menus")
+      .select("id, weekly_menu_days(weekly_menu_meals(recipe_id))")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(6),
+    supabaseAdmin
+      .from("user_menu_feature_history")
+      .select("family_counts")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(6),
+    getCachedRecipes(),
+  ]);
 
   let basePrefs: PlannerPreferences = DEFAULT_PLANNER_PREFERENCES;
-
-  if (row) {
-    const [{ data: equipment }, { data: allergies }, { data: excluded }] = await Promise.all([
-      supabaseAdmin.from("user_equipment").select("equipment_key").eq("user_id", userId),
-      supabaseAdmin.from("user_allergies").select("allergy_key").eq("user_id", userId),
-      supabaseAdmin.from("user_excluded_ingredients").select("ingredient_name").eq("user_id", userId),
-    ]);
+  if (prefRow) {
     basePrefs = rowToPlannerPreferences(
-      row as UserPreferencesRow,
-      equipment || [],
-      allergies || [],
-      excluded || []
+      prefRow as UserPreferencesRow,
+      equipData || [],
+      allergyData || [],
+      excludedData || []
     );
   }
 
   const merged = mergePlannerPreferences(basePrefs, body.overrides || {});
 
-  // Récupérer les recettes non aimées par l'utilisateur
-  const { data: dislikedRows } = await supabaseAdmin
-    .from("user_disliked_recipes")
-    .select("recipe_id")
-    .eq("user_id", userId);
-  const dislikedIds = new Set<number>((dislikedRows || []).map((r) => Number(r.recipe_id)));
-
-  let allRecipes = await getCachedRecipes();
-
-  // Exclure les recettes non aimées
+  const dislikedIds = new Set<number>((dislikedData || []).map((r) => Number(r.recipe_id)));
   const recipes = dislikedIds.size > 0
     ? allRecipes.filter((r) => !dislikedIds.has(r.id))
     : allRecipes;
 
-  // Charger les recipe_id des 6 derniers menus pour pénaliser les répétitions
   const recentlyUsed = new Map<number, number>();
-  if (supabaseAdmin) {
-    const { data: recentMenus } = await supabaseAdmin
-      .from("weekly_menus")
-      .select("id, weekly_menu_days(weekly_menu_meals(recipe_id))")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(6);
-
-    if (recentMenus) {
-      type MealRow = { recipe_id: number | string };
-      type DayRow = { weekly_menu_meals: MealRow[] };
-      recentMenus.forEach((menu, menuIdx) => {
-        const days = (menu.weekly_menu_days as DayRow[]) || [];
-        for (const day of days) {
-          for (const meal of (day.weekly_menu_meals || [])) {
-            const rid = Number(meal.recipe_id);
-            if (Number.isFinite(rid) && !recentlyUsed.has(rid)) {
-              recentlyUsed.set(rid, menuIdx); // 0 = menu le plus récent
-            }
+  if (recentMenus) {
+    type MealRow = { recipe_id: number | string };
+    type DayRow = { weekly_menu_meals: MealRow[] };
+    recentMenus.forEach((menu, menuIdx) => {
+      const days = (menu.weekly_menu_days as DayRow[]) || [];
+      for (const day of days) {
+        for (const meal of (day.weekly_menu_meals || [])) {
+          const rid = Number(meal.recipe_id);
+          if (Number.isFinite(rid) && !recentlyUsed.has(rid)) {
+            recentlyUsed.set(rid, menuIdx);
           }
         }
-      });
-    }
+      }
+    });
   }
 
   const openaiKey = process.env.OPENAI_API_KEY;
   const recentFamilyCounts = new Map<string, number>();
-  if (supabaseAdmin) {
-    const { data: featureRows } = await supabaseAdmin
-      .from("user_menu_feature_history")
-      .select("family_counts")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(6);
-    for (const row of featureRows || []) {
-      const raw = (row as { family_counts?: Record<string, unknown> }).family_counts || {};
-      for (const [k, v] of Object.entries(raw)) {
-        const n = Number(v) || 0;
-        if (n <= 0) continue;
-        recentFamilyCounts.set(k, (recentFamilyCounts.get(k) || 0) + n);
-      }
+  for (const row of featureRows || []) {
+    const raw = (row as { family_counts?: Record<string, unknown> }).family_counts || {};
+    for (const [k, v] of Object.entries(raw)) {
+      const n = Number(v) || 0;
+      if (n <= 0) continue;
+      recentFamilyCounts.set(k, (recentFamilyCounts.get(k) || 0) + n);
     }
   }
   const lockedSlots: LockedSlot[] = Array.isArray(body.locked_slots) ? body.locked_slots : [];

@@ -77,30 +77,27 @@ export async function POST(request: NextRequest) {
 
   const excludeIds = new Set<number>((body.exclude_recipe_ids || []).map(Number).filter(Number.isFinite));
 
-  // Load user preferences
-  const { data: row } = await supabaseAdmin
-    .from("user_preferences")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const [
+    { data: prefRow },
+    { data: equipData },
+    { data: allergyData },
+    { data: excludedData },
+    { data: dislikedRows },
+    allRecipes,
+  ] = await Promise.all([
+    supabaseAdmin.from("user_preferences").select("*").eq("user_id", userId).maybeSingle(),
+    supabaseAdmin.from("user_equipment").select("equipment_key").eq("user_id", userId),
+    supabaseAdmin.from("user_allergies").select("allergy_key").eq("user_id", userId),
+    supabaseAdmin.from("user_excluded_ingredients").select("ingredient_name").eq("user_id", userId),
+    supabaseAdmin.from("user_disliked_recipes").select("recipe_id").eq("user_id", userId),
+    getCachedRecipes(),
+  ]);
 
   let prefs = DEFAULT_PLANNER_PREFERENCES;
-  if (row) {
-    const [{ data: equipment }, { data: allergies }, { data: excluded }] = await Promise.all([
-      supabaseAdmin.from("user_equipment").select("equipment_key").eq("user_id", userId),
-      supabaseAdmin.from("user_allergies").select("allergy_key").eq("user_id", userId),
-      supabaseAdmin.from("user_excluded_ingredients").select("ingredient_name").eq("user_id", userId),
-    ]);
-    prefs = rowToPlannerPreferences(row as UserPreferencesRow, equipment || [], allergies || [], excluded || []);
+  if (prefRow) {
+    prefs = rowToPlannerPreferences(prefRow as UserPreferencesRow, equipData || [], allergyData || [], excludedData || []);
   }
 
-  const allRecipes = await getCachedRecipes();
-
-  // Disliked recipes
-  const { data: dislikedRows } = await supabaseAdmin
-    .from("user_disliked_recipes")
-    .select("recipe_id")
-    .eq("user_id", userId);
   const dislikedIds = new Set<number>((dislikedRows || []).map((r) => Number(r.recipe_id)));
 
   const season = getCurrentSeason();

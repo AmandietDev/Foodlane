@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchRecipes } from "../../../src/lib/recipes";
-import { createClient } from "@supabase/supabase-js";
+import { getCachedRecipes } from "../../../src/lib/recipesServerCache";
 import type { Recipe } from "../../../src/lib/recipes";
 import {
   getCurrentSeason,
@@ -306,79 +305,15 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get("query") || "";
     const ingredientsParam = searchParams.get("ingredients") || "";
     const typeFilter = searchParams.get("type") || "all";
-    const userId = searchParams.get("userId") || null;
 
     const selectedIngredients = ingredientsParam
       ? ingredientsParam.split(",").map(i => i.trim()).filter(i => i.length > 0)
       : [];
 
-    console.log(`[Search] Recherche: query="${query}", ingredients=[${selectedIngredients.join(", ")}], type=${typeFilter}, userId=${userId || "none"}`);
+    const userAllergies: string[] = [];
+    const userDiets: string[] = [];
 
-    // Récupérer le profil utilisateur si userId fourni
-    let userAllergies: string[] = [];
-    let userDiets: string[] = [];
-
-    if (userId) {
-      try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-        if (supabaseUrl && supabaseServiceKey) {
-          const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-            auth: { autoRefreshToken: false, persistSession: false },
-          });
-
-          // Essayer de récupérer les préférences depuis Supabase
-          // Note: Les préférences peuvent être stockées dans profiles ou dans une table séparée
-          // Pour l'instant, on essaie de récupérer depuis profiles
-          const { data: profile } = await supabaseAdmin
-            .from("profiles")
-            .select("*")
-            .eq("id", userId)
-            .maybeSingle();
-
-          if (profile) {
-            // Récupérer les allergies (peut être dans différentes colonnes selon le schéma)
-            // Essayer plusieurs noms de colonnes possibles
-            const allergiesData = profile.allergies || profile.aversions_alimentaires || profile.aversionsAlimentaires;
-            if (allergiesData) {
-              if (Array.isArray(allergiesData)) {
-                userAllergies = allergiesData;
-              } else if (typeof allergiesData === 'string') {
-                // Si c'est une string, essayer de la parser comme JSON ou la splitter par virgule
-                try {
-                  const parsed = JSON.parse(allergiesData);
-                  userAllergies = Array.isArray(parsed) ? parsed : [allergiesData];
-                } catch {
-                  userAllergies = allergiesData.split(",").map(a => a.trim()).filter(a => a.length > 0);
-                }
-              }
-            }
-
-            // Récupérer les régimes (peut être dans différentes colonnes selon le schéma)
-            const dietsData = profile.regimes_particuliers || profile.regimesParticuliers || profile.diets;
-            if (dietsData) {
-              if (Array.isArray(dietsData)) {
-                userDiets = dietsData;
-              } else if (typeof dietsData === 'string') {
-                try {
-                  const parsed = JSON.parse(dietsData);
-                  userDiets = Array.isArray(parsed) ? parsed : [dietsData];
-                } catch {
-                  userDiets = dietsData.split(",").map(d => d.trim()).filter(d => d.length > 0);
-                }
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error("[Search] Erreur lors de la récupération du profil:", error);
-        // Continuer sans filtres si erreur
-      }
-    }
-
-    // Récupérer toutes les recettes
-    const allRecipes = await fetchRecipes();
+    const allRecipes = await getCachedRecipes();
 
     // Filtrer par type si nécessaire
     let filteredRecipes = allRecipes;
@@ -430,9 +365,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Déterminer la saison actuelle une seule fois
     const currentSeason = getCurrentSeason();
-    console.log(`[Search] Saison actuelle: ${currentSeason}`);
 
     // Calculer le score pour chaque recette
     const scored: SearchResult[] = filteredRecipes
@@ -449,8 +382,6 @@ export async function GET(request: NextRequest) {
       })
       .filter(item => item.score > 0) // Exclure les recettes avec score négatif (allergènes)
       .sort((a, b) => b.score - a.score); // Trier par score décroissant
-
-    console.log(`[Search] ${scored.length} recettes avec score > 0`);
 
     // Analyser la distribution des scores pour adapter le nombre de résultats
     if (scored.length === 0) {
@@ -486,10 +417,6 @@ export async function GET(request: NextRequest) {
       ? scored.filter((item) => item.coverage > 0 && item.coverage < 0.4)
       : scored.filter((item) => item.score > 0 && item.score < Math.max(18, maxScore * 0.35));
 
-    console.log(
-      `[Search] Distribution: ${highRelevance.length} fortes, ${mediumRelevance.length} moyennes, ${lowRelevance.length} faibles`
-    );
-
     // Adapter le nombre de résultats selon la pertinence disponible
     // Principe : proposer uniquement les recettes pertinentes, sans en ajouter de moins pertinentes
     let exactResults: Recipe[] = [];
@@ -500,38 +427,22 @@ export async function GET(request: NextRequest) {
       // Il y a des résultats très pertinents : proposer uniquement ceux-là
       // Si seulement 2 sont très pertinentes, on ne propose que ces 2
       exactResults = highRelevance.slice(0, 12).map(item => item.recipe);
-      console.log(`[Search] ${exactResults.length} résultats très pertinents proposés (tous, sans ajout de moins pertinents)`);
-      
-      // Si peu de résultats très pertinents (≤ 5), ajouter des recettes moins pertinentes mais faisables
       if (exactResults.length <= 5) {
-        // Ajouter des recettes moyennement pertinentes
         if (mediumRelevance.length > 0) {
           lessRelevant = mediumRelevance.slice(0, 6).map(item => item.recipe);
-          console.log(`[Search] ${lessRelevant.length} recettes moins pertinentes ajoutées (moyennement pertinentes)`);
         }
-        // Si toujours pas assez, ajouter des recettes faiblement pertinentes
         if (exactResults.length + lessRelevant.length < 8 && lowRelevance.length > 0) {
           const needed = 8 - (exactResults.length + lessRelevant.length);
-          const additional = lowRelevance.slice(0, needed).map(item => item.recipe);
-          lessRelevant = [...lessRelevant, ...additional];
-          console.log(`[Search] ${additional.length} recettes faiblement pertinentes ajoutées`);
+          lessRelevant = [...lessRelevant, ...lowRelevance.slice(0, needed).map(item => item.recipe)];
         }
       }
     } else if (mediumRelevance.length > 0) {
-      // Pas de très pertinents, mais des moyennement pertinents : proposer uniquement ceux-là
       exactResults = mediumRelevance.slice(0, 10).map(item => item.recipe);
-      console.log(`[Search] ${exactResults.length} résultats moyennement pertinents proposés (tous)`);
-      
-      // Si peu de résultats (≤ 5), ajouter des recettes faiblement pertinentes
       if (exactResults.length <= 5 && lowRelevance.length > 0) {
-        const needed = Math.min(6, lowRelevance.length);
-        lessRelevant = lowRelevance.slice(0, needed).map(item => item.recipe);
-        console.log(`[Search] ${lessRelevant.length} recettes moins pertinentes ajoutées (faiblement pertinentes)`);
+        lessRelevant = lowRelevance.slice(0, Math.min(6, lowRelevance.length)).map(item => item.recipe);
       }
     } else {
-      // Seulement des résultats de faible pertinence : proposer ceux-là mais limiter à 8 max
       exactResults = lowRelevance.slice(0, 8).map(item => item.recipe);
-      console.log(`[Search] ${exactResults.length} résultats de faible pertinence proposés (limités à 8)`);
     }
 
     // Suggestions IA: recettes plausibles quand la couverture est partielle

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../src/lib/supabaseAdmin";
 import { getUserIdFromRequest } from "../../../src/lib/supabaseServer";
-import { fetchRecipes } from "../../../src/lib/recipes";
+import { getCachedRecipes } from "../../../src/lib/recipesServerCache";
 import { scoreRecipesForUserProfile } from "../../../src/lib/recipePersonalizationAi";
 import { DEFAULT_PLANNER_PREFERENCES } from "../../../src/lib/weeklyPlanner";
 import { rowToPlannerPreferences, type UserPreferencesRow } from "../../../src/lib/plannerServer";
@@ -11,6 +11,15 @@ import { tryConsumeFreemiumQuota, weekPeriodKey } from "../../../src/lib/usageQu
 
 export const dynamic = "force-dynamic";
 
+type CachedResult = { at: number; data: object };
+const userResultsCache = new Map<string, CachedResult>();
+const USER_CACHE_TTL_MS = 5 * 60 * 1000;
+const USER_CACHE_MAX_SIZE = 200;
+
+export function clearForMeCache(): void {
+  userResultsCache.clear();
+}
+
 export async function GET(request: NextRequest) {
   const userId = await getUserIdFromRequest(request);
   if (!userId) {
@@ -18,6 +27,12 @@ export async function GET(request: NextRequest) {
   }
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Serveur non configuré" }, { status: 503 });
+  }
+
+  // Return cached result if still fresh (skips preference queries + scoring)
+  const cached = userResultsCache.get(userId);
+  if (cached && Date.now() - cached.at < USER_CACHE_TTL_MS) {
+    return NextResponse.json(cached.data);
   }
 
   const { data: row } = await supabaseAdmin
@@ -41,7 +56,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const recipes = await fetchRecipes();
+  // Use the shared 30-min server cache instead of fetching from Supabase on every request
+  const recipes = await getCachedRecipes();
+
   const openaiKey = process.env.OPENAI_API_KEY;
   if (openaiKey) {
     const aiQuota = await tryConsumeFreemiumQuota(
@@ -58,7 +75,7 @@ export async function GET(request: NextRequest) {
           limit: aiQuota.limit,
           count: aiQuota.count,
           message:
-            "Tu as atteint la limite d’affinage IA « recettes pour moi » pour cette semaine sur le plan gratuit.",
+            "Tu as atteint la limite d'affinage IA « recettes pour moi » pour cette semaine sur le plan gratuit.",
         },
         { status: 403 }
       );
@@ -73,9 +90,12 @@ export async function GET(request: NextRequest) {
     personalization_reason: s.reason,
   }));
 
-  return NextResponse.json({
-    recipes: out,
-    used_ai: usedAi,
-    count: out.length,
-  });
+  const result = { recipes: out, used_ai: usedAi, count: out.length };
+
+  if (userResultsCache.size >= USER_CACHE_MAX_SIZE) {
+    userResultsCache.delete(userResultsCache.keys().next().value!);
+  }
+  userResultsCache.set(userId, { at: Date.now(), data: result });
+
+  return NextResponse.json(result);
 }
