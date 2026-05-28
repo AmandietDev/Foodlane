@@ -11,9 +11,45 @@ import RefgrowReferralHint from "./components/RefgrowReferralHint";
 import RefgrowScriptLoader from "./components/RefgrowScriptLoader";
 import CookieConsentBanner from "./components/CookieConsentBanner";
 
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://foodlane.fr";
+
 export const metadata: Metadata = {
-  title: "Foodlane",
-  description: "Ta diététicienne privée t'accompagne à équilibrer tes repas et faciliter ton organisation. Trouve des recettes avec ce que tu as déjà, ou crée un menu et génère ta liste de courses.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Foodlane | Menu semaine, liste de courses et assistant nutrition",
+    template: "%s | Foodlane",
+  },
+  description:
+    "Foodlane est l'assistant intelligent pour organiser tes repas : menu de la semaine automatique, liste de courses intelligente, nutrition simple, économies courses et moins de gaspillage alimentaire.",
+  keywords: [
+    "menu semaine",
+    "menu de la semaine",
+    "liste de courses",
+    "planification repas",
+    "organisation repas",
+    "assistant nutrition",
+    "assistant diététique",
+    "meal planner",
+    "menus équilibrés",
+    "économies courses",
+    "gaspillage alimentaire",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    url: "/",
+    siteName: "Foodlane",
+    title: "Foodlane | Organise tes repas et tes courses simplement",
+    description:
+      "Génère tes menus de semaine, crée une liste de courses intelligente et améliore ton alimentation avec un assistant nutrition.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Foodlane | Organise tes repas et tes courses simplement",
+    description:
+      "Menu de la semaine, planning repas, liste de courses et nutrition facile.",
+  },
 };
 
 export default function RootLayout({
