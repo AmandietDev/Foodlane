@@ -1,5 +1,3 @@
-"use server";
-
 import type { Metadata } from "next";
 
 export const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://foodlane.fr";
