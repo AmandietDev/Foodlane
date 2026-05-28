@@ -3,6 +3,7 @@ import { BLOG_POSTS, LANDING_PAGES, SITE_URL } from "./src/lib/seo";
 
 const staticPages = [
   "/",
+  "/organise-repas",
   "/menu-semaine",
   "/tableau",
   "/equilibre",

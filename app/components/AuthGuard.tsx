@@ -20,6 +20,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     "/forgot-password",
     "/reset-password",
     "/blog",
+    "/organise-repas",
     "/liste-de-courses",
     "/organisation-repas",
     "/meal-planner",
