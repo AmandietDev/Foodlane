@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import "./globals.css";
 import { ThemeProviderWrapper } from "./providers/ThemeProviderWrapper";
 import { TranslationProvider } from "./components/TranslationProvider";
@@ -9,6 +8,8 @@ import AuthGuard from "./components/AuthGuard";
 import SplashScreen from "./components/SplashScreen";
 import EnvChecker from "./components/EnvChecker";
 import RefgrowReferralHint from "./components/RefgrowReferralHint";
+import RefgrowScriptLoader from "./components/RefgrowScriptLoader";
+import CookieConsentBanner from "./components/CookieConsentBanner";
 
 export const metadata: Metadata = {
   title: "Foodlane",
@@ -26,11 +27,7 @@ export default function RootLayout({
     <html lang="fr">
       <body>
         {refgrowProjectId ? (
-          <Script
-            src="https://scripts.refgrowcdn.com/latest.js"
-            data-project-id={refgrowProjectId}
-            strategy="afterInteractive"
-          />
+          <RefgrowScriptLoader projectId={refgrowProjectId} />
         ) : null}
         {refgrowProjectId ? <RefgrowReferralHint /> : null}
         <SplashScreen />
@@ -48,6 +45,7 @@ export default function RootLayout({
               </PremiumProvider>
             </AuthGuard>
             <EnvChecker />
+            <CookieConsentBanner />
           </TranslationProvider>
         </ThemeProviderWrapper>
       </body>

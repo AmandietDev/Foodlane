@@ -29,9 +29,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Serveur non configuré" }, { status: 503 });
   }
 
-  // Return cached result if still fresh (skips preference queries + scoring)
-  const cached = userResultsCache.get(userId);
+  const t0 = Date.now();
+  const skipUserCache = process.env.DISABLE_RECIPE_SERVER_CACHE === "true";
+  const cached = !skipUserCache && userResultsCache.get(userId);
   if (cached && Date.now() - cached.at < USER_CACHE_TTL_MS) {
+    console.log(`[for-me] HIT user cache (age ${Math.round((Date.now() - cached.at) / 1000)}s)`);
     return NextResponse.json(cached.data);
   }
 
@@ -91,11 +93,14 @@ export async function GET(request: NextRequest) {
   }));
 
   const result = { recipes: out, used_ai: usedAi, count: out.length };
+  console.log(`[for-me] MISS → ${out.length} recettes scorées en ${Date.now() - t0}ms`);
 
-  if (userResultsCache.size >= USER_CACHE_MAX_SIZE) {
-    userResultsCache.delete(userResultsCache.keys().next().value!);
+  if (!skipUserCache) {
+    if (userResultsCache.size >= USER_CACHE_MAX_SIZE) {
+      userResultsCache.delete(userResultsCache.keys().next().value!);
+    }
+    userResultsCache.set(userId, { at: Date.now(), data: result });
   }
-  userResultsCache.set(userId, { at: Date.now(), data: result });
 
   return NextResponse.json(result);
 }

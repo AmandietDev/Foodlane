@@ -123,6 +123,8 @@ function mondayISO(d = new Date()): string {
 }
 
 export async function POST(request: NextRequest) {
+  const _t0 = Date.now();
+  let _tDb = 0, _tAi = 0;
   const userId = await getUserIdFromRequest(request);
   if (!userId) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
@@ -167,6 +169,7 @@ export async function POST(request: NextRequest) {
 
   const weekStart = body.week_start_date || mondayISO();
 
+  const _tDb0 = Date.now();
   // Single round-trip: all user data + recipes fetched in parallel
   const [
     { data: prefRow },
@@ -197,6 +200,7 @@ export async function POST(request: NextRequest) {
       .limit(6),
     getCachedRecipes(),
   ]);
+  _tDb = Date.now() - _tDb0;
 
   let basePrefs: PlannerPreferences = DEFAULT_PLANNER_PREFERENCES;
   if (prefRow) {
@@ -245,6 +249,7 @@ export async function POST(request: NextRequest) {
   const lockedSlots: LockedSlot[] = Array.isArray(body.locked_slots) ? body.locked_slots : [];
 
   const shouldUseAi = Boolean(openaiKey);
+  const _tAi0 = Date.now();
   const aiPlan = shouldUseAi
     ? await withTimeout(
         buildWeeklyPlanWithAi(
@@ -260,6 +265,7 @@ export async function POST(request: NextRequest) {
         AI_MENU_TIMEOUT_MS
       )
     : null;
+  _tAi = Date.now() - _tAi0;
   const rawPlan =
     aiPlan ?? buildWeeklyPlan(recipes, merged, weekStart, recentlyUsed, recentFamilyCounts, lockedSlots);
 
@@ -284,7 +290,8 @@ export async function POST(request: NextRequest) {
       r,
       s: scoreRecipeForPlanner(r, season, merged, recentFamilyCounts),
     }))
-    .sort((a, b) => b.s - a.s);
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 150); // repair fait max 8 remplacements → 150 candidats largement suffisants
 
   // Contrôle qualité : les incompatibilités créneau sont corrigées SANS limite,
   // les sur-représentations dans la limite de 8 remplacements.
@@ -343,6 +350,7 @@ export async function POST(request: NextRequest) {
 
   const { menuId, listId, grocery_count } = persisted;
 
+  console.log(`[generate] total=${Date.now() - _t0}ms db=${_tDb}ms ai=${_tAi}ms pool=${recipes.length} ai=${shouldUseAi}`);
   return NextResponse.json({
     menu_id: menuId,
     grocery_list_id: listId,

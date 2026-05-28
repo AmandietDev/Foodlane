@@ -16,6 +16,7 @@ import { usePremium } from "../contexts/PremiumContext";
 import { getSubscriptionAccountMessage } from "../src/lib/subscriptionDisplay";
 import { refgrowTrackSignup } from "../src/lib/refgrowClient";
 import ErrorMessage from "../components/ErrorMessage";
+import { CGUContent } from "../components/LegalDocuments";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -775,142 +776,7 @@ export default function AccountPage() {
             </div>
 
             <div className="space-y-4 text-xs text-[#726566] max-h-[60vh] overflow-y-auto">
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">1. Objet</h4>
-                <p className="space-y-1">
-                  Les présentes Conditions Générales d&apos;Utilisation (ci-après « CGU ») ont pour objet de définir les modalités d&apos;accès et d&apos;utilisation de l&apos;application Foodlane, éditée par Amandine Fontaine – WayDia, micro-entreprise dont les informations légales figurent dans les Mentions légales.
-                  <br />
-                  <br />
-                  En utilisant Foodlane, l&apos;utilisateur reconnaît avoir lu, compris et accepté sans réserve les présentes CGU.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">2. Description du service</h4>
-                <p className="space-y-1">
-                  Foodlane est une application d&apos;inspiration culinaire et d&apos;équilibre alimentaire, permettant notamment :
-                  <br />
-                  • Création et gestion d&apos;un compte utilisateur
-                  <br />
-                  • Suggestions d&apos;idées repas personnalisées
-                  <br />
-                  • Gestion des recettes favorites
-                  <br />
-                  • Adaptation du contenu selon les préférences alimentaires
-                  <br />
-                  <br />
-                  <strong>Foodlane ne constitue ni un conseil médical, ni un dispositif médical, ni une prestation de santé personnalisée.</strong>
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">3. Création de compte et sécurité</h4>
-                <p className="space-y-1">
-                  L&apos;accès aux fonctionnalités de Foodlane nécessite la création d&apos;un compte utilisateur.
-                  <br />
-                  L&apos;utilisateur renseigne des informations exactes, complètes et mises à jour.
-                  <br />
-                  <br />
-                  Il s&apos;engage à :
-                  <br />
-                  • préserver la confidentialité de ses identifiants
-                  <br />
-                  • signaler toute utilisation non autorisée à l&apos;éditeur
-                  <br />
-                  • ne pas créer de compte pour un tiers sans autorisation
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">4. Données personnelles</h4>
-                <p className="space-y-1">
-                  Foodlane collecte et traite certaines données personnelles, y compris des données liées à l&apos;alimentation.
-                  <br />
-                  <br />
-                  Ce traitement est strictement encadré par :
-                  <br />
-                  • la Politique de Confidentialité
-                  <br />
-                  • le RGPD (Règlement (UE) 2016/679)
-                  <br />
-                  • les directives applicables en France
-                  <br />
-                  <br />
-                  L&apos;utilisateur peut exercer ses droits via contact@foodlane.fr.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">5. Utilisation responsable</h4>
-                <p className="space-y-1">
-                  L&apos;utilisateur s&apos;engage à :
-                  <br />
-                  • ne pas détourner l&apos;application de sa finalité
-                  <br />
-                  • ne pas porter atteinte au bon fonctionnement ou à la sécurité du service
-                  <br />
-                  • ne pas diffuser de contenus illicites, injurieux ou discriminatoires
-                  <br />
-                  <br />
-                  L&apos;éditeur pourra suspendre ou supprimer un compte ne respectant pas les présentes CGU.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">6. Disponibilité du service</h4>
-                <p className="space-y-1">
-                  Foodlane est accessible en continu sous réserve de maintenance et contraintes techniques.
-                  <br />
-                  L&apos;éditeur ne peut garantir une disponibilité permanente du service.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">7. Propriété intellectuelle</h4>
-                <p className="space-y-1">
-                  Tous les éléments de l&apos;application sont protégés par le droit d&apos;auteur et la propriété intellectuelle.
-                  <br />
-                  Aucune reproduction non autorisée n&apos;est permise.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">8. Limitation de responsabilité</h4>
-                <p className="space-y-1">
-                  Foodlane fournit des suggestions alimentaires généralistes.
-                  <br />
-                  Il appartient à l&apos;utilisateur de vérifier la compatibilité des recommandations avec :
-                  <br />
-                  • son état de santé
-                  <br />
-                  • ses allergies et intolérances
-                  <br />
-                  • ses besoins personnels
-                  <br />
-                  <br />
-                  L&apos;éditeur ne pourra être tenu responsable d&apos;une mauvaise utilisation de l&apos;application.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">9. Résiliation / Suppression du compte</h4>
-                <p className="space-y-1">
-                  L&apos;utilisateur peut supprimer son compte à tout moment depuis l&apos;application ou en envoyant une demande à :
-                  <br />
-                  📧 contact@foodlane.fr
-                  <br />
-                  <br />
-                  La suppression du compte entraîne l&apos;effacement des données conformément au RGPD.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">10. Modifications des CGU</h4>
-                <p className="space-y-1">
-                  WayDia se réserve le droit de modifier les présentes CGU pour tenir compte de l&apos;évolution du service.
-                  <br />
-                  La version applicable est celle disponible dans l&apos;application au moment de l&apos;utilisation.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#6B2E2E] mb-2">11. Droit applicable / litiges</h4>
-                <p className="space-y-1">
-                  Les présentes CGU sont régies par le droit français.
-                  <br />
-                  En cas de litige, les tribunaux compétents seront ceux du lieu du domicile de l&apos;éditeur.
-                </p>
-              </div>
+              <CGUContent variant="modal" />
             </div>
 
             <div className="mt-6 flex gap-3">

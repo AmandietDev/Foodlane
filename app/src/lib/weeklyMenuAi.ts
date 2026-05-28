@@ -138,7 +138,7 @@ export async function buildWeeklyPlanWithAi(
 
   // Catalogue IA : sélection pondérée par score + forte randomisation.
   // L'IA ne voit que des recettes fraîches (non utilisées récemment si possible).
-  const CATALOG_SIZE = 500;
+  const CATALOG_SIZE = 150; // 7j×3repas=21 slots → 150 donne 7× le choix, suffisant
   const stratifiedSample = scoredPool.length <= CATALOG_SIZE
     ? scoredPool
     : scoredPool
@@ -167,7 +167,6 @@ export async function buildWeeklyPlanWithAi(
     main_carb: getMainCarb(r) || null,
     main_vegetables: r.main_vegetables ?? null,
     diet_tags: r.diet_tags ?? null,
-    ingredients: (r.ingredients || "").slice(0, 160),
   }));
 
   const carnivoreExplicite =

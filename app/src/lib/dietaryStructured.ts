@@ -22,7 +22,7 @@
  *   etc.
  */
 import type { Recipe } from "./recipes";
-import { getAllergens, getDietTags, getMainProteins, normalizeText } from "./recipeFields";
+import { getAllergens, getDietTags, getIngredientTags, getMainProteins, normalizeText } from "./recipeFields";
 import type { DietaryFilterKey } from "./plannerConstants";
 
 /** Tags de régime positifs attendus dans `diet_tags` pour chaque filtre. */
@@ -114,6 +114,12 @@ export function recipeMatchesDietaryFilter(
   // 3. Protéine interdite → KO
   const forbiddenProteins = FORBIDDEN_PROTEINS[filter] || [];
   if (forbiddenProteins.some((p) => proteins.has(normalizeText(p)))) {
+    return false;
+  }
+
+  // 3b. Protéine interdite trouvée dans igredient_tags → KO
+  const ingTags = new Set(getIngredientTags(recipe).map(normalizeText));
+  if (ingTags.size > 0 && forbiddenProteins.some((p) => ingTags.has(normalizeText(p)))) {
     return false;
   }
 

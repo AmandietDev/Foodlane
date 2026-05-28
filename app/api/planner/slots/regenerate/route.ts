@@ -32,6 +32,7 @@ function pickWeightedRandom<T>(items: { item: T; weight: number }[]): T | null {
 }
 
 export async function POST(request: NextRequest) {
+  const _t0 = Date.now();
   const userId = await getUserIdFromRequest(request);
   if (!userId) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
@@ -136,5 +137,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Impossible de sélectionner une recette" }, { status: 500 });
   }
 
+  console.log(`[regenerate] total ${Date.now() - _t0}ms | pool=${pool.length}`);
   return NextResponse.json({ recipe });
 }

@@ -9,6 +9,7 @@ import {
   maxMinutesForCookingPreference,
 } from "./weeklyPlanner";
 import { buildUserProfileForAi } from "./profileForAi";
+import { filterRecipesByStructuredDietaryRules } from "./dietaryStructured";
 
 export type RecipeScoreRow = { recipe_id: string; score: number; reason: string };
 
@@ -21,11 +22,13 @@ export async function scoreRecipesForUserProfile(
   openaiKey: string | undefined
 ): Promise<{ scored: { recipe: Recipe; score: number; reason: string }[]; usedAi: boolean }> {
   const exclusions = buildExclusionList(prefs);
-  let pool = filterRecipesByStrictExclusions(recipes, exclusions);
+  let pool = filterRecipesByStructuredDietaryRules(recipes, prefs.dietary_filters, prefs.allergy_keys);
+  pool = filterRecipesByStrictExclusions(pool, exclusions);
   pool = filterRecipesByMaxPrepTime(pool, maxMinutesForCookingPreference(prefs.cooking_time_preference));
   if (prefs.equipment_keys.length) {
     pool = filterRecipesByEquipment(pool, expandEquipmentKeys(prefs.equipment_keys));
   }
+  console.log(`[for-me] loaded=${recipes.length} compatible=${pool.length} excluded=${recipes.length - pool.length}`);
 
   if (pool.length === 0) {
     return { scored: [], usedAi: false };
