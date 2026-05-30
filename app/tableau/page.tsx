@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { plannerFetch } from "../src/lib/plannerClient";
 import FavoritesRecipesHero from "../components/FavoritesRecipesHero";
+import HomeRecipeSections from "../components/HomeRecipeSections";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { FreeTierAdSlot } from "../components/ads/FreeTierAdSlot";
 import { useTranslation } from "../components/TranslationProvider";
@@ -166,6 +167,8 @@ export default function TableauPage() {
             </Link>
           </div>
         </section>
+
+        <HomeRecipeSections />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Link

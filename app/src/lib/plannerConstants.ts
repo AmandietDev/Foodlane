@@ -43,7 +43,7 @@ export type CookingTimeKey = (typeof COOKING_TIME_OPTIONS)[number]["key"];
 export const BREAKFAST_PREFERENCE_OPTIONS = [
   { key: "sweet", label: "🍯 Sucré" },
   { key: "savory", label: "🥚 Salé" },
-  { key: "both", label: "🌅 Les deux" },
+  { key: "both", label: "🌅 Peu importe" },
 ] as const;
 
 export type BreakfastPreferenceKey = (typeof BREAKFAST_PREFERENCE_OPTIONS)[number]["key"];

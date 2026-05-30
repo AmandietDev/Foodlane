@@ -1,5 +1,5 @@
 import type { Recipe } from "./recipes";
-import type { PlannerMealType } from "./plannerConstants";
+import type { BreakfastPreferenceKey, PlannerMealType } from "./plannerConstants";
 import { getMealSlots, getDishType, getEffectiveFamily, normalizeText } from "./recipeFields";
 
 /**
@@ -157,6 +157,28 @@ function meal_slotForbidsSlot(recipe: Recipe, meal: PlannerMealType): boolean {
  *      - déjeuner/dîner : pas de boisson, pas de pur dessert sucré
  *      - dîner spécifique : pas de smoothie / pur sucré même si la recette est "appropriée"
  */
+/** Bonus / malus selon la préférence petit-déjeuner (sucré / salé / les deux). */
+export function scoreBreakfastPreference(
+  recipe: Recipe,
+  pref: BreakfastPreferenceKey
+): number {
+  if (pref === "both") return 0;
+  const sweet = isClearlySweet(recipe);
+  const savory =
+    isClearlySavory(recipe) ||
+    /\b(omelette|oeuf|oeufs|toast|tartine|avocado|wrap|muffin sale|shakshuka|frittata)\b/.test(
+      recipeText(recipe)
+    );
+  if (pref === "sweet") {
+    if (sweet && !savory) return 28;
+    if (savory && !sweet) return -22;
+    return 8;
+  }
+  if (savory && !sweet) return 28;
+  if (sweet && !savory) return -22;
+  return 8;
+}
+
 export function isRecipeCompatibleWithMealType(
   recipe: Recipe,
   meal: PlannerMealType

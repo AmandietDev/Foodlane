@@ -28,7 +28,7 @@ import {
   addRecipeDominantKeys,
   dominantKeysConflictWithDay,
 } from "./proteinVariety";
-import { isRecipeCompatibleWithMealType } from "./mealCompatibility";
+import { isRecipeCompatibleWithMealType, scoreBreakfastPreference } from "./mealCompatibility";
 import {
   addRecipeDiversityTags,
   wouldExceedWeekDiversityCap,
@@ -628,7 +628,11 @@ export function buildWeeklyPlan(
 
       // Helper : convertit un score en poids final en appliquant la pénalité dynamique.
       const weightFor = (r: Recipe, s: number, reusePenalty = 0): number => {
-        return Math.max(1, s - dynamicVarietyPenalty(r) - reusePenalty);
+        let bonus = 0;
+        if (meal === "breakfast") {
+          bonus += scoreBreakfastPreference(r, prefs.breakfast_preference);
+        }
+        return Math.max(1, s + bonus - dynamicVarietyPenalty(r) - reusePenalty);
       };
 
       let picked: Recipe | null = null;

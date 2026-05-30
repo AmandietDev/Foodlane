@@ -465,5 +465,5 @@ export const PLANNER_I18N: Record<string, { fr: string; en: string; es: string; 
 
   "planner.bf.sweet": { fr: "🍯 Sucré", en: "🍯 Sweet", es: "🍯 Dulce", de: "🍯 Süß" },
   "planner.bf.savory": { fr: "🥚 Salé", en: "🥚 Savory", es: "🥚 Salado", de: "🥚 Herzhaft" },
-  "planner.bf.both": { fr: "🌅 Les deux", en: "🌅 Both", es: "🌅 Ambos", de: "🌅 Beides" },
+  "planner.bf.both": { fr: "🌅 Peu importe", en: "🌅 No preference", es: "🌅 Me da igual", de: "🌅 Egal" },
 };

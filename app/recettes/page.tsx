@@ -8,7 +8,11 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import RecipeImage from "../components/RecipeImage";
 import type { Recipe } from "../src/lib/recipes";
 import { plannerAuthHeaders } from "../src/lib/plannerClient";
-import { addFavorite, loadFavorites, removeFavorite } from "../src/lib/favorites";
+import {
+  loadRecentHomeRecipeIds,
+  rememberHomeRecipeIds,
+  rotateScoredRecipes,
+} from "../src/lib/recipeDiscoveryClient";
 import { addRecipeToCollection, loadCollections, type Collection } from "../src/lib/collections";
 
 type RecipeWithPersonalization = Recipe & {
@@ -220,14 +224,23 @@ export default function RecettesPage() {
   );
 
   const displayedRecipes = useMemo(() => {
-    if (!isFilterActive) return personalizedRecipes;
-    if (personalizedIds.size === 0) return searchResults;
-    return [...searchResults].sort((a, b) => {
-      const aP = personalizedIds.has(a.id) ? 0 : 1;
-      const bP = personalizedIds.has(b.id) ? 0 : 1;
-      return aP - bP;
-    });
+    if (isFilterActive) {
+      if (personalizedIds.size === 0) return searchResults;
+      return [...searchResults].sort((a, b) => {
+        const aP = personalizedIds.has(a.id) ? 0 : 1;
+        const bP = personalizedIds.has(b.id) ? 0 : 1;
+        return aP - bP;
+      });
+    }
+    const recent = loadRecentHomeRecipeIds();
+    return rotateScoredRecipes(personalizedRecipes, 24, recent);
   }, [isFilterActive, personalizedRecipes, searchResults, personalizedIds]);
+
+  useEffect(() => {
+    if (!isFilterActive && displayedRecipes.length > 0) {
+      rememberHomeRecipeIds(displayedRecipes.map((r) => r.id));
+    }
+  }, [displayedRecipes, isFilterActive]);
 
   // Full-page spinner only for the initial personalized load (when no filter active)
   if (sessionLoading || !user || (!isFilterActive && loadingPersonalized)) {

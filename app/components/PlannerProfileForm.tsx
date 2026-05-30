@@ -427,23 +427,26 @@ export default function PlannerProfileForm({
           {t("planner.field.seasonal")}
         </label>
 
-        {meal_types.includes("breakfast") && (
-          <div>
-            <span className={`block text-sm mb-2 ${mutedClass}`}>{t("planner.field.breakfast_pref")}</span>
-            <div className="flex flex-wrap gap-2">
-              {BREAKFAST_PREFERENCE_OPTIONS.map((o) => (
-                <button
-                  key={o.key}
-                  type="button"
-                  className={`${chip} ${breakfast_preference === o.key ? chipOn : chipOff}`}
-                  onClick={() => setBreakfastPref(o.key)}
-                >
-                  {t(`planner.bf.${o.key}`)}
-                </button>
-              ))}
-            </div>
+        <div>
+          <span className={`block text-sm mb-2 ${mutedClass}`}>
+            {t("planner.field.breakfast_pref")}
+          </span>
+          <p className={`text-xs mb-2 ${mutedClass}`}>
+            Utilisé pour tes petits-déjeuners lors de la génération de menus.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {BREAKFAST_PREFERENCE_OPTIONS.map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                className={`${chip} ${breakfast_preference === o.key ? chipOn : chipOff}`}
+                onClick={() => setBreakfastPref(o.key)}
+              >
+                {t(`planner.bf.${o.key}`)}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </section>
 
       <button
