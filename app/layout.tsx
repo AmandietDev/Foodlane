@@ -52,6 +52,9 @@ export const metadata: Metadata = {
     description:
       "Menu de la semaine, planning repas, liste de courses et nutrition facile.",
   },
+  other: {
+    "google-adsense-account": "ca-pub-3828366277477392",
+  },
 };
 
 export default function RootLayout({
