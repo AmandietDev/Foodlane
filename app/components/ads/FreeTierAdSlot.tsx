@@ -18,20 +18,28 @@ declare global {
   }
 }
 
-function loadAdsenseScript(clientId: string): Promise<void> {
+/** Attend le script injecté une seule fois par `AdsenseScript` dans le layout. */
+function waitForAdsenseScript(): Promise<void> {
   if (typeof document === "undefined") return Promise.resolve();
-  if (document.querySelector('script[data-foodlane-adsense="1"]')) {
+  if (
+    document.querySelector("#google-adsense, script[data-foodlane-adsense='1'], script[src*='adsbygoogle.js']")
+  ) {
     return Promise.resolve();
   }
   return new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.async = true;
-    s.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(clientId)}`;
-    s.crossOrigin = "anonymous";
-    s.dataset.foodlaneAdsense = "1";
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("AdSense"));
-    document.head.appendChild(s);
+    let attempts = 0;
+    const tick = () => {
+      if (
+        document.querySelector("#google-adsense, script[data-foodlane-adsense='1'], script[src*='adsbygoogle.js']")
+      ) {
+        resolve();
+        return;
+      }
+      attempts += 1;
+      if (attempts >= 50) reject(new Error("AdSense"));
+      else setTimeout(tick, 100);
+    };
+    tick();
   });
 }
 
@@ -67,7 +75,7 @@ export function FreeTierAdSlot({ placement, className = "", oncePerSession = fal
 
     void (async () => {
       try {
-        await loadAdsenseScript(publisherId);
+        await waitForAdsenseScript();
         if (cancelled || !insRef.current || pushedRef.current) return;
         (window.adsbygoogle = window.adsbygoogle || []).push({});
         pushedRef.current = true;

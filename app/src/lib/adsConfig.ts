@@ -5,9 +5,11 @@
 
 export type AdPlacement = "mobile_bottom" | "tableau_inline";
 
+const DEFAULT_ADSENSE_PUBLISHER_ID = "ca-pub-3828366277477392";
+
 export function getAdsensePublisherId(): string | undefined {
   const id = process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID?.trim();
-  return id || undefined;
+  return id || DEFAULT_ADSENSE_PUBLISHER_ID;
 }
 
 export function getAdsenseSlot(placement: AdPlacement): string | undefined {

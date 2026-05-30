@@ -11,6 +11,7 @@ import RefgrowReferralHint from "./components/RefgrowReferralHint";
 import RefgrowScriptLoader from "./components/RefgrowScriptLoader";
 import CookieConsentBanner from "./components/CookieConsentBanner";
 import SubscriptionUpsellGate from "./components/billing/SubscriptionUpsellGate";
+import AdsenseScript from "./components/ads/AdsenseScript";
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://foodlane.fr";
 
@@ -63,6 +64,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body>
+        <AdsenseScript />
         {refgrowProjectId ? (
           <RefgrowScriptLoader projectId={refgrowProjectId} />
         ) : null}
