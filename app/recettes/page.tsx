@@ -13,6 +13,7 @@ import {
   rememberHomeRecipeIds,
   rotateScoredRecipes,
 } from "../src/lib/recipeDiscoveryClient";
+import { addFavorite, loadFavorites, removeFavorite } from "../src/lib/favorites";
 import { addRecipeToCollection, loadCollections, type Collection } from "../src/lib/collections";
 
 type RecipeWithPersonalization = Recipe & {
