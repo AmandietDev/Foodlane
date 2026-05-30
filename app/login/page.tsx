@@ -14,6 +14,7 @@ import {
 // ✅ Client Supabase
 import { supabase, isSupabaseConfigured, getSessionResilient } from "../src/lib/supabaseClient";
 import { refgrowTrackSignup } from "../src/lib/refgrowClient";
+import { markSignupUpsellPending } from "../src/lib/subscriptionUpsellStorage";
 import { getSafeNextRedirectFromWindow } from "../src/lib/safeNextRedirect";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -262,6 +263,7 @@ export default function LoginPage() {
           "Compte créé. Si la confirmation email est activée dans Supabase, vérifie ta boîte mail."
         );
       } else {
+        markSignupUpsellPending();
         router.push("/onboarding");
       }
     } catch (err) {

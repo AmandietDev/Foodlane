@@ -10,6 +10,7 @@ import EnvChecker from "./components/EnvChecker";
 import RefgrowReferralHint from "./components/RefgrowReferralHint";
 import RefgrowScriptLoader from "./components/RefgrowScriptLoader";
 import CookieConsentBanner from "./components/CookieConsentBanner";
+import SubscriptionUpsellGate from "./components/billing/SubscriptionUpsellGate";
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://foodlane.fr";
 
@@ -71,6 +72,7 @@ export default function RootLayout({
           <TranslationProvider>
             <AuthGuard>
               <PremiumProvider>
+                <SubscriptionUpsellGate />
                 {/* Contenu : marge basse mobile (barre + pub) ; sur bureau, décalage pour le rail gauche */}
                 <div className="min-h-screen pb-36 md:pb-10 md:pl-[var(--app-nav-rail-width)]">
                   {children}
