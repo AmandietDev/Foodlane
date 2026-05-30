@@ -1,17 +1,17 @@
 import Script from "next/script";
-import { getAdsensePublisherId } from "../../src/lib/adsConfig";
 
-/** Script AdSense global — une seule injection via le layout racine. */
+const ADSENSE_SRC =
+  "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3828366277477392";
+
+/** Script AdSense global — toujours chargé (validation site + annonces). */
 export default function AdsenseScript() {
-  const clientId = getAdsensePublisherId();
-  if (!clientId) return null;
-
   return (
     <Script
-      id="google-adsense"
-      strategy="afterInteractive"
-      src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(clientId)}`}
+      id="adsense-script"
+      async
+      src={ADSENSE_SRC}
       crossOrigin="anonymous"
+      strategy="beforeInteractive"
       data-foodlane-adsense="1"
     />
   );

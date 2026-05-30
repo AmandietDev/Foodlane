@@ -22,7 +22,7 @@ declare global {
 function waitForAdsenseScript(): Promise<void> {
   if (typeof document === "undefined") return Promise.resolve();
   if (
-    document.querySelector("#google-adsense, script[data-foodlane-adsense='1'], script[src*='adsbygoogle.js']")
+    document.querySelector("#adsense-script, script[data-foodlane-adsense='1'], script[src*='adsbygoogle.js']")
   ) {
     return Promise.resolve();
   }
@@ -30,7 +30,7 @@ function waitForAdsenseScript(): Promise<void> {
     let attempts = 0;
     const tick = () => {
       if (
-        document.querySelector("#google-adsense, script[data-foodlane-adsense='1'], script[src*='adsbygoogle.js']")
+        document.querySelector("#adsense-script, script[data-foodlane-adsense='1'], script[src*='adsbygoogle.js']")
       ) {
         resolve();
         return;
