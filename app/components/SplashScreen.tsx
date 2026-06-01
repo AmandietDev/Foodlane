@@ -9,12 +9,14 @@ export default function SplashScreen() {
   const SPLASH_PLAYED_KEY = "foodlane_splash_played";
 
   useEffect(() => {
-    // Vérifier si la vidéo a déjà été jouée (optionnel - décommentez si vous voulez la jouer une seule fois)
-    // const played = localStorage.getItem(SPLASH_PLAYED_KEY);
-    // if (played === "true") {
-    //   setShowSplash(false);
-    //   return;
-    // }
+    try {
+      if (localStorage.getItem(SPLASH_PLAYED_KEY) === "true") {
+        setShowSplash(false);
+        return;
+      }
+    } catch {
+      /* private mode */
+    }
 
     // Démarrer la vidéo automatiquement (en muet pour éviter les restrictions de navigateur)
     if (videoRef.current) {
@@ -27,11 +29,18 @@ export default function SplashScreen() {
     }
   }, []);
 
-  const handleVideoEnd = () => {
+  const dismissSplash = () => {
     setShowSplash(false);
     setHasPlayed(true);
-    // Marquer comme jouée (optionnel)
-    // localStorage.setItem(SPLASH_PLAYED_KEY, "true");
+    try {
+      localStorage.setItem(SPLASH_PLAYED_KEY, "true");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleVideoEnd = () => {
+    dismissSplash();
   };
 
   if (!showSplash) {
@@ -39,7 +48,16 @@ export default function SplashScreen() {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
+    <div
+      className="fixed inset-0 z-[100] bg-black flex items-center justify-center"
+      role="button"
+      tabIndex={0}
+      onClick={dismissSplash}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") dismissSplash();
+      }}
+      aria-label="Passer l’intro"
+    >
       <video
         ref={videoRef}
         className="w-full h-full object-cover"

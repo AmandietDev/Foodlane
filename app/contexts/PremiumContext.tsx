@@ -88,30 +88,32 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
       }
 
       emitSubscriptionStateChanged();
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        try {
-          const r = await fetch("/api/billing/sync-beta-access", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          });
-          if (r.ok) {
-            const j = (await r.json().catch(() => ({}))) as { applied?: boolean };
-            if (j.applied) {
-              const updated = await getProfile(user.id);
-              if (updated) setProfile(updated);
-            }
-          }
-        } catch (e) {
-          console.warn("[PremiumProvider] sync-beta-access:", e);
-        }
-      }
     } catch (error) {
       console.error("[PremiumProvider] Erreur lors du rafraîchissement:", error);
     } finally {
       setLoading(false);
     }
+
+    // Bêta Stripe : en arrière-plan pour ne pas bloquer l’affichage des pages
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      try {
+        const r = await fetch("/api/billing/sync-beta-access", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (r.ok) {
+          const j = (await r.json().catch(() => ({}))) as { applied?: boolean };
+          if (j.applied) {
+            const updated = await getProfile(user.id);
+            if (updated) setProfile(updated);
+          }
+        }
+      } catch (e) {
+        console.warn("[PremiumProvider] sync-beta-access:", e);
+      }
+    })();
   }, [user]);
 
   useEffect(() => {

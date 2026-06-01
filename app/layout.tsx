@@ -11,9 +11,11 @@ import RefgrowReferralHint from "./components/RefgrowReferralHint";
 import RefgrowScriptLoader from "./components/RefgrowScriptLoader";
 import CookieConsentBanner from "./components/CookieConsentBanner";
 import SubscriptionUpsellGate from "./components/billing/SubscriptionUpsellGate";
-import AdsenseScript from "./components/ads/AdsenseScript";
+import AdsenseLoader from "./components/ads/AdsenseLoader";
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://foodlane.fr";
+const ADSENSE_PUBLISHER_META =
+  process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID?.trim() || "ca-pub-3828366277477392";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -53,7 +55,7 @@ export const metadata: Metadata = {
       "Menu de la semaine, planning repas, liste de courses et nutrition facile.",
   },
   other: {
-    "google-adsense-account": "ca-pub-3828366277477392",
+    "google-adsense-account": ADSENSE_PUBLISHER_META,
   },
 };
 
@@ -67,7 +69,6 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body>
-        <AdsenseScript />
         {refgrowProjectId ? (
           <RefgrowScriptLoader projectId={refgrowProjectId} />
         ) : null}
@@ -83,7 +84,7 @@ export default function RootLayout({
                   {children}
                 </div>
 
-                {/* Zone fixe en bas : barre d'onglets + pub sous les onglets */}
+                {/* Zone fixe en bas : pub au-dessus de la barre d'onglets (mobile) */}
                 <BottomNavigation />
               </PremiumProvider>
             </AuthGuard>

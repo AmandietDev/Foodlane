@@ -259,17 +259,10 @@ export default function FavorisPage() {
   async function loadMenuCreatorRecipes() {
     setLoadingMenuRecipes(true);
     try {
-      const res = await fetch("/api/recipes", {
-        cache: "no-store",
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
-      });
-      
+      const res = await fetch("/api/recipes/sample?limit=100");
       if (!res.ok) {
         throw new Error(`Erreur API: ${res.status}`);
       }
-      
       const data = await res.json();
       const allRecipes: Recipe[] = data.recipes || [];
       

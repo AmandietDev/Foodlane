@@ -53,7 +53,7 @@ function parametresTabActive(pathname: string | null): boolean {
 }
 
 export default function BottomNavigation() {
-  const { isPremium, canAccessDietAssistant } = usePremium();
+  const { isPremium, loading, canAccessDietAssistant } = usePremium();
   const { t } = useTranslation();
   const pathname = usePathname();
 
@@ -73,7 +73,7 @@ export default function BottomNavigation() {
         : "text-[#7A3A3A] hover:bg-[#FFF6F6] border border-transparent"
     }`;
 
-  const adBar = <FreeTierAdSlot placement="mobile_bottom" />;
+  const showMobileAd = !loading && !isPremium;
 
   const desktopPremiumHint = !isPremium && (
     <div className="hidden md:block mt-auto p-3 border-t border-[#E8A0A0] bg-[var(--surface-muted)]">
@@ -132,6 +132,7 @@ export default function BottomNavigation() {
       </aside>
 
       <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col md:hidden pb-[env(safe-area-inset-bottom,0px)]">
+        {showMobileAd ? <FreeTierAdSlot placement="mobile_bottom" /> : null}
         <nav
           className="min-h-14 bg-[#FFF0F0]/95 backdrop-blur-md border-t border-[#E8A0A0] flex items-stretch justify-around text-[11px] leading-tight shadow-[0_-4px_20px_rgba(107,46,46,0.08)]"
           aria-label="Navigation principale"
@@ -167,7 +168,6 @@ export default function BottomNavigation() {
             <span className="text-center max-w-[4.5rem]">{t("nav.parametres")}</span>
           </Link>
         </nav>
-        {adBar}
       </div>
     </>
   );

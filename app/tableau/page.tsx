@@ -11,6 +11,7 @@ import HomeRecipeSections from "../components/HomeRecipeSections";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { FreeTierAdSlot } from "../components/ads/FreeTierAdSlot";
 import { useTranslation } from "../components/TranslationProvider";
+import { usePremium } from "../contexts/PremiumContext";
 
 type MenuRow = {
   id: string;
@@ -24,6 +25,7 @@ export default function TableauPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const { user, loading: sessionLoading } = useSupabaseSession();
+  const { isPremium, loading: premiumLoading } = usePremium();
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [menus, setMenus] = useState<MenuRow[]>([]);
@@ -109,7 +111,9 @@ export default function TableauPage() {
           <p className="text-base text-[#7A3A3A] font-medium">{t("dashboard.subtitle")}</p>
         </header>
 
-        <FreeTierAdSlot placement="tableau_inline" oncePerSession className="max-w-xl mx-auto" />
+        {!premiumLoading && !isPremium ? (
+          <FreeTierAdSlot placement="tableau_inline" oncePerSession className="max-w-xl mx-auto" />
+        ) : null}
 
         <section className="rounded-3xl border border-[#E8A0A0] overflow-hidden shadow-sm bg-[#FFF1F1]">
           <div className="relative h-48 w-full bg-white">

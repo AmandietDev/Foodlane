@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../src/lib/supabaseClient";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
@@ -38,6 +38,7 @@ import {
 } from "../src/lib/dietaryProfiles";
 import { filterRecipesBySeason } from "../src/lib/seasonalFilter";
 import { analyzeMenu, type MenuAdvice } from "../src/lib/menuAnalysis";
+import { recipesFromWeeklyMenu } from "../src/lib/recipesFromMenu";
 
 const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
   { key: "petit-dejeuner", label: "Petit-déjeuner", icon: "🌅" },
@@ -53,8 +54,10 @@ export default function WeeklyMenuPage() {
   const [viewMode, setViewMode] = useState<"edit" | "view">("edit");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedMeal, setSelectedMeal] = useState<{ day: string; mealType: MealType } | null>(null);
-  const [availableRecipes, setAvailableRecipes] = useState<Recipe[]>([]);
+  const [pickerRecipes, setPickerRecipes] = useState<Recipe[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
   const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([]);
+  const menuRecipes = useMemo(() => recipesFromWeeklyMenu(menu), [menu]);
   const [recipeSearchTerm, setRecipeSearchTerm] = useState("");
   const [recipeFilters, setRecipeFilters] = useState({
     type: "tous" as "tous" | "sucré" | "salé",
@@ -139,16 +142,15 @@ export default function WeeklyMenuPage() {
     }
   }, [menu]); // S'exécute quand le menu est chargé
 
-  // Vérifier si on doit ouvrir la liste de courses après que le menu et les recettes soient chargés
+  // Liste de courses : recettes déjà dans le menu (pas de chargement du catalogue entier)
   useEffect(() => {
-    if (!menu || availableRecipes.length === 0) return;
+    if (!menu) return;
 
     if (typeof window !== "undefined") {
       const showShoppingList = localStorage.getItem("foodlane_show_shopping_list");
       if (showShoppingList === "true") {
         localStorage.removeItem("foodlane_show_shopping_list");
-        // Générer la liste de courses et ouvrir le modal
-        const shoppingList = generateSmartShoppingList(menu, availableRecipes);
+        const shoppingList = generateSmartShoppingList(menu, menuRecipes);
         if (shoppingList.length === 0) {
           alert("Aucun ingrédient à ajouter à la liste de courses.");
         } else {
@@ -157,28 +159,53 @@ export default function WeeklyMenuPage() {
         }
       }
     }
-  }, [menu, availableRecipes]);
+  }, [menu, menuRecipes]);
 
-  // Charger les recettes disponibles
+  // Sélecteur de recette : recherche paginée côté serveur (modal ouvert uniquement)
   useEffect(() => {
-    async function loadRecipes() {
-      try {
-        const res = await fetch("/api/recipes");
-        if (res.ok) {
-          const data = await res.json();
-          setAvailableRecipes(data.recipes || []);
-          setFilteredRecipes(data.recipes || []);
-        }
-      } catch (err) {
-        console.error("Erreur lors du chargement des recettes :", err);
-      }
+    if (!selectedMeal) {
+      setPickerRecipes([]);
+      setFilteredRecipes([]);
+      return;
     }
-    loadRecipes();
-  }, []);
 
-  // Filtrer les recettes selon la recherche et les filtres
+    const ac = new AbortController();
+    const timer = setTimeout(() => {
+      void (async () => {
+        setPickerLoading(true);
+        try {
+          const params = new URLSearchParams({ limit: "48", page: "1" });
+          if (recipeFilters.type === "sucré") params.set("type", "sweet");
+          else if (recipeFilters.type === "salé") params.set("type", "savory");
+          if (recipeSearchTerm.trim()) params.set("query", recipeSearchTerm.trim());
+
+          const res = await fetch(`/api/recipes?${params}`, { signal: ac.signal });
+          if (!res.ok) {
+            setPickerRecipes([]);
+            setFilteredRecipes([]);
+            return;
+          }
+          const data = (await res.json()) as { recipes?: Recipe[] };
+          setPickerRecipes(data.recipes || []);
+        } catch (err) {
+          if ((err as { name?: string }).name !== "AbortError") {
+            console.error("[MenuSemaine] recherche recettes:", err);
+          }
+        } finally {
+          if (!ac.signal.aborted) setPickerLoading(false);
+        }
+      })();
+    }, 280);
+
+    return () => {
+      clearTimeout(timer);
+      ac.abort();
+    };
+  }, [selectedMeal, recipeSearchTerm, recipeFilters.type]);
+
+  // Filtres locaux (difficulté, temps, régimes) sur le lot serveur
   useEffect(() => {
-    let filtered = [...availableRecipes];
+    let filtered = [...pickerRecipes];
 
     // Charger les préférences utilisateur pour le filtrage automatique
     const userPreferences = loadPreferences();
@@ -196,27 +223,7 @@ export default function WeeklyMenuPage() {
     // Filtre automatique par équipements disponibles
     filtered = filterRecipesByEquipment(filtered, availableEquipment);
 
-    // Filtre automatique par saison (en priorité pour privilégier les recettes de saison)
     filtered = filterRecipesBySeason(filtered);
-
-    // Filtre par recherche textuelle
-    if (recipeSearchTerm.trim()) {
-      const term = recipeSearchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (recipe) =>
-          (recipe.nom_recette || "").toLowerCase().includes(term) ||
-          recipe.description_courte?.toLowerCase().includes(term) ||
-          (recipe.ingredients || "").toLowerCase().includes(term)
-      );
-    }
-
-    // Filtre par type
-    if (recipeFilters.type !== "tous") {
-      filtered = filtered.filter((recipe) => {
-        const recipeTypeLower = recipe.type?.toLowerCase() || "";
-        return recipeTypeLower.includes(recipeFilters.type);
-      });
-    }
 
     // Filtre par difficulté
     if (recipeFilters.difficulte !== "tous") {
@@ -237,7 +244,7 @@ export default function WeeklyMenuPage() {
     }
 
     setFilteredRecipes(filtered);
-  }, [recipeSearchTerm, recipeFilters, availableRecipes]);
+  }, [pickerRecipes, recipeFilters.difficulte, recipeFilters.tempsMax]);
 
   const handleSelectRecipe = (recipe: Recipe) => {
     if (!menu || !selectedMeal) return;
@@ -334,7 +341,7 @@ export default function WeeklyMenuPage() {
 
     if (!menu) return;
 
-    const shoppingList = generateSmartShoppingList(menu, availableRecipes);
+    const shoppingList = generateSmartShoppingList(menu, menuRecipes);
     if (shoppingList.length === 0) {
       alert("Aucun ingrédient à ajouter à la liste de courses.");
       return;
@@ -349,7 +356,7 @@ export default function WeeklyMenuPage() {
     if (!menu) return;
 
     // Analyser le menu et générer des conseils
-    const advice = analyzeMenu(menu, availableRecipes);
+    const advice = analyzeMenu(menu, menuRecipes);
     setMenuAdvice(advice);
     setShowAdviceModal(true);
   };
@@ -813,7 +820,9 @@ export default function WeeklyMenuPage() {
             </div>
 
             <div className="space-y-2">
-              {filteredRecipes.length === 0 ? (
+              {pickerLoading ? (
+                <p className="text-xs text-[var(--text-muted)] text-center py-4">Recherche…</p>
+              ) : filteredRecipes.length === 0 ? (
                 <p className="text-xs text-[var(--text-muted)] text-center py-4">
                   Aucune recette trouvée
                 </p>

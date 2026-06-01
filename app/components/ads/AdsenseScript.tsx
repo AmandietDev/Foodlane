@@ -1,16 +1,18 @@
 import Script from "next/script";
-
-const ADSENSE_SRC =
-  "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3828366277477392";
+import { getAdsensePublisherId, getAdsenseScriptSrc } from "../../src/lib/adsConfig";
 
 export default function AdsenseScript() {
+  const publisherId = getAdsensePublisherId();
+  if (!publisherId) return null;
+
   return (
     <Script
       id="adsense-script"
+      data-foodlane-adsense="1"
       async
-      src={ADSENSE_SRC}
+      src={getAdsenseScriptSrc(publisherId)}
       crossOrigin="anonymous"
-      strategy="beforeInteractive"
+      strategy="afterInteractive"
     />
   );
 }

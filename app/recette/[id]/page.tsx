@@ -27,10 +27,10 @@ function resolveBackLink(fromParam: string | null): { href: string; label: strin
   }
   const pathOnly = raw.split("?")[0] || "/recettes";
   if (pathOnly.startsWith("/menus/")) {
-    return { href: pathOnly, label: "← Retour au menu" };
+    return { href: raw, label: "← Retour au menu" };
   }
   if (pathOnly === "/planifier") {
-    return { href: "/planifier", label: "← Retour au planning menu" };
+    return { href: raw, label: "← Retour au planning menu" };
   }
   return { href: pathOnly, label: "← Retour" };
 }
@@ -119,17 +119,9 @@ function RecetteDetailInner() {
   return (
     <main className="min-h-screen bg-[#FFF8F6] px-4 py-6 pb-28 md:pb-10">
       <div className="max-w-lg md:max-w-2xl mx-auto space-y-4">
-        <div className="flex flex-wrap gap-3 text-sm">
-          <Link href={backHref} className="text-[#8A4A4A] hover:text-[#6B2E2E] font-medium">
-            {backLabel}
-          </Link>
-          <Link href="/recettes" className="text-[#8A4A4A] hover:text-[#6B2E2E]">
-            Toutes les recettes
-          </Link>
-          <Link href="/planifier" className="text-[#8A4A4A] hover:text-[#6B2E2E]">
-            Planifier
-          </Link>
-        </div>
+        <Link href={backHref} className="inline-block text-sm text-[#8A4A4A] hover:text-[#6B2E2E] font-medium">
+          {backLabel}
+        </Link>
 
         <article className="rounded-2xl border border-[#E8A0A0] bg-white shadow-sm overflow-hidden">
           <div className="p-4 border-b border-[#F0E4E4]">

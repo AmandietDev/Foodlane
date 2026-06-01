@@ -98,11 +98,12 @@ export function FreeTierAdSlot({ placement, className = "", oncePerSession = fal
 
   if (!configured || error) {
     if (placement !== "mobile_bottom") return null;
+    if (process.env.NODE_ENV !== "development") return null;
     return (
       <div
         className={`flex items-center justify-between gap-2 border-t border-[#E8A0A0] bg-[#FFF8F6] px-3 py-2 text-xs md:hidden ${className}`}
       >
-        <span className="text-[#8A4A4A] truncate">Espace pub — AdSense : voir .env.example</span>
+        <span className="text-[#8A4A4A] truncate">Dev : slots AdSense — voir .env.example</span>
         <Link
           href="/premium"
           className="shrink-0 rounded-lg bg-[#D44A4A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#C03A3A] transition-colors"

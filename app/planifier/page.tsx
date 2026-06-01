@@ -7,6 +7,14 @@ import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { plannerFetch } from "../src/lib/plannerClient";
 import { getLocale } from "../src/lib/i18n";
 import LoadingSpinner from "../components/LoadingSpinner";
+import {
+  clearPlanifierDraft,
+  loadPlanifierDraft,
+  planifierEditHref,
+  plannedWeekFromMenuApi,
+  savePlanifierDraft,
+} from "../src/lib/plannerDraftStorage";
+import type { PlannedWeek as StoredPlannedWeek } from "../src/lib/weeklyPlanner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -978,7 +986,67 @@ export default function PlanifierPage() {
     setPlan(null);
     setMenuId(null);
     setLockedSlots(new Set());
+    clearPlanifierDraft();
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, "", "/planifier");
+    }
   }, [weekOffset]);
+
+  // Restaurer le menu en cours d’édition (retour fiche recette ou ?menu=…)
+  useEffect(() => {
+    if (!user || checking || plan) return;
+
+    const draft = loadPlanifierDraft();
+    if (draft) {
+      setPlan(draft.plan as unknown as PlannedWeek);
+      setMenuId(draft.menuId);
+      setWeekStart(draft.weekStart);
+      setLockedSlots(new Set(draft.lockedSlots));
+      return;
+    }
+
+    const menuParam =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("menu")
+        : null;
+    if (!menuParam) return;
+
+    let cancelled = false;
+    void (async () => {
+      const res = await plannerFetch(`/menus/${menuParam}`);
+      const j = await res.json().catch(() => ({}));
+      if (cancelled) return;
+      if (!res.ok) return;
+      const restored = plannedWeekFromMenuApi(j);
+      if (!restored) return;
+      const week =
+        typeof j.menu?.week_start_date === "string" ? j.menu.week_start_date : weekStart;
+      setPlan(restored);
+      setMenuId(menuParam);
+      setWeekStart(week);
+      setLockedSlots(new Set());
+      savePlanifierDraft({
+        plan: restored as StoredPlannedWeek,
+        menuId: menuParam,
+        weekStart: week,
+        lockedSlots: [],
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, checking, plan, weekStart]);
+
+  // Brouillon session : garder la grille si on quitte vers une fiche recette
+  useEffect(() => {
+    if (!plan || !menuId) return;
+    savePlanifierDraft({
+      plan: plan as unknown as StoredPlannedWeek,
+      menuId,
+      weekStart,
+      lockedSlots: [...lockedSlots],
+    });
+  }, [plan, menuId, weekStart, lockedSlots]);
 
   // Toggle type de repas
   const toggleMealType = useCallback((mt: MealType) => {
@@ -1024,15 +1092,24 @@ export default function PlanifierPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Échec de la génération");
-      setPlan(data.plan as PlannedWeek);
-      setMenuId(data.menu_id as string);
+      const newPlan = data.plan as PlannedWeek;
+      const newMenuId = data.menu_id as string;
+      setPlan(newPlan);
+      setMenuId(newMenuId);
       setLockedSlots(new Set());
+      savePlanifierDraft({
+        plan: newPlan as unknown as StoredPlannedWeek,
+        menuId: newMenuId,
+        weekStart,
+        lockedSlots: [],
+      });
+      router.replace(planifierEditHref(newMenuId), { scroll: false });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {
       setIsGenerating(false);
     }
-  }, [weekStart, activeMealTypes]);
+  }, [weekStart, activeMealTypes, plan, lockedSlots, router]);
 
   // Régénérer un slot individuel
   const regenerateSlot = useCallback(async (dayIndex: number, mealType: MealType) => {
@@ -1567,8 +1644,16 @@ export default function PlanifierPage() {
                                 onViewRecipe={() => {
                                   const rid = meal.recipe_id;
                                   if (Number.isFinite(rid) && rid > 0) {
+                                    if (plan && menuId) {
+                                      savePlanifierDraft({
+                                        plan: plan as unknown as StoredPlannedWeek,
+                                        menuId,
+                                        weekStart,
+                                        lockedSlots: [...lockedSlots],
+                                      });
+                                    }
                                     router.push(
-                                      `/recette/${rid}?from=${encodeURIComponent("/planifier")}`
+                                      `/recette/${rid}?from=${encodeURIComponent(planifierEditHref(menuId))}`
                                     );
                                   }
                                 }}

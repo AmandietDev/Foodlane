@@ -281,19 +281,25 @@ export default function EquilibrePage() {
     const silent = Boolean(opts?.silent);
     if (!silent) setLoading(true);
     try {
-      // Charger les repas du jour
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
-        return;
+      if (!session?.user) return;
+
+      const authHeaders: Record<string, string> = {};
+      if (session.access_token) {
+        authHeaders.Authorization = `Bearer ${session.access_token}`;
       }
 
-      const { data: mealsData, error: mealsError } = await supabase
-        .from("food_log_entries")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .eq("date", date)
-        .order("created_at", { ascending: true });
+      const [mealsResult, summaryRes] = await Promise.all([
+        supabase
+          .from("food_log_entries")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .eq("date", date)
+          .order("created_at", { ascending: true }),
+        fetch(`/api/foodlog/summary?date=${date}`, { headers: authHeaders }),
+      ]);
 
+      const { data: mealsData, error: mealsError } = mealsResult;
       if (mealsError) {
         if (isNonBlockingSupabaseError(mealsError)) {
           console.warn("[Equilibre] Table/accès food_log_entries indisponible, affichage en mode vide.");
@@ -305,16 +311,8 @@ export default function EquilibrePage() {
         setMeals(mealsData || []);
       }
 
-      const authHeaders: Record<string, string> = {};
-      if (session.access_token) {
-        authHeaders.Authorization = `Bearer ${session.access_token}`;
-      }
-
-      // Charger le résumé du jour
-      const summaryRes = await fetch(`/api/foodlog/summary?date=${date}`, { headers: authHeaders });
       if (summaryRes.ok) {
-        const summaryData = await summaryRes.json();
-        setSummary(summaryData);
+        setSummary(await summaryRes.json());
       }
     } catch (error) {
       console.error("[Equilibre] Erreur:", error);
