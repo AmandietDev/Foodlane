@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:mobile": "next dev -H 0.0.0.0",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "dev:mobile": "next dev --webpack -H 0.0.0.0",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "migrate:supabase": "tsx scripts/migrate-to-supabase.ts",
@@ -14,6 +14,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.86.0",
     "dotenv": "^17.2.3",
+    "framer-motion": "^12.40.0",
     "next": "^16.0.8",
     "papaparse": "^5.4.1",
     "react": "19.2.0",

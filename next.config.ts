@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: projectRoot,
+  },
   images: {
     remotePatterns: [
       {
@@ -14,6 +21,10 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: '**.googleusercontent.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'i.pravatar.cc',
       },
     ],
     // Permettre toutes les images pour le proxy API

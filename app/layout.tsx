@@ -5,13 +5,12 @@ import { TranslationProvider } from "./components/TranslationProvider";
 import { PremiumProvider } from "./contexts/PremiumContext";
 import BottomNavigation from "./components/BottomNavigation";
 import AuthGuard from "./components/AuthGuard";
-import SplashScreen from "./components/SplashScreen";
 import EnvChecker from "./components/EnvChecker";
-import RefgrowReferralHint from "./components/RefgrowReferralHint";
-import RefgrowScriptLoader from "./components/RefgrowScriptLoader";
 import CookieConsentBanner from "./components/CookieConsentBanner";
 import SubscriptionUpsellGate from "./components/billing/SubscriptionUpsellGate";
 import AdsenseLoader from "./components/ads/AdsenseLoader";
+import AppContentShell from "./components/AppContentShell";
+import LayoutClientExtras from "./components/LayoutClientExtras";
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://foodlane.fr";
 const ADSENSE_PUBLISHER_META =
@@ -69,20 +68,13 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body>
-        {refgrowProjectId ? (
-          <RefgrowScriptLoader projectId={refgrowProjectId} />
-        ) : null}
-        {refgrowProjectId ? <RefgrowReferralHint /> : null}
-        <SplashScreen />
+        <LayoutClientExtras refgrowProjectId={refgrowProjectId} />
         <ThemeProviderWrapper>
           <TranslationProvider>
             <AuthGuard>
               <PremiumProvider>
                 <SubscriptionUpsellGate />
-                {/* Contenu : marge basse mobile (barre + pub) ; sur bureau, décalage pour le rail gauche */}
-                <div className="min-h-screen pb-36 md:pb-10 md:pl-[var(--app-nav-rail-width)]">
-                  {children}
-                </div>
+                <AppContentShell>{children}</AppContentShell>
 
                 {/* Zone fixe en bas : pub au-dessus de la barre d'onglets (mobile) */}
                 <BottomNavigation />

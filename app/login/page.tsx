@@ -1,9 +1,10 @@
 "use client";
 
+import { Pacifico } from "next/font/google";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Logo from "../components/Logo";
+import { LandingLogo } from "../components/landing/LandingShared";
 
 // On garde les préférences locales pour l’instant
 import {
@@ -18,6 +19,12 @@ import { markSignupUpsellPending } from "../src/lib/subscriptionUpsellStorage";
 import { getSafeNextRedirectFromWindow } from "../src/lib/safeNextRedirect";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
+
+const pacifico = Pacifico({
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export default function LoginPage() {
   const router = useRouter();
@@ -93,11 +100,18 @@ export default function LoginPage() {
       setPasswordResetSuccess(true);
       window.history.replaceState({}, "", "/login");
     }
+    if (q.get("mode") === "signup") {
+      setMode("signup");
+    }
   }, []);
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-white px-4">
+        <LandingLogo
+          className="justify-center"
+          wordmarkStyle={{ fontFamily: pacifico.style.fontFamily }}
+        />
         <LoadingSpinner message="Vérification de la session…" />
       </div>
     );
@@ -278,13 +292,13 @@ export default function LoginPage() {
     <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#FFF0F0] to-[#FFD9D9] px-4 py-8">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <Logo />
-          <h1 className="text-2xl font-bold text-[#6B2E2E] mt-4">
-            {mode === "login" && "Connexion"}
-            {mode === "signup" && "Créer un compte"}
-          </h1>
+        <div className="mb-8 flex justify-center">
+          <LandingLogo wordmarkStyle={{ fontFamily: pacifico.style.fontFamily }} />
         </div>
+        <h1 className="mb-8 text-center text-2xl font-bold text-[#3D2525]">
+          {mode === "login" && "Connexion"}
+          {mode === "signup" && "Créer un compte"}
+        </h1>
 
         {/* Carte principale */}
         <div className="bg-white rounded-2xl shadow-xl p-6 border border-[#E8A0A0]">

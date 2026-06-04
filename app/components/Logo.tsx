@@ -6,7 +6,7 @@ export default function Logo({ className = "" }: { className?: string }) {
       {/* Logo image avec fond transparent */}
       <div className="relative">
         <Image
-          src="/logo.png?v=2"
+          src="/logo-app.png"
           alt="Foodlane Logo"
           width={120}
           height={120}

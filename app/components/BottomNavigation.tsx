@@ -7,7 +7,7 @@ import { useTranslation } from "./TranslationProvider";
 import { usePremium } from "../contexts/PremiumContext";
 import { FreeTierAdSlot } from "./ads/FreeTierAdSlot";
 
-const HIDDEN_PATH_PREFIXES = ["/login", "/forgot-password", "/reset-password"];
+const HIDDEN_PATH_PREFIXES = ["/", "/login", "/forgot-password", "/reset-password", "/coming-soon"];
 
 function hideGlobalNav(pathname: string | null): boolean {
   if (!pathname) return false;

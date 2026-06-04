@@ -9,24 +9,34 @@ export default function SplashScreen() {
   const SPLASH_PLAYED_KEY = "foodlane_splash_played";
 
   useEffect(() => {
+    let mounted = true;
+
+    const hide = () => {
+      if (mounted) setShowSplash(false);
+    };
+
     try {
       if (localStorage.getItem(SPLASH_PLAYED_KEY) === "true") {
-        setShowSplash(false);
-        return;
+        hide();
+        return () => {
+          mounted = false;
+        };
       }
     } catch {
       /* private mode */
     }
 
-    // Démarrer la vidéo automatiquement (en muet pour éviter les restrictions de navigateur)
-    if (videoRef.current) {
-      // La vidéo est en muted par défaut, donc elle peut être lue automatiquement
-      videoRef.current.play().catch((err) => {
+    const video = videoRef.current;
+    if (video) {
+      video.play().catch((err) => {
         console.error("Erreur lors de la lecture de la vidéo:", err);
-        // Si la vidéo ne peut pas être lue, masquer le splash screen
-        setShowSplash(false);
+        hide();
       });
     }
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const dismissSplash = () => {

@@ -22,13 +22,18 @@ export default function RefgrowScriptLoader({ projectId }: Props) {
   const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     const sync = () => {
+      if (!mounted) return;
       const consent = getCookieConsent();
       setAllowed(Boolean(consent?.affiliation));
     };
+
     sync();
     window.addEventListener("foodlane:cookie-consent-changed", sync);
     return () => {
+      mounted = false;
       window.removeEventListener("foodlane:cookie-consent-changed", sync);
     };
   }, []);

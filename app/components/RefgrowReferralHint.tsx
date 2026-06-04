@@ -15,20 +15,32 @@ function RefgrowReferralHintInner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem(DISMISS_KEY) === "1") return;
+    let mounted = true;
+
+    if (sessionStorage.getItem(DISMISS_KEY) === "1") {
+      return () => {
+        mounted = false;
+      };
+    }
 
     const refParam = searchParams.get("ref")?.trim();
     if (refParam) {
       setVisible(true);
-      return;
+      return () => {
+        mounted = false;
+      };
     }
 
-    // latest.js peut poser le cookie juste après chargement
     const id = window.setTimeout(() => {
+      if (!mounted) return;
       if (sessionStorage.getItem(DISMISS_KEY) === "1") return;
       if (hasRefgrowRefCookie()) setVisible(true);
     }, 1800);
-    return () => window.clearTimeout(id);
+
+    return () => {
+      mounted = false;
+      window.clearTimeout(id);
+    };
   }, [searchParams]);
 
   if (!visible) return null;

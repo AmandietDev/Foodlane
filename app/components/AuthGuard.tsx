@@ -15,6 +15,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   // Pages qui ne nécessitent pas de connexion
   const publicPages = [
     "/",
+    "/coming-soon",
     "/compte",
     "/login",
     "/forgot-password",
