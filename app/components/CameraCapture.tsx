@@ -143,7 +143,7 @@ export default function CameraCapture({
             <p className="text-sm mb-4">{error}</p>
             <button
               onClick={startCamera}
-              className="px-4 py-2 rounded-lg bg-[#D44A4A] text-white hover:bg-[#C03A3A] transition-colors"
+              className="px-4 py-2 rounded-lg bg-[#E94E77] text-white hover:bg-[#D63D56] transition-colors"
             >
               Réessayer
             </button>

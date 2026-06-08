@@ -154,7 +154,7 @@ export default function RessourcesPage() {
       <section className="mb-6">
         <Link
           href="/menu-semaine"
-          className="block rounded-2xl border border-[var(--beige-border)] bg-[var(--beige-card)] px-4 py-4 hover:border-[#D44A4A] transition-colors"
+          className="block rounded-2xl border border-[var(--beige-border)] bg-[var(--beige-card)] px-4 py-4 hover:border-[#E94E77] transition-colors"
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
@@ -181,7 +181,7 @@ export default function RessourcesPage() {
             </p>
           </div>
           {favorites.length > 0 && (
-            <span className="px-2 py-1 rounded-full bg-[#D44A4A] text-[11px] text-white font-semibold">
+            <span className="px-2 py-1 rounded-full bg-[#E94E77] text-[11px] text-white font-semibold">
               {favorites.length}
             </span>
           )}
@@ -206,7 +206,7 @@ export default function RessourcesPage() {
                       {detectDietaryBadges(recipe).slice(0, 2).map((badge) => (
                         <span
                           key={badge}
-                          className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[#D44A4A] text-white border border-[#C03A3A] flex items-center gap-0.5"
+                          className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[#E94E77] text-white border border-[#D63D56] flex items-center gap-0.5"
                           title={badge}
                         >
                           <span className="text-[8px]">{DIETARY_BADGE_ICONS[badge]}</span>
@@ -214,7 +214,7 @@ export default function RessourcesPage() {
                         </span>
                       ))}
                       {detectDietaryBadges(recipe).length > 2 && (
-                        <span className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[#D44A4A] text-white border border-[#C03A3A]">
+                        <span className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[#E94E77] text-white border border-[#D63D56]">
                           +{detectDietaryBadges(recipe).length - 2}
                         </span>
                       )}
@@ -239,7 +239,7 @@ export default function RessourcesPage() {
                 </div>
                 <div className="mt-2 flex gap-2">
                   <button
-                    className="flex-1 rounded-xl border border-[#C03A3A] bg-[#D44A4A] px-3 py-2 text-xs text-white hover:bg-[#C03A3A] transition"
+                    className="flex-1 rounded-xl border border-[#D63D56] bg-[#E94E77] px-3 py-2 text-xs text-white hover:bg-[#D63D56] transition"
                     onClick={() => setSelectedRecipe(recipe)}
                   >
                     Voir la fiche
@@ -296,14 +296,14 @@ export default function RessourcesPage() {
                   setNewsletterStatus("idle");
                 }}
                 placeholder="Ton adresse email"
-                className="w-full rounded-xl border border-[var(--beige-border)] bg-[var(--beige-rose)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[#D44A4A] placeholder:text-[var(--beige-text-muted)]"
+                className="w-full rounded-xl border border-[var(--beige-border)] bg-[var(--beige-rose)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[#E94E77] placeholder:text-[var(--beige-text-muted)]"
                 required
                 disabled={newsletterStatus === "loading"}
               />
               <button
                 type="submit"
                 disabled={newsletterStatus === "loading" || !newsletterEmail.trim()}
-                className="w-full rounded-xl border border-[#C03A3A] bg-[#D44A4A] px-3 py-2 text-xs text-white hover:bg-[#C03A3A] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full rounded-xl border border-[#D63D56] bg-[#E94E77] px-3 py-2 text-xs text-white hover:bg-[#D63D56] transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {newsletterStatus === "loading"
                   ? "Inscription..."
@@ -332,7 +332,7 @@ export default function RessourcesPage() {
             >
               <h3 className="text-sm font-semibold mb-1 text-[var(--foreground)]">{item.title}</h3>
               <p className="text-xs text-[var(--beige-text-light)] mb-2">{item.description}</p>
-              <button className="w-full rounded-xl border border-[#C03A3A] bg-[#D44A4A] px-3 py-2 text-xs text-white hover:bg-[#C03A3A] transition">
+              <button className="w-full rounded-xl border border-[#D63D56] bg-[#E94E77] px-3 py-2 text-xs text-white hover:bg-[#D63D56] transition">
                 {item.cta}
               </button>
             </article>
@@ -348,7 +348,7 @@ export default function RessourcesPage() {
               href="https://foodlane.fr"
               target="_blank"
               rel="noopener noreferrer"
-              className="block w-full rounded-xl border border-[#C03A3A] bg-[#D44A4A] px-3 py-2 text-xs text-white hover:bg-[#C03A3A] transition text-center"
+              className="block w-full rounded-xl border border-[#D63D56] bg-[#E94E77] px-3 py-2 text-xs text-white hover:bg-[#D63D56] transition text-center"
             >
               Voir les articles →
             </a>
@@ -367,9 +367,9 @@ export default function RessourcesPage() {
                   {selectedRecipe.type && (
                     <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${
                       selectedRecipe.type.toLowerCase().includes("sucré")
-                        ? "bg-[#F5E6D8] text-[#D44A4A] border border-[#D4C4B8]"
+                        ? "bg-[#F5E6D8] text-[#E94E77] border border-[#D4C4B8]"
                         : selectedRecipe.type.toLowerCase().includes("salé")
-                        ? "bg-[#E8D5C4] text-[#C03A3A] border border-[#CAAFA0]"
+                        ? "bg-[#E8D5C4] text-[#D63D56] border border-[#CAAFA0]"
                         : "bg-[var(--beige-card-alt)] text-[var(--beige-text-muted)] border border-[var(--beige-border)]"
                     }`}>
                       {selectedRecipe.type}
@@ -378,7 +378,7 @@ export default function RessourcesPage() {
                   {detectDietaryBadges(selectedRecipe).map((badge) => (
                     <span
                       key={badge}
-                      className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#D44A4A] text-white border border-[#C03A3A] flex items-center gap-1"
+                      className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#E94E77] text-white border border-[#D63D56] flex items-center gap-1"
                     >
                       <span>{DIETARY_BADGE_ICONS[badge]}</span>
                       <span>{badge}</span>
@@ -436,7 +436,7 @@ export default function RessourcesPage() {
             </div>
 
             <button
-              className="w-full mt-2 px-4 py-2 rounded-2xl bg-[#D44A4A] border border-[#C03A3A] text-xs text-white"
+              className="w-full mt-2 px-4 py-2 rounded-2xl bg-[#E94E77] border border-[#D63D56] text-xs text-white"
               onClick={() => setSelectedRecipe(null)}
             >
               ← Fermer

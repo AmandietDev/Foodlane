@@ -89,7 +89,7 @@ function ResetPasswordForm() {
     return (
       <div className="space-y-4 text-center">
         <p className="text-red-700 text-sm">{msg}</p>
-        <Link href="/forgot-password" className="inline-block text-[#D44A4A] font-semibold underline text-sm">
+        <Link href="/forgot-password" className="inline-block text-[#E94E77] font-semibold underline text-sm">
           Demander un nouvel e-mail
         </Link>
         <div>
@@ -113,7 +113,7 @@ function ResetPasswordForm() {
           onChange={(e) => setPassword(e.target.value)}
           required
           minLength={8}
-          className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A]"
+          className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77]"
           autoComplete="new-password"
         />
       </div>
@@ -125,14 +125,14 @@ function ResetPasswordForm() {
           onChange={(e) => setConfirm(e.target.value)}
           required
           minLength={8}
-          className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A]"
+          className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77]"
           autoComplete="new-password"
         />
       </div>
       <button
         type="submit"
         disabled={loading}
-        className="w-full py-3 px-4 bg-[#D44A4A] hover:bg-[#C03A3A] text-white rounded-xl font-semibold disabled:opacity-50"
+        className="w-full py-3 px-4 bg-[#E94E77] hover:bg-[#D63D56] text-white rounded-xl font-semibold disabled:opacity-50"
       >
         {loading ? "Enregistrement…" : "Enregistrer le mot de passe"}
       </button>
@@ -148,7 +148,7 @@ export default function ResetPasswordPage() {
           <Logo />
           <h1 className="text-2xl font-bold text-[#6B2E2E] mt-4">Nouveau mot de passe</h1>
         </div>
-        <div className="bg-white rounded-2xl shadow-xl p-6 border border-[#E8A0A0]">
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-[var(--beige-border)]">
           <Suspense fallback={<div className="text-center py-8 text-gray-600 text-sm">Chargement…</div>}>
             <ResetPasswordForm />
           </Suspense>

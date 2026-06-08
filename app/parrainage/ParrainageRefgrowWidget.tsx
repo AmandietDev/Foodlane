@@ -15,7 +15,7 @@ export default function ParrainageRefgrowWidget({ email, projectId }: Props) {
     <>
       <div
         id="refgrow"
-        className="min-h-[420px] w-full overflow-hidden rounded-2xl border border-[#E8A0A0] bg-white shadow-sm"
+        className="min-h-[420px] w-full overflow-hidden rounded-2xl border border-[var(--beige-border)] bg-white shadow-sm"
         data-project-id={projectId}
         data-project-email={email}
       />

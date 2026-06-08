@@ -50,14 +50,14 @@ export default function SubscriptionUpsellModal({ open, onClose, variant = "week
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto rounded-xl border border-[#E8A0A0] bg-white px-4 py-2.5 text-sm font-semibold text-[#6B2E2E]"
+            className="w-full sm:w-auto rounded-xl border border-[var(--beige-border)] bg-white px-4 py-2.5 text-sm font-semibold text-[#6B2E2E]"
           >
             {variant === "signup" ? "Continuer avec le gratuit" : "Plus tard"}
           </button>
           <Link
             href="/premium"
             onClick={onClose}
-            className="w-full sm:w-auto text-center rounded-xl px-4 py-2.5 text-sm font-semibold text-[#D44A4A] underline-offset-2 hover:underline"
+            className="w-full sm:w-auto text-center rounded-xl px-4 py-2.5 text-sm font-semibold text-[#E94E77] underline-offset-2 hover:underline"
           >
             Voir tous les détails
           </Link>

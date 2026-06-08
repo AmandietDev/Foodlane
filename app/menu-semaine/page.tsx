@@ -527,14 +527,14 @@ export default function WeeklyMenuPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setViewMode(viewMode === "edit" ? "view" : "edit")}
-              className="px-3 py-1 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] text-xs text-[var(--text-primary)]"
+              className="px-3 py-1 rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] text-xs text-[var(--text-primary)]"
             >
               {viewMode === "edit" ? "Voir" : "Modifier"}
             </button>
             {viewMode === "edit" && (
               <button
                 onClick={handleSaveMenu}
-                className="px-3 py-1 rounded-xl bg-[#D44A4A] text-white text-xs"
+                className="px-3 py-1 rounded-xl bg-[#E94E77] text-white text-xs"
               >
                 Enregistrer
               </button>
@@ -563,7 +563,7 @@ export default function WeeklyMenuPage() {
           return (
             <div
               key={day.date}
-              className="rounded-2xl bg-[#FFD9D9] border border-[#E8A0A0] p-4 cursor-pointer hover:shadow-md transition-shadow"
+              className="rounded-2xl bg-[#FFD9D9] border border-[var(--beige-border)] p-4 cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => {
                 // En mode édition, ouvrir le modal pour choisir le jour et le repas
                 if (viewMode === "edit") {
@@ -577,7 +577,7 @@ export default function WeeklyMenuPage() {
                   {formatDateDisplay(day.date)}
                 </h3>
                 {recipeCount > 0 && (
-                  <span className="text-xs bg-[#D44A4A] text-white px-2 py-1 rounded-full font-semibold">
+                  <span className="text-xs bg-[#E94E77] text-white px-2 py-1 rounded-full font-semibold">
                     {recipeCount} {recipeCount === 1 ? "recette" : "recettes"}
                   </span>
                 )}
@@ -633,7 +633,7 @@ export default function WeeklyMenuPage() {
                                   setSelectedRecipe(recipe);
                                   setSelectedDay(null);
                                 }}
-                                className="text-xs text-[var(--text-primary)] hover:text-[#D44A4A] text-left flex-1 truncate"
+                                className="text-xs text-[var(--text-primary)] hover:text-[#E94E77] text-left flex-1 truncate"
                               >
                                 {recipe.nom_recette}
                               </button>
@@ -669,7 +669,7 @@ export default function WeeklyMenuPage() {
                               setSelectedMeal({ day: selectedDay, mealType: mealType.key });
                               setSelectedDay(null);
                             }}
-                            className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] py-1 text-center border border-dashed border-[var(--beige-border)] rounded-lg hover:border-[#D44A4A] transition-colors"
+                            className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] py-1 text-center border border-dashed border-[var(--beige-border)] rounded-lg hover:border-[#E94E77] transition-colors"
                           >
                             + Ajouter une autre recette
                           </button>
@@ -680,7 +680,7 @@ export default function WeeklyMenuPage() {
                             setSelectedMeal({ day: selectedDay, mealType: mealType.key });
                             setSelectedDay(null);
                           }}
-                          className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] py-1 text-center border border-dashed border-[var(--beige-border)] rounded-lg hover:border-[#D44A4A] transition-colors"
+                          className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] py-1 text-center border border-dashed border-[var(--beige-border)] rounded-lg hover:border-[#E94E77] transition-colors"
                         >
                           + Ajouter une recette
                         </button>
@@ -699,7 +699,7 @@ export default function WeeklyMenuPage() {
         <div className="space-y-3">
           <button
             onClick={handleGetDietitianAdvice}
-            className="w-full px-4 py-3 rounded-2xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm"
+            className="w-full px-4 py-3 rounded-2xl bg-[#E94E77] hover:bg-[#D63D56] text-white font-semibold text-sm"
           >
             💬 Demander l'avis de ma diététicienne
           </button>
@@ -708,19 +708,19 @@ export default function WeeklyMenuPage() {
           {isPremium ? (
             <button
               onClick={handleGenerateShoppingList}
-              className="w-full px-4 py-3 rounded-2xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm"
+              className="w-full px-4 py-3 rounded-2xl bg-[#E94E77] hover:bg-[#D63D56] text-white font-semibold text-sm"
             >
               🛒 Générer ma liste de courses
             </button>
           ) : (
-            <div className="rounded-2xl border border-[#E8A0A0] bg-[#FFF5F5] p-4">
+            <div className="rounded-2xl border border-[var(--beige-border)] bg-[#FFF5F5] p-4">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-xl bg-[#FFD9D9] flex items-center justify-center flex-shrink-0">
                   <span className="text-lg">🛒</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm text-[var(--text-primary)]">Voir ma liste de courses</p>
-                  <span className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full bg-[#D44A4A] text-white text-[10px] font-bold">
+                  <span className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full bg-[#E94E77] text-white text-[10px] font-bold">
                     🔒 Plan Premium
                   </span>
                 </div>
@@ -730,7 +730,7 @@ export default function WeeklyMenuPage() {
               </p>
               <button
                 onClick={() => router.push("/premium")}
-                className="w-full px-4 py-2.5 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors"
+                className="w-full px-4 py-2.5 rounded-xl bg-[#E94E77] hover:bg-[#D63D56] text-white font-semibold text-sm transition-colors"
               >
                 Passer au plan Premium
               </button>
@@ -761,7 +761,7 @@ export default function WeeklyMenuPage() {
               placeholder="Rechercher une recette..."
               value={recipeSearchTerm}
               onChange={(e) => setRecipeSearchTerm(e.target.value)}
-              className="w-full rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] px-3 py-2 text-sm outline-none focus:border-[#B07A6E] text-[var(--text-primary)] mb-3"
+              className="w-full rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] px-3 py-2 text-sm outline-none focus:border-[#B07A6E] text-[var(--text-primary)] mb-3"
             />
             
             {/* Filtres */}
@@ -776,8 +776,8 @@ export default function WeeklyMenuPage() {
                       onClick={() => setRecipeFilters({ ...recipeFilters, type })}
                       className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
                         recipeFilters.type === type
-                          ? "bg-[#D44A4A] text-white border border-[#C03A3A]"
-                          : "bg-[#FFD9D9] text-[var(--text-primary)] border border-[#E8A0A0] hover:border-[#D44A4A]"
+                          ? "bg-[#E94E77] text-white border border-[#D63D56]"
+                          : "bg-[#FFD9D9] text-[var(--text-primary)] border border-[var(--beige-border)] hover:border-[#E94E77]"
                       }`}
                     >
                       {type === "tous" ? "Tous" : type.charAt(0).toUpperCase() + type.slice(1)}
@@ -796,8 +796,8 @@ export default function WeeklyMenuPage() {
                       onClick={() => setRecipeFilters({ ...recipeFilters, difficulte })}
                       className={`flex-1 px-2 py-1.5 rounded-xl text-[10px] font-semibold transition-colors ${
                         recipeFilters.difficulte === difficulte
-                          ? "bg-[#D44A4A] text-white border border-[#C03A3A]"
-                          : "bg-[#FFD9D9] text-[var(--text-primary)] border border-[#E8A0A0] hover:border-[#D44A4A]"
+                          ? "bg-[#E94E77] text-white border border-[#D63D56]"
+                          : "bg-[#FFD9D9] text-[var(--text-primary)] border border-[var(--beige-border)] hover:border-[#E94E77]"
                       }`}
                     >
                       {difficulte}
@@ -814,7 +814,7 @@ export default function WeeklyMenuPage() {
                   placeholder="Ex: 30"
                   value={recipeFilters.tempsMax}
                   onChange={(e) => setRecipeFilters({ ...recipeFilters, tempsMax: e.target.value })}
-                  className="w-full rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] px-3 py-2 text-sm outline-none focus:border-[#B07A6E] text-[var(--text-primary)]"
+                  className="w-full rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] px-3 py-2 text-sm outline-none focus:border-[#B07A6E] text-[var(--text-primary)]"
                 />
               </div>
             </div>
@@ -831,7 +831,7 @@ export default function WeeklyMenuPage() {
                 <button
                   key={recipe.id}
                   onClick={() => handleSelectRecipe(recipe)}
-                  className="w-full text-left p-3 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] hover:border-[#D44A4A] transition-colors"
+                  className="w-full text-left p-3 rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] hover:border-[#E94E77] transition-colors"
                 >
                   <p className="font-semibold text-sm text-[var(--text-primary)]">{recipe.nom_recette}</p>
                   {recipe.description_courte && (
@@ -848,7 +848,7 @@ export default function WeeklyMenuPage() {
       {/* Modal de détails de recette */}
       {selectedRecipe && (
         <div className="fixed inset-0 bg-[#6B2E2E]/70 z-50 flex items-center justify-center">
-          <div className="w-full h-full max-w-md bg-[#FFF0F0] border-l border-r border-[#E8A0A0] overflow-y-auto px-4 pt-4 pb-8">
+          <div className="w-full h-full max-w-md bg-[#FFF0F0] border-l border-r border-[var(--beige-border)] overflow-y-auto px-4 pt-4 pb-8">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold">{selectedRecipe.nom_recette}</h3>
               <button
@@ -867,10 +867,10 @@ export default function WeeklyMenuPage() {
                     {selectedRecipe.type && (
                       <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${
                         selectedRecipe.type.toLowerCase().includes("sucré")
-                          ? "bg-[#FFD9D9] text-[#D44A4A] border border-[#E8A0A0]"
+                          ? "bg-[#FFD9D9] text-[#E94E77] border border-[var(--beige-border)]"
                           : selectedRecipe.type.toLowerCase().includes("salé")
-                          ? "bg-[#FFC4C4] text-[#C03A3A] border border-[#CAAFA0]"
-                          : "bg-[#FFD9D9] text-[var(--text-primary)] border border-[#E8A0A0]"
+                          ? "bg-[#FFC4C4] text-[#D63D56] border border-[#CAAFA0]"
+                          : "bg-[#FFD9D9] text-[var(--text-primary)] border border-[var(--beige-border)]"
                       }`}>
                         {selectedRecipe.type}
                       </span>
@@ -878,7 +878,7 @@ export default function WeeklyMenuPage() {
                     {detectDietaryBadges(selectedRecipe).map((badge) => (
                       <span
                         key={badge}
-                        className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#D44A4A] text-white border border-[#C03A3A] flex items-center gap-1"
+                        className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#E94E77] text-white border border-[#D63D56] flex items-center gap-1"
                       >
                         <span>{DIETARY_BADGE_ICONS[badge]}</span>
                         <span>{badge}</span>
@@ -892,23 +892,23 @@ export default function WeeklyMenuPage() {
                           ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
                           : selectedRecipe.difficulte.toLowerCase().includes("difficile")
                           ? "bg-orange-100 text-orange-700 border border-orange-300"
-                          : "bg-[#FFC4C4] text-[var(--text-primary)] border border-[#E8A0A0]"
+                          : "bg-[#FFC4C4] text-[var(--text-primary)] border border-[var(--beige-border)]"
                       }`}>
                         {selectedRecipe.difficulte}
                       </span>
                     )}
                     {(selectedRecipe.temps_preparation_min || 0) > 0 && (
-                      <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#FFC4C4] text-[var(--text-primary)] border border-[#E8A0A0]">
+                      <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#FFC4C4] text-[var(--text-primary)] border border-[var(--beige-border)]">
                         ⏱ {selectedRecipe.temps_preparation_min || 0} min
                       </span>
                     )}
                     {(selectedRecipe.nombre_personnes || 0) > 0 && (
-                      <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#FFC4C4] text-[var(--text-primary)] border border-[#E8A0A0]">
+                      <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#FFC4C4] text-[var(--text-primary)] border border-[var(--beige-border)]">
                         👥 {selectedRecipe.nombre_personnes} pers
                       </span>
                     )}
                     {selectedRecipe.calories && showCalories && (
-                      <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#FFC4C4] text-[var(--text-primary)] border border-[#E8A0A0]">
+                      <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-[#FFC4C4] text-[var(--text-primary)] border border-[var(--beige-border)]">
                         🔥 {selectedRecipe.calories} kcal
                       </span>
                     )}
@@ -1009,7 +1009,7 @@ export default function WeeklyMenuPage() {
             </p>
             <div className="space-y-2">
               {menu.days.map((day) => (
-                <div key={day.date} className="rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] p-3">
+                <div key={day.date} className="rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] p-3">
                   <h4 className="font-semibold text-xs mb-2 text-[var(--text-primary)]">
                     {formatDateDisplay(day.date)}
                   </h4>
@@ -1018,7 +1018,7 @@ export default function WeeklyMenuPage() {
                       <button
                         key={mealType.key}
                         onClick={() => handleAddRecipeToMeal(day.date, mealType.key)}
-                        className="px-3 py-2 rounded-xl bg-white border border-[#E8A0A0] hover:border-[#D44A4A] transition-colors text-xs text-[var(--text-primary)]"
+                        className="px-3 py-2 rounded-xl bg-white border border-[var(--beige-border)] hover:border-[#E94E77] transition-colors text-xs text-[var(--text-primary)]"
                       >
                         <span className="text-sm">{mealType.icon}</span>
                         <span className="block mt-1">{mealType.label}</span>
@@ -1072,10 +1072,10 @@ export default function WeeklyMenuPage() {
                   key={index}
                   className={`rounded-xl p-4 border ${
                     advice.priority === "high"
-                      ? "bg-[#FFD9D9] border-[#D44A4A]"
+                      ? "bg-[#FFD9D9] border-[#E94E77]"
                       : advice.priority === "medium"
-                      ? "bg-[#FFD9D9] border-[#E8A0A0]"
-                      : "bg-white border-[#E8A0A0]"
+                      ? "bg-[#FFD9D9] border-[var(--beige-border)]"
+                      : "bg-white border-[var(--beige-border)]"
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -1095,7 +1095,7 @@ export default function WeeklyMenuPage() {
 
             <button
               onClick={() => setShowAdviceModal(false)}
-              className="w-full mt-4 px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A]"
+              className="w-full mt-4 px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56]"
             >
               J'ai compris
             </button>
@@ -1130,15 +1130,15 @@ export default function WeeklyMenuPage() {
                   key={index}
                   className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
                     item.hasAtHome
-                      ? "bg-[#FFC4C4] border-[#D44A4A]"
-                      : "bg-white border-[#E8A0A0] hover:border-[#D44A4A]"
+                      ? "bg-[#FFC4C4] border-[#E94E77]"
+                      : "bg-white border-[var(--beige-border)] hover:border-[#E94E77]"
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={item.hasAtHome}
                     onChange={() => handleToggleItem(index)}
-                    className="w-5 h-5 rounded border-[#E8A0A0] text-[#D44A4A] focus:ring-[#D44A4A]"
+                    className="w-5 h-5 rounded border-[var(--beige-border)] text-[#E94E77] focus:ring-[#E94E77]"
                   />
                   <span className="text-sm text-[var(--text-primary)] flex-1">
                     {formatShoppingListItem(item)}
@@ -1150,13 +1150,13 @@ export default function WeeklyMenuPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setShowShoppingListModal(false)}
-                className="flex-1 px-4 py-2 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] text-sm text-[var(--text-primary)] hover:border-[#D44A4A]"
+                className="flex-1 px-4 py-2 rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] text-sm text-[var(--text-primary)] hover:border-[#E94E77]"
               >
                 Annuler
               </button>
               <button
                 onClick={handleValidateShoppingList}
-                className="flex-1 px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A]"
+                className="flex-1 px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56]"
               >
                 Valider
               </button>
@@ -1175,26 +1175,26 @@ export default function WeeklyMenuPage() {
             <div className="space-y-3 mb-4">
               <button
                 onClick={handleExportAsText}
-                className="w-full px-4 py-3 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] text-sm text-[var(--text-primary)] hover:border-[#D44A4A]"
+                className="w-full px-4 py-3 rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] text-sm text-[var(--text-primary)] hover:border-[#E94E77]"
               >
                 📄 Télécharger en texte (.txt)
               </button>
               <button
                 onClick={handleExportAsImage}
-                className="w-full px-4 py-3 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] text-sm text-[var(--text-primary)] hover:border-[#D44A4A]"
+                className="w-full px-4 py-3 rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] text-sm text-[var(--text-primary)] hover:border-[#E94E77]"
               >
                 🖼️ Télécharger en image (.png)
               </button>
               <button
                 onClick={handleCopyToClipboard}
-                className="w-full px-4 py-3 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] text-sm text-[var(--text-primary)] hover:border-[#D44A4A]"
+                className="w-full px-4 py-3 rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] text-sm text-[var(--text-primary)] hover:border-[#E94E77]"
               >
                 📋 Copier dans le presse-papiers
               </button>
             </div>
             <button
               onClick={() => setShowExportModal(false)}
-              className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm"
+              className="w-full px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm"
             >
               Annuler
             </button>

@@ -2,7 +2,7 @@
 
 import AnimateIn from "./AnimateIn";
 import { ASSISTANT_BULLETS, WEEK_CHALLENGES } from "./landingContent";
-import { CheckIcon, RobotIllustration } from "./LandingIcons";
+import { CheckIcon, MascotIllustration } from "./LandingIcons";
 import { landingTheme } from "./landingTheme";
 
 const ASSISTANT_PANEL_BG = landingTheme.assistantPanel;
@@ -16,7 +16,7 @@ export function LandingAssistantSection() {
       >
         <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(220px,268px)_minmax(240px,300px)_1fr] lg:gap-5">
           <div className="relative mx-auto h-52 w-full max-w-[220px] sm:h-56 lg:mx-0 lg:min-h-[320px] lg:max-w-none lg:h-full">
-            <RobotIllustration fill className="object-contain object-center" />
+            <MascotIllustration fill className="object-contain object-bottom drop-shadow-[0_8px_24px_rgba(233,78,119,0.15)]" />
           </div>
 
           <div className="flex min-w-0 flex-col justify-center px-1 py-2 lg:px-4 lg:py-6">

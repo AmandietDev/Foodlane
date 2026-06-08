@@ -153,12 +153,12 @@ export default function PlannerProfileForm({
   const chipOff =
     visualVariant === "foyer"
       ? "bg-white text-[#2A2523] border-[var(--beige-border)] hover:border-[var(--beige-accent)]"
-      : "bg-white text-[#5c3d3d] border-[#E8A0A0] hover:border-[#6B2E2E]";
+      : "bg-white text-[#5c3d3d] border-[var(--beige-border)] hover:border-[#6B2E2E]";
 
   const sectionClass =
     visualVariant === "foyer"
       ? "rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4 space-y-3"
-      : "rounded-2xl bg-white border border-[#E8A0A0] p-5 shadow-sm space-y-3";
+      : "rounded-2xl bg-white border border-[var(--beige-border)] p-5 shadow-sm space-y-3";
 
   const titleClass =
     visualVariant === "foyer"

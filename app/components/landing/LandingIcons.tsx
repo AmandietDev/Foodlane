@@ -3,19 +3,18 @@ import Link from "next/link";
 
 type IconProps = { className?: string };
 
+export const FOODLANE_LOGO_SRC = "/logo-app.png";
+
 export function FoodlaneLogoMark({ className = "h-9 w-9" }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 40 40" fill="none" aria-hidden>
-      <circle cx="20" cy="20" r="20" fill="#FFE4E0" />
-      <path
-        d="M20 8c-2 4-6 6-6 11 0 4 2.5 7 6 7s6-3 6-7c0-5-4-7-6-11z"
-        fill="#E94E67"
-      />
-      <path
-        d="M20 26c1.5 2 3.5 3 5 3 1.2 0 2-.5 2-1.5 0-2-3-3.5-7-3.5s-7 1.5-7 3.5c0 1 1 1.5 2 1.5 1.5 0 3.5-1 5-3z"
-        fill="#F9A8B4"
-      />
-    </svg>
+    <Image
+      src={FOODLANE_LOGO_SRC}
+      alt=""
+      width={36}
+      height={36}
+      className={`object-contain ${className}`}
+      unoptimized
+    />
   );
 }
 
@@ -116,14 +115,14 @@ export function CheckIcon({ className = "h-5 w-5" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden>
       <circle cx="10" cy="10" r="10" fill="#FFE4E0" />
-      <path d="M6 10l2.5 2.5L14 7" stroke="#E94E67" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 10l2.5 2.5L14 7" stroke="#E94E77" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
 export function StarIcon({ className = "h-4 w-4" }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 20 20" fill="#E94E67" aria-hidden>
+    <svg className={className} viewBox="0 0 20 20" fill="#E94E77" aria-hidden>
       <path d="M10 1.5l2.2 5.5 5.8.5-4.4 3.8 1.4 5.7L10 14.2 5 16.9l1.4-5.7-4.4-3.8 5.8-.5L10 1.5z" />
     </svg>
   );
@@ -134,44 +133,47 @@ export function HeartIcon({ className = "h-5 w-5" }: IconProps) {
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M12 20s-7-4.5-7-9.5a4 4 0 017-2.5 4 4 0 017 2.5C19 15.5 12 20 12 20z"
-        stroke="#E94E67"
+        stroke="#E94E77"
         strokeWidth="1.8"
       />
     </svg>
   );
 }
 
-const ASSISTANT_ROBOT_WIDTH = 287;
-const ASSISTANT_ROBOT_HEIGHT = 366;
+const ASSISTANT_MASCOT_WIDTH = 320;
+const ASSISTANT_MASCOT_HEIGHT = 380;
 
-export function RobotIllustration({
+export function MascotIllustration({
   className = "",
   fill = false,
 }: IconProps & { fill?: boolean }) {
   if (fill) {
     return (
       <Image
-        src="/landing/assistant-robot.png"
-        alt="Assistant diététicien IA Foodlane"
+        src="/landing/assistant-mascot.png"
+        alt="Mascotte Foodlane, votre assistant diététicien"
         fill
         className={className}
         unoptimized
-        sizes="268px"
+        sizes="(max-width: 1024px) 220px, 268px"
       />
     );
   }
 
   return (
     <Image
-      src="/landing/assistant-robot.png"
-      alt="Assistant diététicien IA Foodlane"
-      width={ASSISTANT_ROBOT_WIDTH}
-      height={ASSISTANT_ROBOT_HEIGHT}
+      src="/landing/assistant-mascot.png"
+      alt="Mascotte Foodlane, votre assistant diététicien"
+      width={ASSISTANT_MASCOT_WIDTH}
+      height={ASSISTANT_MASCOT_HEIGHT}
       className={`object-contain ${className}`}
       unoptimized
     />
   );
 }
+
+/** @deprecated Utiliser MascotIllustration */
+export const RobotIllustration = MascotIllustration;
 
 export function AppStoreBadge({ href }: { href: string }) {
   return (

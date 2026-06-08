@@ -56,7 +56,7 @@ function RefgrowReferralHintInner() {
         <span className="text-[#7A4545]">Ta visite peut être associée au parrainage (cookie Refgrow, ~30 jours).</span>
         <button
           type="button"
-          className="ml-2 inline-flex items-center rounded-md bg-[#D44A4A] px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-[#b83d3d]"
+          className="ml-2 inline-flex items-center rounded-md bg-[#E94E77] px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-[#b83d3d]"
           onClick={() => {
             sessionStorage.setItem(DISMISS_KEY, "1");
             setVisible(false);

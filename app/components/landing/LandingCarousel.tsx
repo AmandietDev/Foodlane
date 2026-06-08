@@ -86,7 +86,7 @@ export default function LandingCarousel({
             type="button"
             onClick={prev}
             aria-label="Précédent"
-            className={`${arrowLeftClass} top-1/2 z-10 flex ${arrowSizeClass} -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#E94E67] transition hover:bg-[#FFF0EE]`}
+            className={`${arrowLeftClass} top-1/2 z-10 flex ${arrowSizeClass} -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#E94E77] transition hover:bg-[#FFF0EE]`}
           >
             <ChevronLeft size={chevronSize} />
           </button>
@@ -94,7 +94,7 @@ export default function LandingCarousel({
             type="button"
             onClick={next}
             aria-label="Suivant"
-            className={`${arrowRightClass} top-1/2 z-10 flex ${arrowSizeClass} -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#E94E67] transition hover:bg-[#FFF0EE]`}
+            className={`${arrowRightClass} top-1/2 z-10 flex ${arrowSizeClass} -translate-y-1/2 items-center justify-center rounded-full bg-white text-[#E94E77] transition hover:bg-[#FFF0EE]`}
           >
             <ChevronRight size={chevronSize} />
           </button>
@@ -123,7 +123,7 @@ export default function LandingCarousel({
               aria-label={`Slide ${i + 1}`}
               onClick={() => setIndex(i)}
               className={`rounded-full transition-all ${
-                i === index ? `${dotActive} bg-[#E94E67]` : `${dotIdle} bg-[#F9C4CE]`
+                i === index ? `${dotActive} bg-[#E94E77]` : `${dotIdle} bg-[#F9C4CE]`
               }`}
             />
           ))}

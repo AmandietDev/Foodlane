@@ -108,7 +108,7 @@ function RecetteDetailInner() {
       <main className="min-h-screen bg-[#FFF8F6] px-4 py-8 pb-28">
         <div className="max-w-lg mx-auto space-y-4">
           <p className="text-red-700">{error || "Recette introuvable."}</p>
-          <Link href={backHref} className="text-sm font-semibold text-[#D44A4A] underline">
+          <Link href={backHref} className="text-sm font-semibold text-[#E94E77] underline">
             {backLabel}
           </Link>
         </div>
@@ -123,7 +123,7 @@ function RecetteDetailInner() {
           {backLabel}
         </Link>
 
-        <article className="rounded-2xl border border-[#E8A0A0] bg-white shadow-sm overflow-hidden">
+        <article className="rounded-2xl border border-[var(--beige-border)] bg-white shadow-sm overflow-hidden">
           <div className="p-4 border-b border-[#F0E4E4]">
             <h1 className="text-xl font-bold text-[#4a2c2c]">{recipe.nom_recette}</h1>
             <p className="text-xs text-[#7a5a5a] mt-1">

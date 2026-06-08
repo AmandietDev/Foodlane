@@ -69,8 +69,8 @@ export default function EquivalencesPage() {
           onClick={() => handleTabChange("recipe")}
           className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-colors ${
             activeTab === "recipe"
-              ? "bg-[#D44A4A] text-white border border-[#C03A3A]"
-              : "bg-[var(--beige-card)] text-[var(--foreground)] border border-[var(--beige-border)] hover:border-[#D44A4A]"
+              ? "bg-[#E94E77] text-white border border-[#D63D56]"
+              : "bg-[var(--beige-card)] text-[var(--foreground)] border border-[var(--beige-border)] hover:border-[#E94E77]"
           }`}
         >
           🍳 Pour les recettes
@@ -79,8 +79,8 @@ export default function EquivalencesPage() {
           onClick={() => handleTabChange("nutrition")}
           className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-colors ${
             activeTab === "nutrition"
-              ? "bg-[#D44A4A] text-white border border-[#C03A3A]"
-              : "bg-[var(--beige-card)] text-[var(--foreground)] border border-[var(--beige-border)] hover:border-[#D44A4A]"
+              ? "bg-[#E94E77] text-white border border-[#D63D56]"
+              : "bg-[var(--beige-card)] text-[var(--foreground)] border border-[var(--beige-border)] hover:border-[#E94E77]"
           }`}
         >
           🥗 Conseils nutritionnels
@@ -101,7 +101,7 @@ export default function EquivalencesPage() {
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Ex: beurre, œuf, sucre, farine..."
-            className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A] placeholder:text-[var(--beige-text-muted)]"
+            className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77] placeholder:text-[var(--beige-text-muted)]"
           />
         </section>
       )}
@@ -142,7 +142,7 @@ export default function EquivalencesPage() {
                     <button
                       key={goal.id}
                       onClick={() => handleGoalSelect(goal.id)}
-                      className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-4 py-3 text-left hover:border-[#D44A4A] transition-colors"
+                      className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-4 py-3 text-left hover:border-[#E94E77] transition-colors"
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">{goal.icon}</span>
@@ -262,21 +262,21 @@ function AlternativeCard({ alternative }: { alternative: Alternative }) {
 
         {alternative.interest && (
           <div>
-            <p className="font-medium text-[#D44A4A] mb-1">✓ Intérêt :</p>
+            <p className="font-medium text-[#E94E77] mb-1">✓ Intérêt :</p>
             <p className="text-[var(--beige-text-light)]">{alternative.interest}</p>
           </div>
         )}
 
         {alternative.idealFor && (
           <div>
-            <p className="font-medium text-[#D44A4A] mb-1">⭐ Idéal pour :</p>
+            <p className="font-medium text-[#E94E77] mb-1">⭐ Idéal pour :</p>
             <p className="text-[var(--beige-text-light)]">{alternative.idealFor}</p>
           </div>
         )}
 
         {alternative.variant && (
           <div>
-            <p className="font-medium text-[#D44A4A] mb-1">🔄 Variante :</p>
+            <p className="font-medium text-[#E94E77] mb-1">🔄 Variante :</p>
             <p className="text-[var(--beige-text-light)]">{alternative.variant}</p>
           </div>
         )}
@@ -353,7 +353,7 @@ function NutritionGoalView({
           <ul className="space-y-2">
             {goalData.keyPrinciples.map((principle, idx) => (
               <li key={idx} className="text-xs text-[var(--beige-text-light)] flex items-start gap-2">
-                <span className="text-[#D44A4A] mt-1">•</span>
+                <span className="text-[#E94E77] mt-1">•</span>
                 <span>{principle}</span>
               </li>
             ))}
@@ -367,7 +367,7 @@ function NutritionGoalView({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Rechercher une équivalence..."
-            className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A] placeholder:text-[var(--beige-text-muted)]"
+            className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77] placeholder:text-[var(--beige-text-muted)]"
           />
         </div>
       </div>
@@ -447,7 +447,7 @@ function NutritionEquivalenceCard({
         </div>
 
         <div>
-          <p className="font-medium text-[#D44A4A] mb-1">✓ Intérêt :</p>
+          <p className="font-medium text-[#E94E77] mb-1">✓ Intérêt :</p>
           <p className="text-[var(--beige-text-light)]">{equivalence.interest}</p>
         </div>
       </div>

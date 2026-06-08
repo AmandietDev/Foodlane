@@ -26,13 +26,13 @@ export default function BillingCancelPage() {
         <div className="w-full max-w-sm space-y-3">
           <button
             onClick={() => router.push("/premium")}
-            className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors"
+            className="w-full px-4 py-3 rounded-xl bg-[#E94E77] hover:bg-[#D63D56] text-white font-semibold text-sm transition-colors"
           >
             Réessayer
           </button>
           <button
             onClick={() => router.push("/")}
-            className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+            className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
           >
             Retour à l'accueil
           </button>

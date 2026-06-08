@@ -206,21 +206,21 @@ export default function CookieConsentBanner() {
               <button
                 type="button"
                 onClick={refuseAll}
-                className="flex-1 px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-sm font-semibold text-[var(--foreground)] hover:border-[#D44A4A] transition-colors"
+                className="flex-1 px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-sm font-semibold text-[var(--foreground)] hover:border-[#E94E77] transition-colors"
               >
                 Tout refuser
               </button>
               <button
                 type="button"
                 onClick={() => setCustomize(true)}
-                className="flex-1 px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-sm font-semibold text-[var(--foreground)] hover:border-[#D44A4A] transition-colors"
+                className="flex-1 px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-sm font-semibold text-[var(--foreground)] hover:border-[#E94E77] transition-colors"
               >
                 Personnaliser
               </button>
               <button
                 type="button"
                 onClick={acceptAll}
-                className="flex-1 px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
+                className="flex-1 px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56] transition-colors"
               >
                 Tout accepter
               </button>
@@ -286,21 +286,21 @@ export default function CookieConsentBanner() {
               <button
                 type="button"
                 onClick={refuseAll}
-                className="flex-1 px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-sm font-semibold text-[var(--foreground)] hover:border-[#D44A4A] transition-colors"
+                className="flex-1 px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-sm font-semibold text-[var(--foreground)] hover:border-[#E94E77] transition-colors"
               >
                 Tout refuser
               </button>
               <button
                 type="button"
                 onClick={saveCustom}
-                className="flex-1 px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-sm font-semibold text-[var(--foreground)] hover:border-[#D44A4A] transition-colors"
+                className="flex-1 px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-sm font-semibold text-[var(--foreground)] hover:border-[#E94E77] transition-colors"
               >
                 Enregistrer mes choix
               </button>
               <button
                 type="button"
                 onClick={acceptAll}
-                className="flex-1 px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
+                className="flex-1 px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56] transition-colors"
               >
                 Tout accepter
               </button>
@@ -338,7 +338,7 @@ function CategoryRow({
         aria-label={title}
         onClick={() => onChange(!checked)}
         className={`relative shrink-0 w-12 h-6 rounded-full transition-colors ${
-          checked ? "bg-[#D44A4A]" : "bg-[#D4C4B8]"
+          checked ? "bg-[#E94E77]" : "bg-[#D4C4B8]"
         }`}
       >
         <span

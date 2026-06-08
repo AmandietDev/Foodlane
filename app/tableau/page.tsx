@@ -115,7 +115,7 @@ export default function TableauPage() {
           <FreeTierAdSlot placement="tableau_inline" oncePerSession className="max-w-xl mx-auto" />
         ) : null}
 
-        <section className="rounded-3xl border border-[#E8A0A0] overflow-hidden shadow-sm bg-[#FFF1F1]">
+        <section className="rounded-3xl border border-[var(--beige-border)] overflow-hidden shadow-sm bg-[#FFF1F1]">
           <div className="relative h-48 w-full bg-white">
             <Image
               src="/menu-generation-collage.png"
@@ -145,19 +145,19 @@ export default function TableauPage() {
             <div className="flex flex-wrap gap-2">
               <Link
                 href="/preferences"
-                className="inline-flex items-center rounded-full border border-[#E8A0A0] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B2E2E]"
+                className="inline-flex items-center rounded-full border border-[var(--beige-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B2E2E]"
               >
                 {t("dashboard.prefs_link")}
               </Link>
               <Link
                 href="#mon-carnet-menus"
-                className="inline-flex items-center rounded-full border border-[#E8A0A0] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B2E2E] hover:bg-[#fff8f8] transition-colors"
+                className="inline-flex items-center rounded-full border border-[var(--beige-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B2E2E] hover:bg-[#fff8f8] transition-colors"
               >
                 {t("dashboard.carnet_link")}
               </Link>
               <Link
                 href="/favoris"
-                className="inline-flex items-center rounded-full border border-[#E8A0A0] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B2E2E] hover:bg-[#fff8f8] transition-colors"
+                className="inline-flex items-center rounded-full border border-[var(--beige-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B2E2E] hover:bg-[#fff8f8] transition-colors"
                 aria-label={t("dashboard.aria_favorites")}
               >
                 {t("dashboard.favorites_link")}
@@ -165,7 +165,7 @@ export default function TableauPage() {
             </div>
             <Link
               href="/planifier"
-              className="mt-4 block w-full rounded-2xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white text-center font-semibold py-3.5 transition-colors"
+              className="mt-4 block w-full rounded-2xl bg-[#E94E77] hover:bg-[#D63D56] text-white text-center font-semibold py-3.5 transition-colors"
             >
               {t("dashboard.cta_generate")}
             </Link>
@@ -177,7 +177,7 @@ export default function TableauPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Link
             href="/preferences"
-            className="block rounded-2xl border border-[#E8A0A0] overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white text-center"
+            className="block rounded-2xl border border-[var(--beige-border)] overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white text-center"
             aria-label={t("dashboard.aria_prefs_card")}
           >
             <div className="relative h-36 w-full bg-white sm:h-40">
@@ -203,7 +203,7 @@ export default function TableauPage() {
 
         <Link
           href="/recettes"
-          className="block rounded-2xl border border-[#E8A0A0] overflow-hidden shadow-sm hover:shadow-md transition-shadow text-left"
+          className="block rounded-2xl border border-[var(--beige-border)] overflow-hidden shadow-sm hover:shadow-md transition-shadow text-left"
           aria-label={t("dashboard.aria_recipes_card")}
         >
           <div className="relative min-h-[14rem] h-64 w-full bg-white sm:min-h-[15rem] sm:h-72">
@@ -239,7 +239,7 @@ export default function TableauPage() {
           {menusLoading ? (
             <p className="text-sm text-[#7a5a5a]">{t("dashboard.carnet_loading")}</p>
           ) : menus.length === 0 ? (
-            <p className="text-sm text-[#7a5a5a] rounded-xl border border-dashed border-[#E8A0A0] p-6 text-center">
+            <p className="text-sm text-[#7a5a5a] rounded-xl border border-dashed border-[var(--beige-border)] p-6 text-center">
               {t("dashboard.carnet_empty")}
             </p>
           ) : (

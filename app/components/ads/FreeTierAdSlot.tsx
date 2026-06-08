@@ -101,12 +101,12 @@ export function FreeTierAdSlot({ placement, className = "", oncePerSession = fal
     if (process.env.NODE_ENV !== "development") return null;
     return (
       <div
-        className={`flex items-center justify-between gap-2 border-t border-[#E8A0A0] bg-[#FFF8F6] px-3 py-2 text-xs md:hidden ${className}`}
+        className={`flex items-center justify-between gap-2 border-t border-[var(--beige-border)] bg-[#FFF8F6] px-3 py-2 text-xs md:hidden ${className}`}
       >
         <span className="text-[#8A4A4A] truncate">Dev : slots AdSense — voir .env.example</span>
         <Link
           href="/premium"
-          className="shrink-0 rounded-lg bg-[#D44A4A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#C03A3A] transition-colors"
+          className="shrink-0 rounded-lg bg-[#E94E77] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#D63D56] transition-colors"
         >
           Passer Premium
         </Link>
@@ -116,7 +116,7 @@ export function FreeTierAdSlot({ placement, className = "", oncePerSession = fal
 
   if (placement === "mobile_bottom") {
     return (
-      <div className={`md:hidden border-t border-[#E8A0A0] bg-[#FFF8F6] ${className}`}>
+      <div className={`md:hidden border-t border-[var(--beige-border)] bg-[#FFF8F6] ${className}`}>
         <div className="flex min-h-[52px] max-h-[120px] items-center justify-center overflow-hidden px-1">
           <ins
             ref={insRef}
@@ -130,7 +130,7 @@ export function FreeTierAdSlot({ placement, className = "", oncePerSession = fal
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-[#F0E0E0] px-3 py-1.5 text-[11px] text-[#8A4A4A]">
           <span className="truncate">Publicité</span>
-          <Link href="/premium" className="shrink-0 font-semibold text-[#D44A4A] underline-offset-2 hover:underline">
+          <Link href="/premium" className="shrink-0 font-semibold text-[#E94E77] underline-offset-2 hover:underline">
             Retirer les pubs
           </Link>
         </div>

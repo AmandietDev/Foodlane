@@ -330,7 +330,7 @@ export default function PremiumPage() {
         </p>
 
         {pricingCtx?.showFounderPricing && (
-          <div className="mt-5 rounded-2xl border border-[#E8A0A0] bg-[#FFF8F6] p-4 text-left shadow-sm">
+          <div className="mt-5 rounded-2xl border border-[var(--beige-border)] bg-[#FFF8F6] p-4 text-left shadow-sm">
             <p className="text-sm font-bold text-[#4a2c2c]">
               Offre de lancement — les {pricingCtx.foundersLimit} premiers
             </p>
@@ -499,10 +499,10 @@ export default function PremiumPage() {
 
         {/* Premium — vedette */}
         <article
-          className="relative flex flex-col overflow-hidden rounded-3xl border-2 border-[var(--accent)] bg-gradient-to-br from-[#D44A4A] to-[#9E3030] p-6 text-white shadow-xl ring-2 ring-[#D44A4A]/30 lg:scale-[1.02] lg:shadow-2xl"
+          className="relative flex flex-col overflow-hidden rounded-3xl border-2 border-[var(--accent)] bg-gradient-to-br from-[#E94E77] to-[#9E3030] p-6 text-white shadow-xl ring-2 ring-[#E94E77]/30 lg:scale-[1.02] lg:shadow-2xl"
           aria-labelledby="premium-heading"
         >
-          <span className="absolute right-4 top-4 rounded-full bg-white/95 px-3 py-1 text-xs font-bold text-[#C03A3A] shadow">
+          <span className="absolute right-4 top-4 rounded-full bg-white/95 px-3 py-1 text-xs font-bold text-[#D63D56] shadow">
             Le plus populaire
           </span>
           <div className="text-center text-3xl" aria-hidden>
@@ -562,7 +562,7 @@ export default function PremiumPage() {
               <button
                 type="button"
                 onClick={() => router.push("/login")}
-                className="w-full rounded-2xl bg-white py-3 text-sm font-bold text-[#C03A3A] shadow transition hover:bg-white/95"
+                className="w-full rounded-2xl bg-white py-3 text-sm font-bold text-[#D63D56] shadow transition hover:bg-white/95"
               >
                 Se connecter pour s’abonner
               </button>
@@ -571,12 +571,12 @@ export default function PremiumPage() {
                 type="button"
                 onClick={() => void handleCheckout("premium")}
                 disabled={checkoutLoading !== null || upgradeLoading || cancelLoading}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3 text-sm font-bold text-[#C03A3A] shadow transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3 text-sm font-bold text-[#D63D56] shadow transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {checkoutLoading === "premium" ? (
                   <>
                     <span
-                      className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#C03A3A] border-t-transparent"
+                      className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#D63D56] border-t-transparent"
                       aria-hidden
                     />
                     Redirection vers le paiement…
@@ -598,7 +598,7 @@ export default function PremiumPage() {
           <p className="mt-6 text-3xl font-bold text-[var(--foreground)]">{plusDisplayPrice}</p>
           <p className="mt-2 text-xs text-[var(--beige-text-muted)]">{plusSecondaryLine}</p>
           {useFounderPrices && (
-            <p className="mt-2 text-center text-[11px] font-semibold tracking-wide text-[#C03A3A]">
+            <p className="mt-2 text-center text-[11px] font-semibold tracking-wide text-[#D63D56]">
               Offre de lancement · tarif à vie
             </p>
           )}
@@ -709,7 +709,7 @@ export default function PremiumPage() {
                 <th scope="col" className="px-4 py-3 font-semibold text-[var(--foreground)]">
                   Gratuit
                 </th>
-                <th scope="col" className="px-4 py-3 font-semibold text-[#C03A3A]">
+                <th scope="col" className="px-4 py-3 font-semibold text-[#D63D56]">
                   Premium
                 </th>
                 <th scope="col" className="px-4 py-3 font-semibold text-[var(--foreground)]">
@@ -735,7 +735,7 @@ export default function PremiumPage() {
 
       {isPremium && user && (
         <section
-          className="mx-auto mt-12 max-w-2xl rounded-2xl border border-[#E8A0A0] bg-[#FFF8F6] p-5 shadow-sm"
+          className="mx-auto mt-12 max-w-2xl rounded-2xl border border-[var(--beige-border)] bg-[#FFF8F6] p-5 shadow-sm"
           aria-labelledby="manage-sub-heading"
         >
           <h2 id="manage-sub-heading" className="text-base font-semibold text-[#4a2c2c]">
@@ -747,7 +747,7 @@ export default function PremiumPage() {
           {profile?.is_beta_tester ? (
             <p className="mt-2 text-sm text-[#6B2E2E]">{getSubscriptionAccountMessage(profile).detailTu}</p>
           ) : profile?.cancel_at_period_end ? (
-            <p className="mt-3 rounded-xl border border-[#E8A0A0] bg-[#FFE8E8] p-3 text-sm font-medium text-[#4a2c2c]">
+            <p className="mt-3 rounded-xl border border-[var(--beige-border)] bg-[#FFE8E8] p-3 text-sm font-medium text-[#4a2c2c]">
               {getSubscriptionAccountMessage(profile).detailTu}{" "}
               Pour modifier ta carte ou tes factures, utilise le portail Stripe depuis le menu ou la page
               Compte.
@@ -763,7 +763,7 @@ export default function PremiumPage() {
                 type="button"
                 onClick={() => void handleCancelSubscription()}
                 disabled={cancelLoading || upgradeLoading || checkoutLoading !== null}
-                className="mt-4 w-full rounded-2xl border border-[#D44A4A] bg-white px-4 py-3 text-sm font-semibold text-[#6B2E2E] transition hover:bg-[#FFF0F0] disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-4 w-full rounded-2xl border border-[#E94E77] bg-white px-4 py-3 text-sm font-semibold text-[#6B2E2E] transition hover:bg-[#FFF0F0] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {cancelLoading ? "Redirection vers Stripe…" : "Résilier mon abonnement"}
               </button>

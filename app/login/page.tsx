@@ -301,7 +301,7 @@ export default function LoginPage() {
         </h1>
 
         {/* Carte principale */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 border border-[#E8A0A0]">
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-[var(--beige-border)]">
           {passwordResetSuccess && (
             <div className="mb-4 p-4 rounded-xl bg-green-50 border border-green-200 text-green-800 text-sm">
               Ton mot de passe a été mis à jour. Tu peux te connecter avec ton nouveau mot de passe.
@@ -345,7 +345,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77] focus:border-transparent"
                   placeholder="ton@email.com"
                 />
               </div>
@@ -359,13 +359,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77] focus:border-transparent"
                   placeholder="••••••••"
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <Link href="/forgot-password" className="text-sm text-[#D44A4A] hover:underline">
+                <Link href="/forgot-password" className="text-sm text-[#E94E77] hover:underline">
                   Mot de passe oublié ?
                 </Link>
               </div>
@@ -373,7 +373,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 bg-[#D44A4A] hover:bg-[#C03A3A] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 px-4 bg-[#E94E77] hover:bg-[#D63D56] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Connexion..." : "Se connecter"}
               </button>
@@ -389,7 +389,7 @@ export default function LoginPage() {
                       setEmail("");
                       setPassword("");
                     }}
-                    className="text-[#D44A4A] font-semibold hover:underline"
+                    className="text-[#E94E77] font-semibold hover:underline"
                   >
                     Créer un compte
                   </button>
@@ -415,7 +415,7 @@ export default function LoginPage() {
                     value={prenom}
                     onChange={(e) => setPrenom(e.target.value)}
                     required
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77] focus:border-transparent"
                     placeholder="Prénom"
                   />
                 </div>
@@ -429,7 +429,7 @@ export default function LoginPage() {
                     value={nom}
                     onChange={(e) => setNom(e.target.value)}
                     required
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77] focus:border-transparent"
                     placeholder="Nom"
                   />
                 </div>
@@ -444,7 +444,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77] focus:border-transparent"
                   placeholder="ton@email.com"
                 />
               </div>
@@ -459,7 +459,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77] focus:border-transparent"
                   placeholder="••••••••"
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -476,7 +476,7 @@ export default function LoginPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77] focus:border-transparent"
                   placeholder="••••••••"
                 />
               </div>
@@ -484,7 +484,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 bg-[#D44A4A] hover:bg-[#C03A3A] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 px-4 bg-[#E94E77] hover:bg-[#D63D56] text-white rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Création..." : "Créer mon compte"}
               </button>
@@ -503,7 +503,7 @@ export default function LoginPage() {
                       setPrenom("");
                       setConfirmPassword("");
                     }}
-                    className="text-[#D44A4A] font-semibold hover:underline"
+                    className="text-[#E94E77] font-semibold hover:underline"
                   >
                     Se connecter
                   </button>
@@ -518,7 +518,7 @@ export default function LoginPage() {
         <div className="text-center mt-6">
           <Link
             href="/"
-            className="text-sm text-gray-600 hover:text-[#D44A4A] transition-colors"
+            className="text-sm text-gray-600 hover:text-[#E94E77] transition-colors"
           >
             ← Retour à l'accueil
           </Link>

@@ -26,14 +26,14 @@ export default function UserStatusBar() {
 
   if (loading) {
     return (
-      <div className="w-full bg-[#FFF0F0] border-b border-[#E8A0A0] px-4 py-2">
+      <div className="w-full bg-[#FFF0F0] border-b border-[var(--beige-border)] px-4 py-2">
         <LoadingSpinner size="sm" message="" className="py-1" />
       </div>
     );
   }
 
   return (
-    <div className="w-full bg-[#FFF0F0] border-b border-[#E8A0A0] px-4 py-3 flex items-center justify-between">
+    <div className="w-full bg-[#FFF0F0] border-b border-[var(--beige-border)] px-4 py-3 flex items-center justify-between">
       {user && profile ? (
         <>
           <div className="flex items-center gap-2">
@@ -43,7 +43,7 @@ export default function UserStatusBar() {
           </div>
           <button
             onClick={handleLogout}
-            className="px-4 py-2 text-sm font-semibold text-white bg-[#D44A4A] hover:bg-[#C03A3A] rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-semibold text-white bg-[#E94E77] hover:bg-[#D63D56] rounded-lg transition-colors"
           >
             Se déconnecter
           </button>
@@ -51,7 +51,7 @@ export default function UserStatusBar() {
       ) : (
         <Link
           href="/login"
-          className="w-full text-center px-4 py-2 text-sm font-semibold text-white bg-[#D44A4A] hover:bg-[#C03A3A] rounded-lg transition-colors"
+          className="w-full text-center px-4 py-2 text-sm font-semibold text-white bg-[#E94E77] hover:bg-[#D63D56] rounded-lg transition-colors"
         >
           Se connecter / Créer un compte
         </Link>

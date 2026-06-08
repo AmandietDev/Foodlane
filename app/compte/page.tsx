@@ -429,7 +429,7 @@ export default function AccountPage() {
         
         {/* Mention phase de test pour les nouveaux comptes */}
         {isNewAccount && !showLoginForm && (
-          <div className="mb-6 p-3 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0]">
+          <div className="mb-6 p-3 rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)]">
             <p className="text-xs text-center text-[#6B2E2E]">
               <strong>Version de test :</strong> La version de test vous donne accès gratuitement à toutes les fonctionnalités Premium, afin d'améliorer l'application grâce à vos retours.
             </p>
@@ -478,7 +478,7 @@ export default function AccountPage() {
                     }
                   }}
                   disabled={loadingPortal || cancelSubscriptionLoading}
-                  className="w-full py-2 px-4 text-sm font-medium text-white bg-[#D44A4A] hover:bg-[#C03A3A] rounded-xl transition-colors disabled:opacity-50"
+                  className="w-full py-2 px-4 text-sm font-medium text-white bg-[#E94E77] hover:bg-[#D63D56] rounded-xl transition-colors disabled:opacity-50"
                 >
                   {loadingPortal ? "Chargement..." : "Gérer mon abonnement (Stripe)"}
                 </button>
@@ -785,13 +785,13 @@ export default function AccountPage() {
                   setShowCguModal(false);
                   setCguAccepted(true);
                 }}
-                className="flex-1 px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A]"
+                className="flex-1 px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56]"
               >
                 J&apos;accepte
               </button>
               <button
                 onClick={() => setShowCguModal(false)}
-                className="flex-1 px-4 py-2 rounded-xl bg-[#FFD9D9] border border-[#E8A0A0] text-sm text-[#6B2E2E] hover:border-[#D44A4A]"
+                className="flex-1 px-4 py-2 rounded-xl bg-[#FFD9D9] border border-[var(--beige-border)] text-sm text-[#6B2E2E] hover:border-[#E94E77]"
               >
                 Fermer
               </button>

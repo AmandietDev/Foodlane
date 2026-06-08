@@ -326,7 +326,7 @@ export default function MenuDetailPage() {
               type="button"
               disabled={savedInCarnet || savingCarnet}
               onClick={saveInCarnet}
-              className="rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 transition-colors"
+              className="rounded-xl bg-[#E94E77] hover:bg-[#D63D56] disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 transition-colors"
             >
               {savedInCarnet ? "Menu enregistré dans Mon carnet" : savingCarnet ? "Enregistrement..." : "Enregistrer mon menu"}
             </button>
@@ -353,7 +353,7 @@ export default function MenuDetailPage() {
             </p>
           <div className="space-y-4">
             {days.map((d) => (
-              <div key={d.id} className="rounded-2xl border border-[#E8A0A0] bg-white p-4 shadow-sm">
+              <div key={d.id} className="rounded-2xl border border-[var(--beige-border)] bg-white p-4 shadow-sm">
                 <div className="text-sm font-semibold text-[#6B2E2E] mb-2">
                   Jour {d.day_index + 1} — {d.day_date}
                 </div>
@@ -388,7 +388,7 @@ export default function MenuDetailPage() {
                           ) : (
                             <div className="w-full h-full bg-gradient-to-br from-[#FFE5E5] to-[#FFD2D2] flex flex-col items-center justify-center gap-1 text-[#9C4A4A] font-bold p-1">
                               <span>{recipeTitle.charAt(0).toUpperCase()}</span>
-                              <span className="text-[10px] leading-none rounded bg-white/80 px-1.5 py-0.5 text-[#6B2E2E] border border-[#E8A0A0]">
+                              <span className="text-[10px] leading-none rounded bg-white/80 px-1.5 py-0.5 text-[#6B2E2E] border border-[var(--beige-border)]">
                                 Image indisponible
                               </span>
                             </div>
@@ -422,7 +422,7 @@ export default function MenuDetailPage() {
                             className={`print:hidden mt-1 text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
                               dislikedIds.has(r.id)
                                 ? "bg-[#6B2E2E] text-white border-[#6B2E2E]"
-                                : "text-[#9a7a7a] border-[#E8D5D5] hover:border-[#D44A4A] hover:text-[#D44A4A]"
+                                : "text-[#9a7a7a] border-[#E8D5D5] hover:border-[#E94E77] hover:text-[#E94E77]"
                             }`}
                           >
                             {dislikedIds.has(r.id) ? "✓ Recette exclue" : "👎 Ne plus proposer"}
@@ -523,7 +523,7 @@ export default function MenuDetailPage() {
           onClick={() => setSelectedRecipe(null)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-[#FFF0F0] border border-[#E8A0A0] shadow-xl max-h-[88vh] overflow-y-auto"
+            className="w-full max-w-lg rounded-2xl bg-[#FFF0F0] border border-[var(--beige-border)] shadow-xl max-h-[88vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-[#E8D5D5] flex items-center justify-between gap-2 flex-wrap">

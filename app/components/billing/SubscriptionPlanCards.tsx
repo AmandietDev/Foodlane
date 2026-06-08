@@ -80,8 +80,8 @@ export default function SubscriptionPlanCards({ compact = false }: Props) {
           </p>
         </article>
 
-        <article className="relative flex flex-col rounded-2xl border-2 border-[#D44A4A] bg-gradient-to-br from-[#D44A4A] to-[#9E3030] p-4 text-white text-sm">
-          <span className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-0.5 text-[10px] font-bold text-[#C03A3A]">
+        <article className="relative flex flex-col rounded-2xl border-2 border-[#E94E77] bg-gradient-to-br from-[#E94E77] to-[#9E3030] p-4 text-white text-sm">
+          <span className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-0.5 text-[10px] font-bold text-[#D63D56]">
             Populaire
           </span>
           <h3 className="mt-4 font-bold">Premium</h3>
@@ -100,7 +100,7 @@ export default function SubscriptionPlanCards({ compact = false }: Props) {
           ) : !user ? (
             <Link
               href="/login"
-              className="mt-4 block rounded-xl bg-white py-2.5 text-center text-xs font-bold text-[#C03A3A]"
+              className="mt-4 block rounded-xl bg-white py-2.5 text-center text-xs font-bold text-[#D63D56]"
             >
               Se connecter
             </Link>
@@ -109,7 +109,7 @@ export default function SubscriptionPlanCards({ compact = false }: Props) {
               type="button"
               onClick={() => void handleCheckout("premium")}
               disabled={checkoutLoading !== null || upgradeLoading}
-              className="mt-4 w-full rounded-xl bg-white py-2.5 text-xs font-bold text-[#C03A3A] disabled:opacity-60"
+              className="mt-4 w-full rounded-xl bg-white py-2.5 text-xs font-bold text-[#D63D56] disabled:opacity-60"
             >
               {checkoutLoading === "premium" ? "Redirection…" : "S’abonner à Premium"}
             </button>
@@ -134,14 +134,14 @@ export default function SubscriptionPlanCards({ compact = false }: Props) {
               type="button"
               onClick={() => void handleUpgradeToPremiumPlus()}
               disabled={upgradeLoading || checkoutLoading !== null}
-              className="mt-4 w-full rounded-xl bg-[#D44A4A] py-2.5 text-xs font-bold text-white disabled:opacity-60"
+              className="mt-4 w-full rounded-xl bg-[#E94E77] py-2.5 text-xs font-bold text-white disabled:opacity-60"
             >
               {upgradeLoading ? "Mise à niveau…" : "Passer à Premium Plus"}
             </button>
           ) : !user ? (
             <Link
               href="/login"
-              className="mt-4 block rounded-xl bg-[#D44A4A] py-2.5 text-center text-xs font-bold text-white"
+              className="mt-4 block rounded-xl bg-[#E94E77] py-2.5 text-center text-xs font-bold text-white"
             >
               Se connecter
             </Link>
@@ -150,7 +150,7 @@ export default function SubscriptionPlanCards({ compact = false }: Props) {
               type="button"
               onClick={() => void handleCheckout("premium_plus")}
               disabled={checkoutLoading !== null || upgradeLoading}
-              className="mt-4 w-full rounded-xl bg-[#D44A4A] py-2.5 text-xs font-bold text-white disabled:opacity-60"
+              className="mt-4 w-full rounded-xl bg-[#E94E77] py-2.5 text-xs font-bold text-white disabled:opacity-60"
             >
               {checkoutLoading === "premium_plus" ? "Redirection…" : "S’abonner à Premium Plus"}
             </button>
@@ -158,7 +158,7 @@ export default function SubscriptionPlanCards({ compact = false }: Props) {
         </article>
       </div>
       {useFounderPrices && (
-        <p className="text-center text-[11px] text-[#C03A3A] font-medium">
+        <p className="text-center text-[11px] text-[#D63D56] font-medium">
           Tarif fondateur disponible · économie annuelle jusqu’à{" "}
           {yearlySavingsPercent(premiumMonth, premiumYear)} %
         </p>

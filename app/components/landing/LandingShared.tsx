@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
+import { FOODLANE_LOGO_SRC } from "./LandingIcons";
 import { LOGIN_HREF, SIGNUP_HREF } from "./landingTheme";
 
 export function LandingLogo({
@@ -13,7 +14,7 @@ export function LandingLogo({
   return (
     <Link href="/" className={`flex items-center gap-2.5 ${className}`}>
       <Image
-        src="/logo-app.png"
+        src={FOODLANE_LOGO_SRC}
         alt="Foodlane"
         width={44}
         height={45}

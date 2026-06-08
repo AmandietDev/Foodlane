@@ -103,13 +103,13 @@ export default function BillingSuccessPage() {
             <div className="w-full max-w-sm space-y-3">
               <button
                 onClick={() => router.push("/equilibre")}
-                className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-[#E94E77] hover:bg-[#D63D56] text-white font-semibold text-sm transition-colors"
               >
                 Accéder à l'assistant diététicien
               </button>
               <button
                 onClick={() => router.push("/")}
-                className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+                className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
               >
                 Retour à l'accueil
               </button>
@@ -126,7 +126,7 @@ export default function BillingSuccessPage() {
                 Activation en cours...
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#D44A4A]"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#E94E77]"></div>
                 <p className="text-xs text-[var(--beige-text-light)]">
                   Vérification ({pollingAttempts}/{maxPollingAttempts})...
                 </p>
@@ -136,7 +136,7 @@ export default function BillingSuccessPage() {
                   await refreshProfile();
                   router.refresh();
                 }}
-                className="text-xs text-[#D44A4A] underline hover:text-[#C03A3A]"
+                className="text-xs text-[#E94E77] underline hover:text-[#D63D56]"
               >
                 Actualiser maintenant
               </button>
@@ -161,13 +161,13 @@ export default function BillingSuccessPage() {
                   setPollingAttempts(0);
                   await refreshProfile();
                 }}
-                className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-[#E94E77] hover:bg-[#D63D56] text-white font-semibold text-sm transition-colors"
               >
                 Vérifier à nouveau
               </button>
               <button
                 onClick={() => router.push("/premium")}
-                className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+                className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
               >
                 Retour à Premium
               </button>

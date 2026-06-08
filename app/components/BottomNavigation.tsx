@@ -69,14 +69,14 @@ export default function BottomNavigation() {
   const linkClassDesktop = (active: boolean) =>
     `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
       active
-        ? "bg-[#FFD9D9] text-[#4a2c2c] border border-[#E8A0A0]"
+        ? "bg-[#FFD9D9] text-[#4a2c2c] border border-[var(--beige-border)]"
         : "text-[#7A3A3A] hover:bg-[#FFF6F6] border border-transparent"
     }`;
 
   const showMobileAd = !loading && !isPremium;
 
   const desktopPremiumHint = !isPremium && (
-    <div className="hidden md:block mt-auto p-3 border-t border-[#E8A0A0] bg-[var(--surface-muted)]">
+    <div className="hidden md:block mt-auto p-3 border-t border-[var(--beige-border)] bg-[var(--surface-muted)]">
       <Link
         href="/premium"
         className="flex items-center justify-center gap-2 rounded-lg bg-[var(--beige-accent)] text-white text-xs font-semibold py-2 px-2 hover:bg-[var(--beige-accent-hover)] transition-colors text-center"
@@ -89,7 +89,7 @@ export default function BottomNavigation() {
   return (
     <>
       <aside
-        className="hidden md:flex flex-col fixed left-0 top-0 z-40 w-[var(--app-nav-rail-width)] h-dvh border-r border-[#E8A0A0] bg-[#FFF0F0] shadow-sm"
+        className="hidden md:flex flex-col fixed left-0 top-0 z-40 w-[var(--app-nav-rail-width)] h-dvh border-r border-[var(--beige-border)] bg-[#FFF0F0] shadow-sm"
         aria-label="Navigation principale"
       >
         <div className="p-4 border-b border-[#E8D5D5]">
@@ -119,7 +119,7 @@ export default function BottomNavigation() {
             <span className="flex flex-wrap items-center gap-1">
               {t("nav.assistant")}
               {!isPremium && !canAccessDietAssistant && (
-                <span className="px-1.5 py-0.5 bg-[#D44A4A] text-white text-[8px] font-bold rounded">PRO</span>
+                <span className="px-1.5 py-0.5 bg-[#E94E77] text-white text-[8px] font-bold rounded">PRO</span>
               )}
             </span>
           </Link>
@@ -134,7 +134,7 @@ export default function BottomNavigation() {
       <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col md:hidden pb-[env(safe-area-inset-bottom,0px)]">
         {showMobileAd ? <FreeTierAdSlot placement="mobile_bottom" /> : null}
         <nav
-          className="min-h-14 bg-[#FFF0F0]/95 backdrop-blur-md border-t border-[#E8A0A0] flex items-stretch justify-around text-[11px] leading-tight shadow-[0_-4px_20px_rgba(107,46,46,0.08)]"
+          className="min-h-14 bg-[#FFF0F0]/95 backdrop-blur-md border-t border-[var(--beige-border)] flex items-stretch justify-around text-[11px] leading-tight shadow-[0_-4px_20px_rgba(233,78,119,0.08)]"
           aria-label="Navigation principale"
         >
           <Link href="/tableau" className={`${linkClassMobile(menusTabActive(pathname))} flex-1`}>
@@ -158,7 +158,7 @@ export default function BottomNavigation() {
               <span className="flex items-center gap-1">
                 {t("nav.assistant")}
                 {!isPremium && !canAccessDietAssistant && (
-                  <span className="px-1 py-0.5 bg-[#D44A4A] text-white text-[7px] font-bold rounded">PRO</span>
+                  <span className="px-1 py-0.5 bg-[#E94E77] text-white text-[7px] font-bold rounded">PRO</span>
                 )}
               </span>
             </span>

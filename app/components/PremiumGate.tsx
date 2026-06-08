@@ -66,7 +66,7 @@ export default function PremiumGate({
       return (
         <div className={`relative ${className}`}>
           {children}
-          <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-[#D44A4A] text-white text-[10px] font-bold rounded-full">
+          <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-[#E94E77] text-white text-[10px] font-bold rounded-full">
             PREMIUM
           </span>
         </div>
@@ -94,13 +94,13 @@ export default function PremiumGate({
           <div className="w-full max-w-sm space-y-3">
             <button
               onClick={() => router.push("/premium")}
-              className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors"
+              className="w-full px-4 py-3 rounded-xl bg-[#E94E77] hover:bg-[#D63D56] text-white font-semibold text-sm transition-colors"
             >
               Passer à Premium
             </button>
             <button
               onClick={() => router.push("/")}
-              className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+              className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
             >
               Retour à l'accueil
             </button>
@@ -160,13 +160,13 @@ export default function PremiumGate({
                     setShowModal(false);
                     router.push("/premium");
                   }}
-                  className="w-full px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white font-semibold text-sm transition-colors"
+                  className="w-full px-4 py-3 rounded-xl bg-[#E94E77] hover:bg-[#D63D56] text-white font-semibold text-sm transition-colors"
                 >
                   Passer à Premium
                 </button>
                 <button
                   onClick={() => setShowModal(false)}
-                  className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+                  className="w-full px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
                 >
                   Fermer
                 </button>
@@ -185,7 +185,7 @@ export default function PremiumGate({
           {children}
         </div>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="px-2 py-1 bg-[#D44A4A] text-white text-[10px] font-bold rounded">
+          <span className="px-2 py-1 bg-[#E94E77] text-white text-[10px] font-bold rounded">
             PREMIUM
           </span>
         </div>
@@ -198,7 +198,7 @@ export default function PremiumGate({
     return (
       <div className={`relative ${className}`}>
         {children}
-        <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-[#D44A4A] text-white text-[10px] font-bold rounded-full">
+        <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-[#E94E77] text-white text-[10px] font-bold rounded-full">
           PREMIUM
         </span>
       </div>

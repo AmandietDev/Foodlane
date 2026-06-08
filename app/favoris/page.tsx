@@ -446,7 +446,7 @@ export default function FavorisPage() {
     <main className="max-w-md md:max-w-3xl lg:max-w-4xl mx-auto px-4 md:px-8 pt-6 pb-24 md:pb-10">
       {/* Message de succès pour l'ajout aux favoris */}
       {favoriteSuccessMessage && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[100] bg-gradient-to-r from-[#D44A4A] to-[#C03A3A] text-white px-6 py-4 rounded-xl shadow-2xl border-2 border-white/20">
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[100] bg-gradient-to-r from-[#E94E77] to-[#D63D56] text-white px-6 py-4 rounded-xl shadow-2xl border-2 border-white/20">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
               <span className="text-lg font-bold">✓</span>
@@ -458,19 +458,19 @@ export default function FavorisPage() {
       {/* En-tête avec recherche - style inspiré de l'image */}
       <header className="mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-[#D44A4A]">MON CARNET</h1>
+          <h1 className="text-2xl font-bold text-[#E94E77]">MON CARNET</h1>
         </div>
       </header>
 
       {/* Widget Menu et Liste de courses */}
       {!selectedCollection && (
         <section className="mb-6">
-          <div className="bg-white border border-[#E8A0A0] rounded-2xl p-4 shadow-sm">
+          <div className="bg-white border border-[var(--beige-border)] rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-[#6B2E2E]">Mon menu de la semaine</h2>
               <Link
                 href="/menu-semaine"
-                className="text-sm text-[#D44A4A] font-semibold hover:text-[#C03A3A]"
+                className="text-sm text-[#E94E77] font-semibold hover:text-[#D63D56]"
               >
                 Voir le menu →
               </Link>
@@ -496,7 +496,7 @@ export default function FavorisPage() {
                     setSelectedRecipeFromMenuCreator(null); // Réinitialiser
                     loadMenuCreatorRecipes();
                   }}
-                  className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
+                  className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56] transition-colors"
                 >
                   Créer mon menu
                 </button>
@@ -533,7 +533,7 @@ export default function FavorisPage() {
                             <span className="text-sm text-[#6B2E2E] font-medium">
                               {formatDateDisplay(day.date)}
                             </span>
-                            <span className="text-xs bg-[#D44A4A] text-white px-2 py-1 rounded-full font-semibold">
+                            <span className="text-xs bg-[#E94E77] text-white px-2 py-1 rounded-full font-semibold">
                               {recipeCount} {recipeCount === 1 ? "recette" : "recettes"}
                             </span>
                           </div>
@@ -570,7 +570,7 @@ export default function FavorisPage() {
                 <div className="space-y-2 pt-3 border-t border-[var(--beige-border)]">
                   <Link
                     href="/menu-semaine"
-                    className="block text-center px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
+                    className="block text-center px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56] transition-colors"
                   >
                     Voir le menu complet
                   </Link>
@@ -584,7 +584,7 @@ export default function FavorisPage() {
                       }
                       window.location.href = "/menu-semaine";
                     }}
-                    className="w-full text-center px-4 py-2 rounded-xl bg-white border-2 border-[#D44A4A] text-[#D44A4A] text-sm font-semibold hover:bg-[#FFD9D9] transition-colors"
+                    className="w-full text-center px-4 py-2 rounded-xl bg-white border-2 border-[#E94E77] text-[#E94E77] text-sm font-semibold hover:bg-[#FFD9D9] transition-colors"
                   >
                     Accéder à ma liste de courses
                   </button>
@@ -597,10 +597,10 @@ export default function FavorisPage() {
 
       {!selectedCollection && (
         <section className="mb-6">
-          <div className="bg-white border border-[#E8A0A0] rounded-2xl p-4 shadow-sm">
+          <div className="bg-white border border-[var(--beige-border)] rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-semibold text-[#6B2E2E]">Mes menus enregistrés</h2>
-              <Link href="/tableau" className="text-sm text-[#D44A4A] font-semibold hover:text-[#C03A3A]">
+              <Link href="/tableau" className="text-sm text-[#E94E77] font-semibold hover:text-[#D63D56]">
                 Voir tous →
               </Link>
             </div>
@@ -632,14 +632,14 @@ export default function FavorisPage() {
             <h2 className="text-base font-semibold text-[#6B2E2E]">Mes catégories</h2>
             <button
               onClick={() => setShowCreateCollection(true)}
-              className="text-sm text-[#D44A4A] font-semibold hover:text-[#C03A3A]"
+              className="text-sm text-[#E94E77] font-semibold hover:text-[#D63D56]"
             >
               + Créer
             </button>
           </div>
           
           {collections.length === 0 ? (
-            <div className="text-center p-5 bg-white rounded-2xl border border-[#E8A0A0] shadow-sm">
+            <div className="text-center p-5 bg-white rounded-2xl border border-[var(--beige-border)] shadow-sm">
               <div className="relative mb-3 h-28 w-full overflow-hidden rounded-xl bg-white">
                 <Image
                   src="/recipes-explore-banner-229d46d1.png"
@@ -675,7 +675,7 @@ export default function FavorisPage() {
               </p>
               <button
                 onClick={() => setShowCreateCollection(true)}
-                className="px-5 py-2.5 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
+                className="px-5 py-2.5 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56] transition-colors"
               >
                 Créer une collection
               </button>
@@ -726,7 +726,7 @@ export default function FavorisPage() {
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 0 24 24"
                           fill="none"
-                          stroke="#D44A4A"
+                          stroke="#E94E77"
                           strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -753,7 +753,7 @@ export default function FavorisPage() {
                 <div className="mt-4 text-center">
                   <button
                     onClick={() => setShowAllCollections(true)}
-                    className="px-6 py-3 rounded-xl bg-white border-2 border-[#D44A4A] text-[#D44A4A] text-sm font-semibold hover:bg-[#FFD9D9] transition-colors"
+                    className="px-6 py-3 rounded-xl bg-white border-2 border-[#E94E77] text-[#E94E77] text-sm font-semibold hover:bg-[#FFD9D9] transition-colors"
                   >
                     Voir tout ({collections.length} collections)
                   </button>
@@ -774,7 +774,7 @@ export default function FavorisPage() {
             {!showAllFavorites && favorites.length > 4 && (
               <button
                 onClick={() => setShowAllFavorites(true)}
-                className="text-sm text-[#D44A4A] font-semibold hover:text-[#C03A3A]"
+                className="text-sm text-[#E94E77] font-semibold hover:text-[#D63D56]"
               >
                 Voir tout →
               </button>
@@ -801,7 +801,7 @@ export default function FavorisPage() {
                   setCollectionToAddRecipes(selectedCollection);
                   setShowAddRecipesToCollection(true);
                 }}
-                className="px-3 py-1.5 rounded-xl bg-[#D44A4A] text-white text-xs font-semibold hover:bg-[#C03A3A] transition-colors"
+                className="px-3 py-1.5 rounded-xl bg-[#E94E77] text-white text-xs font-semibold hover:bg-[#D63D56] transition-colors"
               >
                 + Ajouter des recettes
               </button>
@@ -826,7 +826,7 @@ export default function FavorisPage() {
 
       {/* Grille de recettes */}
       {displayRecipes.length === 0 ? (
-        <div className="text-center p-6 rounded-2xl border border-[#E8A0A0] bg-white shadow-sm">
+        <div className="text-center p-6 rounded-2xl border border-[var(--beige-border)] bg-white shadow-sm">
           <div className="relative mb-3 h-28 w-full overflow-hidden rounded-xl bg-white">
             <Image
               src="/favorites-recipes-hero-02b30ddf.png"
@@ -877,7 +877,7 @@ export default function FavorisPage() {
           {!selectedCollection && (
             <button
               onClick={() => router.push("/recettes")}
-              className="px-5 py-2.5 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
+              className="px-5 py-2.5 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56] transition-colors"
             >
               Découvrir des recettes
             </button>
@@ -919,8 +919,8 @@ export default function FavorisPage() {
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
-                    fill={isFavorite(recipe.id) ? "#D44A4A" : "none"}
-                    stroke={isFavorite(recipe.id) ? "#D44A4A" : "#6B2E2E"}
+                    fill={isFavorite(recipe.id) ? "#E94E77" : "none"}
+                    stroke={isFavorite(recipe.id) ? "#E94E77" : "#6B2E2E"}
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -935,7 +935,7 @@ export default function FavorisPage() {
                     {detectDietaryBadges(recipe).slice(0, 2).map((badge) => (
                       <span
                         key={badge}
-                        className="px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-[#D44A4A]/95 text-white backdrop-blur-sm border border-white/30 flex items-center gap-0.5"
+                        className="px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-[#E94E77]/95 text-white backdrop-blur-sm border border-white/30 flex items-center gap-0.5"
                         title={badge}
                       >
                         <span className="text-[7px]">{DIETARY_BADGE_ICONS[badge]}</span>
@@ -943,7 +943,7 @@ export default function FavorisPage() {
                       </span>
                     ))}
                     {detectDietaryBadges(recipe).length > 2 && (
-                      <span className="px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-[#D44A4A]/95 text-white backdrop-blur-sm border border-white/30">
+                      <span className="px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-[#E94E77]/95 text-white backdrop-blur-sm border border-white/30">
                         +{detectDietaryBadges(recipe).length - 2}
                       </span>
                     )}
@@ -960,7 +960,7 @@ export default function FavorisPage() {
           <div className="mt-4 text-center">
             <button
               onClick={() => setShowAllFavorites(true)}
-              className="px-6 py-3 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors"
+              className="px-6 py-3 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56] transition-colors"
             >
               Voir tout ({favorites.length} recettes)
             </button>
@@ -979,7 +979,7 @@ export default function FavorisPage() {
               placeholder="Nom de la collection"
               value={newCollectionName}
               onChange={(e) => setNewCollectionName(e.target.value)}
-              className="w-full rounded-xl bg-white border border-[var(--beige-border)] px-4 py-3 text-sm outline-none focus:border-[#D44A4A] text-[#6B2E2E] mb-4"
+              className="w-full rounded-xl bg-white border border-[var(--beige-border)] px-4 py-3 text-sm outline-none focus:border-[#E94E77] text-[#6B2E2E] mb-4"
               onKeyPress={async (e) => {
                 if (e.key === "Enter") {
                   await handleCreateCollection();
@@ -997,7 +997,7 @@ export default function FavorisPage() {
                 Annuler
               </button>
               <button
-                className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-br from-[#E94E77] to-[#D63D56] text-sm font-semibold text-white hover:from-[#D63D56] hover:to-[#E94E77] transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={async () => {
                   await handleCreateCollection();
                 }}
@@ -1043,7 +1043,7 @@ export default function FavorisPage() {
                     setShowAddRecipesToNewCollection(false);
                     setNewlyCreatedCollection(null);
                   }}
-                  className="px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A]"
+                  className="px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56]"
                 >
                   Fermer
                 </button>
@@ -1058,8 +1058,8 @@ export default function FavorisPage() {
                         key={recipe.id}
                         className={`w-full text-left rounded-xl border transition-colors overflow-hidden ${
                           isInCollection
-                            ? "bg-[#FFD9D9] border-[#D44A4A]"
-                            : "bg-white border-[var(--beige-border)] hover:border-[#D44A4A]"
+                            ? "bg-[#FFD9D9] border-[#E94E77]"
+                            : "bg-white border-[var(--beige-border)] hover:border-[#E94E77]"
                         }`}
                         onClick={async () => {
                           if (isInCollection) {
@@ -1103,7 +1103,7 @@ export default function FavorisPage() {
                           {/* Indicateur de sélection */}
                           {isInCollection && (
                             <div className="flex-shrink-0">
-                              <span className="text-[#D44A4A] text-xl">✓</span>
+                              <span className="text-[#E94E77] text-xl">✓</span>
                             </div>
                           )}
                         </div>
@@ -1113,7 +1113,7 @@ export default function FavorisPage() {
                 </div>
                 <div className="flex gap-3 pt-4 border-t border-[var(--beige-border)]">
                   <button
-                    className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md"
+                    className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-br from-[#E94E77] to-[#D63D56] text-sm font-semibold text-white hover:from-[#D63D56] hover:to-[#E94E77] transition-all shadow-md"
                     onClick={() => {
                       setShowAddRecipesToNewCollection(false);
                       setNewlyCreatedCollection(null);
@@ -1161,7 +1161,7 @@ export default function FavorisPage() {
                     setShowAddRecipesToCollection(false);
                     setCollectionToAddRecipes(null);
                   }}
-                  className="px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A]"
+                  className="px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56]"
                 >
                   Fermer
                 </button>
@@ -1176,8 +1176,8 @@ export default function FavorisPage() {
                         key={recipe.id}
                         className={`w-full text-left rounded-xl border transition-colors overflow-hidden ${
                           isInCollection
-                            ? "bg-[#FFD9D9] border-[#D44A4A]"
-                            : "bg-white border-[var(--beige-border)] hover:border-[#D44A4A]"
+                            ? "bg-[#FFD9D9] border-[#E94E77]"
+                            : "bg-white border-[var(--beige-border)] hover:border-[#E94E77]"
                         }`}
                         onClick={async () => {
                           if (isInCollection) {
@@ -1225,7 +1225,7 @@ export default function FavorisPage() {
                           {/* Indicateur de sélection */}
                           {isInCollection && (
                             <div className="flex-shrink-0">
-                              <span className="text-[#D44A4A] text-xl">✓</span>
+                              <span className="text-[#E94E77] text-xl">✓</span>
                             </div>
                           )}
                         </div>
@@ -1235,7 +1235,7 @@ export default function FavorisPage() {
                 </div>
                 <div className="flex gap-3 pt-4 border-t border-[var(--beige-border)]">
                   <button
-                    className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md"
+                    className="flex-1 px-4 py-2 rounded-xl bg-gradient-to-br from-[#E94E77] to-[#D63D56] text-sm font-semibold text-white hover:from-[#D63D56] hover:to-[#E94E77] transition-all shadow-md"
                     onClick={async () => {
                       setShowAddRecipesToCollection(false);
                       setCollectionToAddRecipes(null);
@@ -1274,8 +1274,8 @@ export default function FavorisPage() {
                     key={collection.id}
                     className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${
                       isInCollection
-                        ? "bg-[#FFD9D9] border-[#D44A4A]"
-                        : "bg-white border-[var(--beige-border)] hover:border-[#D44A4A]"
+                        ? "bg-[#FFD9D9] border-[#E94E77]"
+                        : "bg-white border-[var(--beige-border)] hover:border-[#E94E77]"
                     }`}
                     onClick={() => {
                       if (isInCollection) {
@@ -1288,7 +1288,7 @@ export default function FavorisPage() {
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-[#6B2E2E]">{collection.name}</span>
                       {isInCollection && (
-                        <span className="text-[#D44A4A]">✓</span>
+                        <span className="text-[#E94E77]">✓</span>
                       )}
                     </div>
                   </button>
@@ -1301,7 +1301,7 @@ export default function FavorisPage() {
                   Aucune collection. Crée-en une d'abord !
                 </p>
                 <button
-                  className="w-full px-4 py-3 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md"
+                  className="w-full px-4 py-3 rounded-xl bg-gradient-to-br from-[#E94E77] to-[#D63D56] text-sm font-semibold text-white hover:from-[#D63D56] hover:to-[#E94E77] transition-all shadow-md"
                   onClick={() => {
                     // Ne pas fermer le modal "Ajouter à une collection" pour conserver recipeToAdd
                     // Juste ouvrir le modal de création par-dessus
@@ -1326,7 +1326,7 @@ export default function FavorisPage() {
                 </button>
               )}
               <button
-                className={`px-4 py-2 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#D44A4A] transition-all shadow-md ${collections.length > 0 ? 'flex-1' : 'w-full'}`}
+                className={`px-4 py-2 rounded-xl bg-gradient-to-br from-[#E94E77] to-[#D63D56] text-sm font-semibold text-white hover:from-[#D63D56] hover:to-[#E94E77] transition-all shadow-md ${collections.length > 0 ? 'flex-1' : 'w-full'}`}
                 onClick={() => {
                   setShowAddToCollection(false);
                   setRecipeToAdd(null);
@@ -1350,7 +1350,7 @@ export default function FavorisPage() {
             setSelectedRecipe(null);
           }
         }}>
-          <div className="w-full h-full max-w-md bg-[#FFF0F0] border-l border-r border-[#E8A0A0] overflow-y-auto px-4 pt-4 pb-8 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full h-full max-w-md bg-[#FFF0F0] border-l border-r border-[var(--beige-border)] overflow-y-auto px-4 pt-4 pb-8 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-[#6B2E2E]">
                 {selectedRecipe.nom_recette}
@@ -1392,8 +1392,8 @@ export default function FavorisPage() {
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 0 24 24"
-                          fill={isFavorite(selectedRecipe.id) ? "#D44A4A" : "none"}
-                          stroke={isFavorite(selectedRecipe.id) ? "#D44A4A" : "#6B2E2E"}
+                          fill={isFavorite(selectedRecipe.id) ? "#E94E77" : "none"}
+                          stroke={isFavorite(selectedRecipe.id) ? "#E94E77" : "#6B2E2E"}
                           strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -1415,8 +1415,8 @@ export default function FavorisPage() {
                 <div className="mb-2">
                   <span className={`text-xs font-bold uppercase tracking-wider ${
                     selectedRecipe.type.toLowerCase().includes("sucré")
-                      ? "text-[#D44A4A]"
-                      : "text-[#C03A3A]"
+                      ? "text-[#E94E77]"
+                      : "text-[#D63D56]"
                   }`}>
                     {selectedRecipe.type.toUpperCase()}
                   </span>
@@ -1427,10 +1427,10 @@ export default function FavorisPage() {
                 {selectedRecipe.nom_recette}
               </h2>
 
-              <div className="grid grid-cols-4 gap-3 mb-4 pb-4 border-b border-[#E8A0A0]">
+              <div className="grid grid-cols-4 gap-3 mb-4 pb-4 border-b border-[var(--beige-border)]">
                 {(selectedRecipe.temps_preparation_min ?? 0) > 0 && (
                   <div className="text-center">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] flex items-center justify-center mx-auto mb-2 shadow-md">
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#E94E77] to-[#D63D56] flex items-center justify-center mx-auto mb-2 shadow-md">
                       <span className="text-white text-lg">⏱</span>
                     </div>
                     <p className="text-[10px] text-[#7A3A3A] font-semibold">{selectedRecipe.temps_preparation_min} min</p>
@@ -1438,7 +1438,7 @@ export default function FavorisPage() {
                 )}
                 {(selectedRecipe.nombre_personnes || 0) > 0 && (
                   <div className="text-center">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] flex items-center justify-center mx-auto mb-2 shadow-md">
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#E94E77] to-[#D63D56] flex items-center justify-center mx-auto mb-2 shadow-md">
                       <span className="text-white text-lg">👥</span>
                     </div>
                     <p className="text-[10px] text-[#7A3A3A] font-semibold">{selectedRecipe.nombre_personnes} pers</p>
@@ -1446,7 +1446,7 @@ export default function FavorisPage() {
                 )}
                 {selectedRecipe.calories && (
                   <div className="text-center">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] flex items-center justify-center mx-auto mb-2 shadow-md">
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#E94E77] to-[#D63D56] flex items-center justify-center mx-auto mb-2 shadow-md">
                       <span className="text-white text-lg">🔥</span>
                     </div>
                     <p className="text-[10px] text-[#7A3A3A] font-semibold">{selectedRecipe.calories} Cal</p>
@@ -1454,7 +1454,7 @@ export default function FavorisPage() {
                 )}
                 {selectedRecipe.difficulte && (
                   <div className="text-center">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] flex items-center justify-center mx-auto mb-2 shadow-md">
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#E94E77] to-[#D63D56] flex items-center justify-center mx-auto mb-2 shadow-md">
                       <span className="text-white text-lg">
                         {selectedRecipe.difficulte.toLowerCase().includes("facile") ? "✓" : "="}
                       </span>
@@ -1482,7 +1482,7 @@ export default function FavorisPage() {
                       const trimmed = item.trim();
                       return (
                         <li key={idx} className="flex items-start gap-3 text-[#6B2E2E]">
-                          <span className="text-[#D44A4A] mt-0.5 flex-shrink-0">→</span>
+                          <span className="text-[#E94E77] mt-0.5 flex-shrink-0">→</span>
                           <span className="flex-1">{trimmed}</span>
                         </li>
                       );
@@ -1500,7 +1500,7 @@ export default function FavorisPage() {
                       const trimmed = item.trim();
                       return (
                         <li key={idx} className="flex gap-3 text-[#6B2E2E]">
-                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#D44A4A] text-white text-[10px] font-bold flex items-center justify-center">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#E94E77] text-white text-[10px] font-bold flex items-center justify-center">
                             {idx + 1}
                           </span>
                           <span className="flex-1 leading-relaxed">{trimmed}</span>
@@ -1513,7 +1513,7 @@ export default function FavorisPage() {
               {/* Bouton pour ajouter/retirer d'une collection */}
               <div className="mb-3 space-y-2">
                 <button
-                  className="w-full px-4 py-3 rounded-xl bg-gradient-to-br from-[#D44A4A] to-[#C03A3A] text-sm font-semibold text-white hover:from-[#C03A3A] hover:to-[#6B5F3F] transition-all shadow-md pointer-events-auto cursor-pointer"
+                  className="w-full px-4 py-3 rounded-xl bg-gradient-to-br from-[#E94E77] to-[#D63D56] text-sm font-semibold text-white hover:from-[#D63D56] hover:to-[#6B5F3F] transition-all shadow-md pointer-events-auto cursor-pointer"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -1581,7 +1581,7 @@ export default function FavorisPage() {
                   </button>
                 )}
                 <button
-                  className={`px-4 py-3 rounded-xl bg-[#D44A4A] border border-[#C03A3A] text-sm font-semibold text-white hover:bg-[#C03A3A] transition-colors ${selectedRecipeFromMenuCreator && selectedRecipeFromMenuCreator.id === selectedRecipe.id ? "flex-1" : "w-full"}`}
+                  className={`px-4 py-3 rounded-xl bg-[#E94E77] border border-[#D63D56] text-sm font-semibold text-white hover:bg-[#D63D56] transition-colors ${selectedRecipeFromMenuCreator && selectedRecipeFromMenuCreator.id === selectedRecipe.id ? "flex-1" : "w-full"}`}
                   onClick={() => {
                     if (selectedRecipeFromMenuCreator && selectedRecipeFromMenuCreator.id === selectedRecipe.id) {
                       // Si on vient de l'outil de création de menu, fermer le modal aussi
@@ -1626,7 +1626,7 @@ export default function FavorisPage() {
                 placeholder="🔍 Rechercher une recette..."
                 value={menuCreatorSearch}
                 onChange={(e) => setMenuCreatorSearch(e.target.value)}
-                className="w-full px-4 py-2 rounded-xl border border-[var(--beige-border)] focus:outline-none focus:ring-2 focus:ring-[#D44A4A] focus:border-transparent"
+                className="w-full px-4 py-2 rounded-xl border border-[var(--beige-border)] focus:outline-none focus:ring-2 focus:ring-[#E94E77] focus:border-transparent"
               />
 
               {/* Filtres */}
@@ -1637,7 +1637,7 @@ export default function FavorisPage() {
                   <select
                     value={menuCreatorFilters.type}
                     onChange={(e) => setMenuCreatorFilters({ ...menuCreatorFilters, type: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-xl border border-[var(--beige-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[#D44A4A]"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--beige-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[#E94E77]"
                   >
                     <option value="all">Tous</option>
                     <option value="sweet">Sucré</option>
@@ -1651,7 +1651,7 @@ export default function FavorisPage() {
                   <select
                     value={menuCreatorFilters.difficulte}
                     onChange={(e) => setMenuCreatorFilters({ ...menuCreatorFilters, difficulte: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-xl border border-[var(--beige-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[#D44A4A]"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--beige-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[#E94E77]"
                   >
                     <option value="all">Toutes</option>
                     <option value="Facile">Facile</option>
@@ -1668,7 +1668,7 @@ export default function FavorisPage() {
                     placeholder="∞"
                     value={menuCreatorFilters.tempsMax}
                     onChange={(e) => setMenuCreatorFilters({ ...menuCreatorFilters, tempsMax: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-[var(--beige-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[#D44A4A]"
+                    className="w-full px-3 py-2 rounded-xl border border-[var(--beige-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[#E94E77]"
                   />
                 </div>
               </div>
@@ -1717,7 +1717,7 @@ export default function FavorisPage() {
                         <button
                           className={`absolute top-2 right-2 p-2 rounded-full backdrop-blur-sm transition-all ${
                             isFavorite(recipe.id)
-                              ? "bg-[#C03A3A]/90 text-white"
+                              ? "bg-[#D63D56]/90 text-white"
                               : "bg-white/80 text-[#7A3A3A] hover:bg-white"
                           }`}
                           onClick={(e) => {
@@ -1733,7 +1733,7 @@ export default function FavorisPage() {
                             {detectDietaryBadges(recipe).slice(0, 2).map((badge) => (
                               <span
                                 key={badge}
-                                className="px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-[#D44A4A]/95 text-white backdrop-blur-sm"
+                                className="px-1.5 py-0.5 rounded-full text-[8px] font-semibold bg-[#E94E77]/95 text-white backdrop-blur-sm"
                               >
                                 {DIETARY_BADGE_ICONS[badge]} {badge}
                               </span>

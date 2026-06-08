@@ -50,7 +50,7 @@ export default function FavoritesRecipesHero({
     </>
   );
 
-  const boxClass = `rounded-2xl border border-[#E8A0A0] overflow-hidden shadow-sm bg-white ${linkable ? "hover:shadow-md transition-shadow block" : ""} ${className}`;
+  const boxClass = `rounded-2xl border border-[var(--beige-border)] overflow-hidden shadow-sm bg-white ${linkable ? "hover:shadow-md transition-shadow block" : ""} ${className}`;
 
   if (linkable) {
     return (

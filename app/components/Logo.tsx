@@ -1,27 +1,21 @@
 import Image from "next/image";
+import { FOODLANE_LOGO_SRC } from "./landing/LandingIcons";
 
 export default function Logo({ className = "" }: { className?: string }) {
   return (
     <div className={`flex flex-col items-center gap-3 ${className}`}>
-      {/* Logo image avec fond transparent */}
       <div className="relative">
         <Image
-          src="/logo-app.png"
+          src={FOODLANE_LOGO_SRC}
           alt="Foodlane Logo"
           width={120}
           height={120}
           className="drop-shadow-sm"
           priority
           unoptimized
-          style={{ 
+          style={{
             objectFit: "contain",
             backgroundColor: "transparent",
-            mixBlendMode: "normal"
-          }}
-          onError={(e) => {
-            // Fallback si l'image n'existe pas encore
-            const target = e.target as HTMLImageElement;
-            target.style.display = "none";
           }}
         />
       </div>

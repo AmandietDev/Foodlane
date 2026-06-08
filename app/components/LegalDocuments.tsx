@@ -1206,7 +1206,7 @@ export function CookiesContent({
         <button
           type="button"
           onClick={() => openCookieConsentBanner()}
-          className="inline-flex items-center rounded-xl bg-[#D44A4A] px-4 py-2 text-xs font-semibold text-white hover:bg-[#C03A3A] transition-colors"
+          className="inline-flex items-center rounded-xl bg-[#E94E77] px-4 py-2 text-xs font-semibold text-white hover:bg-[#D63D56] transition-colors"
         >
           Modifier mes choix cookies
         </button>

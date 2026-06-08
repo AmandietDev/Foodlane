@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
           <Logo />
           <h1 className="text-2xl font-bold text-[#6B2E2E] mt-4">Mot de passe oublié</h1>
         </div>
-        <div className="bg-white rounded-2xl shadow-xl p-6 border border-[#E8A0A0]">
+        <div className="bg-white rounded-2xl shadow-xl p-6 border border-[var(--beige-border)]">
           {done ? (
             <div className="space-y-4 text-center">
               <p className="text-sm text-gray-700">
@@ -63,7 +63,7 @@ export default function ForgotPasswordPage() {
               </p>
               <Link
                 href="/login"
-                className="inline-block w-full py-3 px-4 bg-[#D44A4A] hover:bg-[#C03A3A] text-white rounded-xl font-semibold text-center"
+                className="inline-block w-full py-3 px-4 bg-[#E94E77] hover:bg-[#D63D56] text-white rounded-xl font-semibold text-center"
               >
                 Retour à la connexion
               </Link>
@@ -84,19 +84,19 @@ export default function ForgotPasswordPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#D44A4A]"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E94E77]"
                   placeholder="ton@email.com"
                 />
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 bg-[#D44A4A] hover:bg-[#C03A3A] text-white rounded-xl font-semibold disabled:opacity-50"
+                className="w-full py-3 px-4 bg-[#E94E77] hover:bg-[#D63D56] text-white rounded-xl font-semibold disabled:opacity-50"
               >
                 {loading ? "Envoi…" : "Envoyer le lien"}
               </button>
               <div className="text-center">
-                <Link href="/login" className="text-sm text-[#D44A4A] hover:underline">
+                <Link href="/login" className="text-sm text-[#E94E77] hover:underline">
                   ← Retour à la connexion
                 </Link>
               </div>

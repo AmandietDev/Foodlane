@@ -67,7 +67,7 @@ export default function OrganiseRepasPage() {
           et simplifie ton alimentation grâce à ton assistant nutrition.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
-          <Link href="/login" className="rounded-xl bg-[#D44A4A] text-white px-4 py-2 text-sm font-semibold">
+          <Link href="/login" className="rounded-xl bg-[#E94E77] text-white px-4 py-2 text-sm font-semibold">
             Commencer gratuitement
           </Link>
           <Link href="/menu-semaine" className="rounded-xl border border-[var(--beige-border)] px-4 py-2 text-sm font-semibold">
@@ -124,7 +124,7 @@ export default function OrganiseRepasPage() {
             <Link
               key={l.href}
               href={l.href}
-              className="rounded-full border border-[var(--beige-border)] px-3 py-1.5 text-sm hover:border-[#D44A4A]"
+              className="rounded-full border border-[var(--beige-border)] px-3 py-1.5 text-sm hover:border-[#E94E77]"
             >
               {l.label}
             </Link>

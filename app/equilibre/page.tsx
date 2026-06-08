@@ -6,6 +6,8 @@ import { usePremium } from "../contexts/PremiumContext";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { supabase } from "../src/lib/supabaseClient";
 import LoadingSpinner from "../components/LoadingSpinner";
+import DietDiaryDayView from "../components/equilibre/DietDiaryDayView";
+import { getTodayISO, shiftDateISO } from "../components/equilibre/dietDiaryUtils";
 import { loadPreferences } from "../src/lib/userPreferences";
 import {
   selectDailyTip,
@@ -14,9 +16,7 @@ import {
   type Challenge,
   type ObjectiveTag,
   type ContextTag,
-  type TipCategory,
 } from "../src/lib/dailyTips";
-import { getNutritionSpotlightForDate } from "../src/lib/nutritionCalendarSpotlight";
 import { getTodayTips, getRecentIds, addToHistory } from "../src/lib/dailyTipsHistory";
 import { getLocale } from "../src/lib/i18n";
 import { sessionAuthHeaders } from "../src/lib/plannerClient";
@@ -82,37 +82,6 @@ function formatWeekdayFr(isoDate: string) {
   });
 }
 
-const TIP_CATEGORY_FR: Record<TipCategory, string> = {
-  nutrition: "Nutrition",
-  hydration: "Hydratation",
-  movement: "Mouvement",
-  sleep: "Sommeil",
-  stress: "Stress",
-  mindful: "Pleine conscience",
-  selfcare: "Bien-être",
-};
-
-function tipDifficultyShort(d: "easy" | "medium"): string {
-  return d === "easy" ? "Facile" : "Moyen";
-}
-
-/** Découpe le texte du conseil : 1re phrase = « action », suite = « pourquoi » (même logique que le défi). */
-function splitTipLeadAndTail(text: string): { lead: string; tail: string | null } {
-  const t = text.trim();
-  if (t.length < 45) return { lead: t, tail: null };
-  const seps = [". ", "? ", "! "] as const;
-  for (const sep of seps) {
-    const i = t.indexOf(sep);
-    if (i >= 18 && t.length - (i + sep.length) >= 18) {
-      return {
-        lead: t.slice(0, i + sep.length - 1).trim(),
-        tail: t.slice(i + sep.length).trim(),
-      };
-    }
-  }
-  return { lead: t, tail: null };
-}
-
 function DietAssistantFreePreview() {
   return (
     <main className="max-w-md mx-auto px-4 pt-6 pb-24">
@@ -145,7 +114,7 @@ function DietAssistantFreePreview() {
           Ici tu verras un score, des points forts et une action simple pour demain, calculés à partir de ce que tu as vraiment
           mangé.
         </p>
-        <div className="rounded-xl bg-white/70 p-3 text-xs text-[#726566] border border-dashed border-[#D44A4A]/40">
+        <div className="rounded-xl bg-white/70 p-3 text-xs text-[#726566] border border-dashed border-[#E94E77]/40">
           Débloqué avec Premium : journal alimentaire, analyse du jour et plan d’actions. Premium Plus ajoute l’analyse photo
           assiette.
         </div>
@@ -154,7 +123,7 @@ function DietAssistantFreePreview() {
       <div className="flex flex-col gap-2">
         <Link
           href="/premium"
-          className="w-full text-center px-4 py-3 rounded-xl bg-[#D44A4A] text-white font-semibold text-sm hover:bg-[#C03A3A] transition-colors"
+          className="w-full text-center px-4 py-3 rounded-xl bg-[#E94E77] text-white font-semibold text-sm hover:bg-[#D63D56] transition-colors"
         >
           Voir Premium et Premium Plus
         </Link>
@@ -186,20 +155,13 @@ export default function EquilibrePage() {
   const { user, loading: sessionLoading } = useSupabaseSession();
   const { loading: premiumLoading, canAccessDietAssistant, subscriptionTier } = usePremium();
   const [loading, setLoading] = useState(true);
-  const [today, setToday] = useState<string>(() => {
-    try {
-      return new Date().toISOString().split("T")[0];
-    } catch {
-      return "";
-    }
-  });
+  const [selectedDate, setSelectedDate] = useState(getTodayISO);
   const [meals, setMeals] = useState<FoodLogEntry[]>([]);
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [weeklyInsights, setWeeklyInsights] = useState<WeeklyInsights | null>(null);
   const [currentMeal, setCurrentMeal] = useState<"breakfast" | "lunch" | "dinner" | "snack">("breakfast");
   const [mealInput, setMealInput] = useState("");
   const [addingMeal, setAddingMeal] = useState(false);
-  const [showPlanTomorrow, setShowPlanTomorrow] = useState(false);
   const [showWeeklyInsights, setShowWeeklyInsights] = useState(false);
   const [hungerBefore, setHungerBefore] = useState<number | null>(null);
   const [satietyAfter, setSatietyAfter] = useState<number | null>(null);
@@ -212,8 +174,8 @@ export default function EquilibrePage() {
 
   useEffect(() => {
     if (sessionLoading || premiumLoading) return;
-    const todayStr = new Date().toISOString().split("T")[0];
-    setToday(todayStr);
+    const todayStr = getTodayISO();
+    setSelectedDate(todayStr);
     if (!canAccessDietAssistant) return;
     void loadTodayData(todayStr);
     void loadWeeklyInsights();
@@ -222,6 +184,35 @@ export default function EquilibrePage() {
       console.error("[Equilibre] Erreur génération conseils/défis:", error);
     });
   }, [sessionLoading, premiumLoading, canAccessDietAssistant]);
+
+  const MAX_DAYS_BACK = 30;
+  const todayIso = getTodayISO();
+  const isSelectedToday = selectedDate === todayIso;
+  const minSelectableDate = shiftDateISO(todayIso, -MAX_DAYS_BACK);
+  const canGoPrev = selectedDate > minSelectableDate;
+  const canGoNext = selectedDate < todayIso;
+
+  function goPrevDay() {
+    const prev = shiftDateISO(selectedDate, -1);
+    if (prev < minSelectableDate) return;
+    setSelectedDate(prev);
+    setLoading(true);
+    void loadTodayData(prev);
+  }
+
+  function goNextDay() {
+    const next = shiftDateISO(selectedDate, 1);
+    if (next > todayIso) return;
+    setSelectedDate(next);
+    setLoading(true);
+    void loadTodayData(next);
+  }
+
+  function goToday() {
+    setSelectedDate(todayIso);
+    setLoading(true);
+    void loadTodayData(todayIso);
+  }
 
   async function generateDailyTips() {
     const preferences = loadPreferences();
@@ -385,7 +376,10 @@ export default function EquilibrePage() {
     setPendingMealId(null);
   }
 
-  async function handleAddMealWithRawText(rawText: string) {
+  async function handleAddMealWithRawText(
+    rawText: string,
+    mealType: "breakfast" | "lunch" | "dinner" | "snack" = currentMeal
+  ) {
     if (!rawText.trim()) return;
 
     setAddingMeal(true);
@@ -397,9 +391,9 @@ export default function EquilibrePage() {
       }
 
       const mealDate =
-        today && /^\d{4}-\d{2}-\d{2}$/.test(today)
-          ? today
-          : new Date().toISOString().split("T")[0];
+        selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(selectedDate)
+          ? selectedDate
+          : getTodayISO();
 
       const res = await fetch("/api/foodlog/add", {
         method: "POST",
@@ -410,7 +404,7 @@ export default function EquilibrePage() {
         },
         body: JSON.stringify({
           date: mealDate,
-          meal_type: currentMeal,
+          meal_type: mealType,
           raw_text: rawText.trim(),
           hunger_before: hungerBefore || undefined,
           satiety_after: satietyAfter || undefined,
@@ -448,7 +442,7 @@ export default function EquilibrePage() {
         });
       }
 
-      await loadTodayData(mealDate, { silent: true });
+      await loadTodayData(selectedDate, { silent: true });
       await reloadWeekData();
     } catch (error) {
       console.error("[Equilibre] Erreur ajout repas:", error);
@@ -481,7 +475,7 @@ export default function EquilibrePage() {
 
       if (error) throw error;
 
-      await loadTodayData(today);
+      await loadTodayData(selectedDate);
       await reloadWeekData();
     } catch (error) {
       console.error("[Equilibre] Erreur suppression:", error);
@@ -512,7 +506,7 @@ export default function EquilibrePage() {
 
       if (error) throw error;
 
-      await loadTodayData(today);
+      await loadTodayData(selectedDate);
       await reloadWeekData();
       setShowFeelingModal(false);
       setPendingMealId(null);
@@ -547,7 +541,7 @@ export default function EquilibrePage() {
         </p>
         <Link
           href="/login"
-          className="inline-block px-4 py-3 rounded-xl bg-[#D44A4A] text-white font-semibold text-sm hover:bg-[#C03A3A] transition-colors"
+          className="inline-block px-4 py-3 rounded-xl bg-[#E94E77] text-white font-semibold text-sm hover:bg-[#D63D56] transition-colors"
         >
           Se connecter
         </Link>
@@ -577,8 +571,6 @@ export default function EquilibrePage() {
       mealInput={mealInput}
       setMealInput={setMealInput}
       addingMeal={addingMeal}
-      showPlanTomorrow={showPlanTomorrow}
-      setShowPlanTomorrow={setShowPlanTomorrow}
       showWeeklyInsights={showWeeklyInsights}
       setShowWeeklyInsights={setShowWeeklyInsights}
       hungerBefore={hungerBefore}
@@ -591,7 +583,13 @@ export default function EquilibrePage() {
       setPendingMealId={setPendingMealId}
       conseilDuJour={conseilDuJour}
       defiDuJour={defiDuJour}
-      today={today}
+      selectedDate={selectedDate}
+      isSelectedToday={isSelectedToday}
+      canGoPrev={canGoPrev}
+      canGoNext={canGoNext}
+      onPrevDay={goPrevDay}
+      onNextDay={goNextDay}
+      onGoToday={goToday}
       subscriptionTier={subscriptionTier}
       handleAddMeal={handleAddMeal}
       handleAddMealWithRawText={handleAddMealWithRawText}
@@ -621,8 +619,6 @@ interface EquilibrePageContentProps {
   mealInput: string;
   setMealInput: (value: string) => void;
   addingMeal: boolean;
-  showPlanTomorrow: boolean;
-  setShowPlanTomorrow: (value: boolean) => void;
   showWeeklyInsights: boolean;
   setShowWeeklyInsights: (value: boolean) => void;
   hungerBefore: number | null;
@@ -635,10 +631,16 @@ interface EquilibrePageContentProps {
   setPendingMealId: (value: string | null) => void;
   conseilDuJour: Tip | null;
   defiDuJour: Challenge | null;
-  today: string;
+  selectedDate: string;
+  isSelectedToday: boolean;
+  canGoPrev: boolean;
+  canGoNext: boolean;
+  onPrevDay: () => void;
+  onNextDay: () => void;
+  onGoToday: () => void;
   subscriptionTier: string | null;
   handleAddMeal: () => Promise<void>;
-  handleAddMealWithRawText: (rawText: string) => Promise<void>;
+  handleAddMealWithRawText: (rawText: string, mealType?: "breakfast" | "lunch" | "dinner" | "snack") => Promise<void>;
   handleDeleteMeal: (id: string) => Promise<void>;
   handleAddFeeling: (id: string) => void;
   handleSaveFeeling: () => Promise<void>;
@@ -673,7 +675,7 @@ function buildDailyDietitianNote(
 
   const intro =
     totalMeals === 0
-      ? "Aucun repas enregistré pour aujourd'hui. Ajoute au moins 1 repas pour recevoir une note ultra personnalisée."
+      ? "Aucun repas enregistré pour cette journée. Ajoute au moins 1 repas pour recevoir une note personnalisée."
       : `Tu as noté ${totalMeals} repas (${prettyMealTypes}). Voici ma lecture rapide de ta journée.`;
 
   const highlights =
@@ -712,8 +714,6 @@ function EquilibrePageContent({
   mealInput,
   setMealInput,
   addingMeal,
-  showPlanTomorrow,
-  setShowPlanTomorrow,
   showWeeklyInsights,
   setShowWeeklyInsights,
   hungerBefore,
@@ -726,8 +726,13 @@ function EquilibrePageContent({
   setPendingMealId,
   conseilDuJour,
   defiDuJour,
-  today,
-  handleAddMeal,
+  selectedDate,
+  isSelectedToday,
+  canGoPrev,
+  canGoNext,
+  onPrevDay,
+  onNextDay,
+  onGoToday,
   handleAddMealWithRawText,
   handleDeleteMeal,
   handleAddFeeling,
@@ -736,7 +741,6 @@ function EquilibrePageContent({
   canUsePhotoScan,
   subscriptionTier,
 }: EquilibrePageContentProps) {
-  const [activePart, setActivePart] = useState<"repas" | "semaine">("repas");
   const [showScanModal, setShowScanModal] = useState(false);
   const [scanAnalysis, setScanAnalysis] = useState<ScanAnalysis | null>(null);
   const [manualIngredients, setManualIngredients] = useState<string[]>([]);
@@ -744,24 +748,6 @@ function EquilibrePageContent({
   const [loadingScan, setLoadingScan] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showFullDietitianAnalysis, setShowFullDietitianAnalysis] = useState(false);
-
-  useEffect(() => {
-    if (activePart !== "semaine") return;
-    void onWeekTabOpen();
-  }, [activePart, onWeekTabOpen]);
-
-  const weekMealsByDay = useMemo(() => {
-    const map = new Map<string, FoodLogEntry[]>();
-    for (const e of weekMeals) {
-      const arr = map.get(e.date) || [];
-      arr.push(e);
-      map.set(e.date, arr);
-    }
-    return map;
-  }, [weekMeals]);
-
-  const nutritionSpotlight = useMemo(() => getNutritionSpotlightForDate(new Date()), []);
 
   const mealTypeLabels = {
     breakfast: "Petit-déjeuner",
@@ -834,457 +820,86 @@ function EquilibrePageContent({
 
   return (
     <main className="max-w-md mx-auto px-4 pt-6 pb-24">
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold text-[var(--foreground)] tracking-tight">Assistant diététicien</h1>
-        <p className="text-sm text-[var(--beige-text-light)] mt-2 leading-relaxed">
-          Ton assistant diététicien en 2 volets : repas du jour et équilibre de la semaine
-        </p>
-      </header>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            void handleImageFromScan(dataUrl);
+          };
+          reader.readAsDataURL(file);
+          e.target.value = "";
+        }}
+      />
+      <DietDiaryDayView
+        selectedDate={selectedDate}
+        isToday={isSelectedToday}
+        canGoPrev={canGoPrev}
+        canGoNext={canGoNext}
+        onPrevDay={onPrevDay}
+        onNextDay={onNextDay}
+        meals={meals}
+        summary={summary}
+        dietitianNote={dietitianNote}
+        defiDuJour={defiDuJour}
+        conseilDuJour={conseilDuJour}
+        addingMeal={addingMeal}
+        canUsePhotoScan={canUsePhotoScan}
+        loadingScan={loadingScan}
+        subscriptionTier={subscriptionTier}
+        onAddMeal={async (mealType, rawText) => {
+          setCurrentMeal(mealType);
+          await handleAddMealWithRawText(rawText, mealType);
+        }}
+        onDeleteMeal={(id) => void handleDeleteMeal(id)}
+        onAddFeeling={handleAddFeeling}
+        onPhotoScanClick={(mealType) => {
+          setCurrentMeal(mealType);
+          fileInputRef.current?.click();
+        }}
+      />
 
-      {/* Onglets Mon repas / Ma semaine */}
-      <div className="flex rounded-2xl border border-white/60 bg-white/45 backdrop-blur-md shadow-sm p-1.5 mb-6">
-        <button
-          type="button"
-          onClick={() => setActivePart("repas")}
-          className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-            activePart === "repas"
-              ? "bg-[#D44A4A] text-white shadow-sm"
-              : "text-[var(--beige-text-light)] hover:bg-white/60"
-          }`}
-        >
-          Mon repas
-        </button>
-        <button
-          type="button"
-          onClick={() => setActivePart("semaine")}
-          className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-            activePart === "semaine"
-              ? "bg-[#D44A4A] text-white shadow-sm"
-              : "text-[var(--beige-text-light)] hover:bg-white/60"
-          }`}
-        >
-          Ma semaine
-        </button>
-      </div>
-
-      {activePart === "repas" && (
-        <>
-      {/* Conseil du jour */}
-      {conseilDuJour && (
-        <section className="mb-4 rounded-2xl border border-white/70 bg-white/55 backdrop-blur-md p-4 shadow-sm">
-          <h2 className="text-sm font-semibold mb-2 text-[#6B2E2E] flex items-center gap-2">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#FFE4E4] text-[#D44A4A]">✦</span>
-            <span>Conseil du jour</span>
-            <span className="text-xs text-[#726566] ml-auto font-medium shrink-0">
-              {TIP_CATEGORY_FR[conseilDuJour.category] ?? conseilDuJour.category} ·{" "}
-              {tipDifficultyShort(conseilDuJour.difficulty)}
-            </span>
-          </h2>
-          {(() => {
-            const { lead, tail } = splitTipLeadAndTail(conseilDuJour.text);
-            return (
-              <>
-                <p className="text-sm font-medium text-[#6B2E2E] mb-1 leading-snug">{lead}</p>
-                {tail ? (
-                  <p className="text-xs text-[#726566] italic leading-relaxed mb-2">{tail}</p>
-                ) : null}
-              </>
-            );
-          })()}
-          <div className="mt-2 pt-2 border-t border-[#EDDCDC]/70">
-            <p className="text-[11px] font-semibold text-[#6B2E2E] mb-1">À la une — santé & bien-être</p>
-            <p className="text-xs text-[#726566] leading-relaxed">
-              <span className="font-medium text-[#3E2A2A]">{nutritionSpotlight.title}</span>
-              {" — "}
-              {nutritionSpotlight.hook}
-            </p>
-          </div>
-        </section>
-      )}
-
-      {/* Journal alimentaire — saisie d’abord, puis score & analyse */}
-      <section className="mb-6 rounded-3xl border border-white/70 bg-white/55 backdrop-blur-md p-4 shadow-sm">
-        <div className="mb-3">
-          <h2 className="text-base font-semibold text-[var(--foreground)]">Journal alimentaire</h2>
-          <p className="mt-1 text-[11px] text-[#8A6F6F] leading-relaxed">
-            Décris ton repas pour ce créneau, puis ouvre l’analyse : score sur la journée et conseils de l’assistant.
-          </p>
-        </div>
-
-        {/* Analyse photo — placée juste sous le titre du journal */}
-        <div className="mb-4">
-          {canUsePhotoScan ? (
-            <>
-              <p className="text-xs font-semibold text-[#6B2E2E] mb-2">Analyse photo</p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    const dataUrl = reader.result as string;
-                    void handleImageFromScan(dataUrl);
-                  };
-                  reader.readAsDataURL(file);
-                  e.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loadingScan}
-                className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-[#D44A4A]/70 bg-white/70 text-[#6B2E2E] font-semibold text-sm flex items-center justify-center gap-2"
-              >
-                {loadingScan ? <>⏳ Analyse en cours...</> : <>📷 Choisir une photo (galerie ou appareil)</>}
-              </button>
-              <p className="text-[10px] text-[#8A6F6F] mt-2 leading-relaxed">
-                Sur téléphone, sans attribut « appareil photo uniquement », le système te laisse ouvrir la galerie ou l’appareil photo selon ton choix.
-              </p>
-            </>
-          ) : (
-            <div className="rounded-xl border border-[var(--beige-border)] bg-white/70 p-4 text-center">
-              <p className="text-sm font-semibold text-[#6B2E2E] mb-1">Analyse photo : réservée Premium Plus</p>
-              <p className="text-xs text-[#726566] mb-3">
-                Tu peux déjà tout noter en texte un peu plus bas. Pour <strong>scanner ton assiette</strong> et enrichir
-                l’analyse avec la vision, passe à <strong>Premium Plus</strong>.
-              </p>
-              <Link
-                href="/premium"
-                className="inline-block text-xs font-semibold text-[#D44A4A] underline underline-offset-2"
-              >
-                Voir Premium Plus
-              </Link>
-            </div>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <div className="flex gap-2 flex-wrap">
-            {(["breakfast", "lunch", "dinner", "snack"] as const).map((meal) => (
-              <button
-                key={meal}
-                type="button"
-                onClick={() => setCurrentMeal(meal)}
-                className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                  currentMeal === meal
-                    ? "bg-[#D44A4A] text-white"
-                    : "bg-white text-[var(--foreground)] border border-[var(--beige-border)]"
-                }`}
-              >
-                {mealTypeLabels[meal]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={mealInput}
-              onChange={(e) => setMealInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void handleAddMeal();
-                }
-              }}
-              placeholder="Ex: Salade de quinoa, poulet..."
-              className="flex-1 rounded-xl border border-[var(--beige-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[#D44A4A] text-[var(--foreground)]"
-              disabled={addingMeal}
-            />
-            <button
-              type="button"
-              onClick={() => void handleAddMeal()}
-              disabled={addingMeal || !mealInput.trim()}
-              className="px-4 py-2 rounded-xl bg-[#D44A4A] text-white font-semibold hover:bg-[#C03A3A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {addingMeal ? "..." : "Ajouter"}
-            </button>
-          </div>
-          <p className="text-[10px] text-[#8A6F6F] mt-2">
-            Une fois enregistré ici, le repas est pris en compte pour la journée et apparaît dans l’onglet « Ma semaine ».
-          </p>
-        </div>
-
-        <div className="space-y-3 mb-4">
-          {(["breakfast", "lunch", "dinner", "snack"] as const).map((mealType) => {
-            const mealsOfType = meals.filter((m) => m.meal_type === mealType);
-            if (mealsOfType.length === 0) return null;
-
-            return (
-              <div key={mealType} className="border border-[#EDDCDC] rounded-xl p-3 bg-white/85">
-                <h3 className="text-xs font-semibold mb-2 text-[var(--foreground)]">{mealTypeLabels[mealType]}</h3>
-                <div className="space-y-2">
-                  {mealsOfType.map((entry) => (
-                    <div key={entry.id} className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className="text-sm text-[var(--foreground)]">{entry.raw_text}</p>
-                        {entry.parsed?.items && entry.parsed.items.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {entry.parsed.items.slice(0, 3).map((item: { name?: string }, idx: number) => (
-                              <span
-                                key={idx}
-                                className="text-[8px] px-1.5 py-0.5 rounded-full bg-[var(--beige-rose)] text-[#726566]"
-                              >
-                                {item.name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {entry.confidence < 50 && (
-                          <p className="text-[10px] text-orange-600 mt-1">⚠️ Analyse incertaine</p>
-                        )}
-                      </div>
-                      <div className="flex gap-1">
-                        {(!entry.hunger_before || !entry.satiety_after) && (
-                          <button
-                            type="button"
-                            onClick={() => handleAddFeeling(entry.id)}
-                            className="text-xs px-2 py-1 rounded bg-[var(--beige-rose)] text-[#726566] hover:bg-[var(--beige-border)] transition-colors"
-                            title="Ajouter ressenti"
-                          >
-                            💭
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteMeal(entry.id)}
-                          className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                          title="Supprimer"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {meals.length === 0 && (
-          <div className="text-center py-6 mb-2">
-            <p className="text-sm text-[var(--beige-text-light)]">
-              Commence par décrire ce que tu manges pour ce créneau.
-            </p>
-          </div>
-        )}
-
-        <div className="rounded-2xl border border-[#EEDDDD] bg-[#FFFDFD] p-4 mb-4">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-sm font-semibold text-[#6B2E2E]">Score du jour</span>
-            <span className="text-xl font-bold text-[#6B2E2E]">
-              {summary ? `${summary.score}/100` : meals.length > 0 ? "…" : "—"}
-            </span>
-          </div>
-          {summary ? (
-            <div className="w-full bg-white/70 rounded-full h-2 overflow-hidden mb-3">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  summary.score >= 70 ? "bg-green-500" : summary.score >= 50 ? "bg-yellow-500" : "bg-orange-500"
-                }`}
-                style={{ width: `${Math.min(100, summary.score)}%` }}
-              />
-            </div>
-          ) : (
-            <p className="text-xs text-[#726566] mb-3">
-              Le score s’affiche lorsque ton résumé du jour est prêt (souvent juste après l’ajout d’un repas).
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => setShowFullDietitianAnalysis((v) => !v)}
-            className="w-full text-left text-sm font-semibold text-[#D44A4A] underline underline-offset-2 py-1"
-          >
-            {showFullDietitianAnalysis
-              ? "Masquer l’analyse de mon assistant diététicien"
-              : "Voir l’analyse de mon assistant diététicien"}
-          </button>
-
-          {showFullDietitianAnalysis && (
-            <div className="mt-4 space-y-4 border-t border-[#EDDCDC] pt-4">
-              <div>
-                <h3 className="font-semibold text-[#3E2A2A] mb-1">{dietitianNote.title}</h3>
-                <p className="text-sm text-[#6D5B5B] leading-relaxed">{dietitianNote.intro}</p>
-              </div>
-              <div className="rounded-xl border border-[#DDF1E4] bg-[#F6FFFA] p-3">
-                <p className="text-xs font-semibold text-[#2E7A4B] mb-2">Ce qui est bien aujourd&apos;hui</p>
-                <ul className="space-y-1.5">
-                  {dietitianNote.highlights.map((h, idx) => (
-                    <li key={idx} className="text-sm text-[#4F5F55] flex items-start gap-2">
-                      <span className="mt-0.5 text-[#2E9F61]">✓</span>
-                      <span>{h}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="rounded-xl border border-[#F3E4CF] bg-[#FFFBF5] p-3">
-                <p className="text-xs font-semibold text-[#9A6A26] mb-2">Axes d&apos;amélioration</p>
-                <ul className="space-y-1.5">
-                  {dietitianNote.improvements.map((tip, idx) => (
-                    <li key={idx} className="text-sm text-[#6D5B5B] flex items-start gap-2">
-                      <span className="mt-0.5 text-[#C28A39]">→</span>
-                      <span>{tip}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {summary && summary.strengths.length > 0 && (
-                <div className="rounded-xl border border-[#D44A4A]/20 bg-white p-3">
-                  <p className="text-xs font-semibold text-[#6B2E2E] mb-2">Synthèse détaillée</p>
-                  <ul className="space-y-1">
-                    {summary.strengths.map((strength, idx) => (
-                      <li key={idx} className="text-sm text-[#726566] flex gap-2">
-                        <span className="text-green-600">✓</span>
-                        <span>{strength}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {summary.priority_tip && (
-                    <p className="mt-2 text-sm text-[#6D5B5B]">{summary.priority_tip}</p>
-                  )}
-                  {summary.tip_options.length > 0 && (
-                    <ul className="mt-2 space-y-1">
-                      {summary.tip_options.map((option, idx) => (
-                        <li key={idx} className="text-xs text-[#726566]">
-                          • {option}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-
-              {subscriptionTier !== "premium_plus" && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3">
-                  <p className="text-sm font-semibold text-[#6B2E2E]">Analyse plus poussée et personnalisée</p>
-                  <p className="mt-1 text-xs text-[#726566] leading-relaxed">
-                    Avec <strong>Premium Plus</strong> : analyse photo de l’assiette, lecture plus fine des repas et suivi
-                    avancé. Passe au plan Premium Plus pour une lecture sur-mesure.
-                  </p>
-                  <Link
-                    href="/premium"
-                    className="mt-2 inline-block text-xs font-semibold text-[#D44A4A] underline underline-offset-2"
-                  >
-                    Découvrir Premium Plus
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {defiDuJour && (
-          <section className="mb-4 rounded-2xl border border-white/70 bg-white/55 backdrop-blur-md p-4 shadow-sm">
-            <h2 className="text-sm font-semibold mb-2 text-[#6B2E2E] flex items-center gap-2">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#FFE4E4] text-[#D44A4A]">
-                ◎
-              </span>
-              <span>Défi pour demain</span>
-              {defiDuJour.duration_min && defiDuJour.duration_min > 0 && (
-                <span className="text-xs text-[#726566] ml-auto">
-                  {defiDuJour.duration_min < 1 ? "< 1 min" : `${Math.round(defiDuJour.duration_min)} min`}
-                </span>
-              )}
-            </h2>
-            {!conseilDuJour ? (
-              <p className="text-xs text-[#726566] mb-3 leading-relaxed">
-                <span className="font-semibold text-[#6B2E2E]">À la une — santé & bien-être : </span>
-                <span className="font-medium text-[#3E2A2A]">{nutritionSpotlight.title}</span>
-                {" — "}
-                {nutritionSpotlight.hook}
-              </p>
-            ) : null}
-            <p className="text-sm font-medium text-[#6B2E2E] mb-1">{defiDuJour.action}</p>
-            <p className="text-xs text-[#726566] italic">{defiDuJour.why}</p>
-            {nutritionSpotlight.ideas[0] ? (
-              <p className="mt-2 pt-2 border-t border-[#EDDCDC]/70 text-[11px] text-[#726566] leading-relaxed not-italic">
-                <span className="font-semibold text-[#6B2E2E]">Piste actu : </span>
-                {nutritionSpotlight.ideas[0]}
-              </p>
-            ) : null}
-          </section>
-        )}
-
-        {summary?.plan_for_tomorrow && (
-          <>
-            <button
-              type="button"
-              onClick={() => setShowPlanTomorrow(!showPlanTomorrow)}
-              className="w-full mb-3 px-4 py-2.5 rounded-xl border border-[#D44A4A]/40 bg-white text-[#6B2E2E] text-sm font-semibold hover:bg-[#FFF5F5] transition-colors"
-            >
-              {showPlanTomorrow ? "Masquer" : "Voir"} mes conseils concrets pour demain
-            </button>
-            {showPlanTomorrow && (
-              <div className="mb-4 space-y-3 rounded-xl border border-[var(--beige-border)] bg-white p-3">
-                {Object.entries(summary.plan_for_tomorrow).map(([mealType, suggestions]) => (
-                  <div key={mealType}>
-                    <h3 className="text-xs font-semibold text-[#6B2E2E] mb-1">
-                      {mealTypeLabels[mealType as keyof typeof mealTypeLabels]}
-                    </h3>
-                    <ul className="space-y-0.5">
-                      {suggestions.map((suggestion, idx) => (
-                        <li key={idx} className="text-xs text-[#726566]">
-                          • {suggestion}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-      </section>
-
-      {/* Modal ressenti */}
       {showFeelingModal && (
         <div className="fixed inset-0 bg-[#6B2E2E]/70 z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#FFF0F0] rounded-2xl p-6">
             <h3 className="text-lg font-bold text-[#6B2E2E] mb-4">Ton ressenti</h3>
-            
             <div className="space-y-4 mb-4">
               <div>
-                <label className="block text-sm font-semibold text-[#6B2E2E] mb-2">
-                  Faim avant le repas (1-5)
-                </label>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((val) => (
-              <button
-                      key={val}
-                      onClick={() => setHungerBefore(val)}
-                      className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${
-                        hungerBefore === val
-                          ? "bg-[#D44A4A] text-white"
-                          : "bg-white border border-[var(--beige-border)] text-[#726566]"
-                      }`}
-                    >
-                      {val}
-              </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-[#6B2E2E] mb-2">
-                  Satiété après le repas (1-5)
-                </label>
+                <label className="block text-sm font-semibold text-[#6B2E2E] mb-2">Faim avant le repas (1-5)</label>
                 <div className="flex gap-2">
                   {[1, 2, 3, 4, 5].map((val) => (
                     <button
                       key={val}
+                      type="button"
+                      onClick={() => setHungerBefore(val)}
+                      className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                        hungerBefore === val
+                          ? "bg-[#E94E77] text-white"
+                          : "bg-white border border-[var(--beige-border)] text-[#726566]"
+                      }`}
+                    >
+                      {val}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-[#6B2E2E] mb-2">Satiété après le repas (1-5)</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
                       onClick={() => setSatietyAfter(val)}
                       className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${
                         satietyAfter === val
-                          ? "bg-[#D44A4A] text-white"
+                          ? "bg-[#E94E77] text-white"
                           : "bg-white border border-[var(--beige-border)] text-[#726566]"
                       }`}
                     >
@@ -1294,32 +909,30 @@ function EquilibrePageContent({
                 </div>
               </div>
             </div>
-
             <div className="flex gap-2">
-            <button
-              onClick={() => {
+              <button
+                type="button"
+                onClick={() => {
                   setShowFeelingModal(false);
                   setPendingMealId(null);
                   setHungerBefore(null);
                   setSatietyAfter(null);
                 }}
-                className="flex-1 px-4 py-2 rounded-xl bg-white border border-[var(--beige-border)] text-sm text-[#726566] font-semibold hover:border-[var(--beige-accent)] transition-colors"
+                className="flex-1 px-4 py-2 rounded-xl bg-white border border-[var(--beige-border)] text-sm text-[#726566] font-semibold"
               >
                 Annuler
               </button>
               <button
+                type="button"
                 onClick={handleSaveFeeling}
                 disabled={hungerBefore === null || satietyAfter === null}
-                className="flex-1 px-4 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold disabled:opacity-50"
               >
                 Enregistrer
-            </button>
+              </button>
             </div>
           </div>
         </div>
-      )}
-
-        </>
       )}
 
       {/* Modales globales (visibles quel que soit l'onglet) */}
@@ -1345,7 +958,7 @@ function EquilibrePageContent({
               {manualIngredients.map((name, idx) => (
                 <span
                   key={`m-${idx}`}
-                  className="px-2.5 py-1 rounded-full bg-[#D44A4A] text-white text-sm flex items-center gap-1"
+                  className="px-2.5 py-1 rounded-full bg-[#E94E77] text-white text-sm flex items-center gap-1"
                 >
                   {name}
                   <button
@@ -1373,7 +986,7 @@ function EquilibrePageContent({
                   }
                 }}
                 placeholder="Ex: crème fraîche, parmesan..."
-                className="flex-1 rounded-xl border border-[var(--beige-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[#D44A4A] text-[var(--foreground)]"
+                className="flex-1 rounded-xl border border-[var(--beige-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[#E94E77] text-[var(--foreground)]"
               />
               <button
                 type="button"
@@ -1384,7 +997,7 @@ function EquilibrePageContent({
                   }
                 }}
                 disabled={!manualInput.trim()}
-                className="px-3 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold disabled:opacity-50"
+                className="px-3 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold disabled:opacity-50"
               >
                 +
               </button>
@@ -1411,7 +1024,7 @@ function EquilibrePageContent({
                 type="button"
                 onClick={handleSaveScanAsMeal}
                 disabled={addingMeal}
-                className="flex-1 py-2 rounded-xl bg-[#D44A4A] text-white text-sm font-semibold hover:bg-[#C03A3A] disabled:opacity-50"
+                className="flex-1 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56] disabled:opacity-50"
               >
                 {addingMeal ? "..." : "Enregistrer le repas"}
               </button>
@@ -1433,81 +1046,6 @@ function EquilibrePageContent({
         </div>
       )}
 
-      {activePart === "semaine" && (
-        <section className="space-y-6">
-          <div className="rounded-2xl border border-white/70 bg-white/60 backdrop-blur-md p-4 shadow-sm">
-            <p className="text-sm text-[#6B2E2E] font-medium">
-              L’équilibre sur plusieurs jours compte plus qu’un repas parfait.
-            </p>
-            <p className="text-xs text-[#726566] mt-2">
-              Ici tu retrouves les repas enregistrés sur la semaine, les tendances et une action simple pour progresser.
-            </p>
-          </div>
-
-          <section className="rounded-2xl border border-white/70 bg-white/60 backdrop-blur-md p-4 shadow-sm">
-            <h2 className="text-lg font-bold text-[#6B2E2E] mb-2">Repas enregistrés cette semaine</h2>
-            {weekMealsLoading ? (
-              <p className="text-sm text-[#726566]">Chargement…</p>
-            ) : weekMeals.length === 0 ? (
-              <p className="text-sm text-[#726566] leading-relaxed">
-                Aucun repas sur cette semaine pour l’instant. Ajoute un repas depuis l’onglet « Mon repas » : il apparaîtra
-                ici automatiquement.
-              </p>
-            ) : (
-              <ul className="space-y-4">
-                {[...weekMealsByDay.entries()]
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([date, entries]) => (
-                    <li key={date}>
-                      <p className="text-xs font-semibold text-[#6B2E2E] mb-1 capitalize">
-                        {formatWeekdayFr(date)}
-                      </p>
-                      <ul className="space-y-2">
-                        {entries.map((e) => (
-                          <li
-                            key={e.id}
-                            className="text-sm text-[#726566] rounded-lg bg-white/85 border border-[#EDDCDC]/80 px-3 py-2"
-                          >
-                            <span className="font-medium text-[#3E2A2A]">
-                              {(mealTypeLabels as Record<string, string>)[e.meal_type] || e.meal_type}
-                            </span>
-                            <span className="text-[#B0A0A0]"> · </span>
-                            {e.raw_text}
-                          </li>
-                        ))}
-                      </ul>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </section>
-
-          {weeklyInsights ? (
-            <section className="rounded-2xl border border-white/70 bg-white/60 backdrop-blur-md p-4 shadow-sm">
-              <h2 className="text-lg font-bold text-[#6B2E2E] mb-3">Cette semaine</h2>
-              <div className="space-y-3">
-                {Object.entries(weeklyInsights.patterns).map(([key, value]) => (
-                  <div key={key} className="text-sm text-[#726566]">
-                    {value}
-                  </div>
-                ))}
-                {weeklyInsights.one_action && (
-                  <div className="p-3 bg-[#FFD9D9] rounded-xl border border-[#D44A4A]/30">
-                    <p className="text-sm font-semibold text-[#6B2E2E] mb-1">1 mini défi :</p>
-                    <p className="text-sm text-[#726566]">{weeklyInsights.one_action}</p>
-                  </div>
-                )}
-              </div>
-            </section>
-          ) : (
-            <div className="rounded-2xl border border-white/70 bg-white/60 backdrop-blur-md p-6 text-center shadow-sm">
-              <p className="text-sm text-[var(--beige-text-light)]">
-                Ajoute des repas pendant la semaine pour voir tes tendances et ton défi.
-              </p>
-            </div>
-          )}
-        </section>
-      )}
     </main>
   );
 }

@@ -290,7 +290,7 @@ export default function RecettesPage() {
                   <button
                     type="button"
                     onClick={() => removeIngredientTag(index)}
-                    className="h-6 w-6 rounded-full text-[var(--text-secondary)] hover:bg-[#D44A4A]/15 hover:text-[#6B2E2E] flex items-center justify-center text-base leading-none"
+                    className="h-6 w-6 rounded-full text-[var(--text-secondary)] hover:bg-[#E94E77]/15 hover:text-[#6B2E2E] flex items-center justify-center text-base leading-none"
                     aria-label={`Retirer ${tag}`}
                   >
                     &times;

@@ -15,7 +15,7 @@ export default async function ParrainagePage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-[#FFF8F6] px-4">
         <p className="text-sm text-[#6B2E2E]">Connexion requise.</p>
-        <Link href="/login?next=/parrainage" className="text-sm font-semibold text-[#D44A4A] underline">
+        <Link href="/login?next=/parrainage" className="text-sm font-semibold text-[#E94E77] underline">
           Se connecter
         </Link>
       </div>
@@ -31,7 +31,7 @@ export default async function ParrainagePage() {
             Cette section est réservée. Le suivi des campagnes partenaires est géré avec Foodlane&nbsp;; les
             utilisateurs de l&apos;app n&apos;y ont pas accès ici.
           </p>
-          <Link href="/menu" className="mt-4 inline-block text-sm font-semibold text-[#D44A4A] underline">
+          <Link href="/menu" className="mt-4 inline-block text-sm font-semibold text-[#E94E77] underline">
             Retour
           </Link>
         </div>
@@ -44,12 +44,12 @@ export default async function ParrainagePage() {
   if (!projectId) {
     return (
       <main className="min-h-screen bg-[#FFF8F6] px-4 py-10 pb-28">
-        <div className="mx-auto max-w-lg rounded-2xl border border-[#E8A0A0] bg-white p-6 text-center text-[#6B2E2E]">
+        <div className="mx-auto max-w-lg rounded-2xl border border-[var(--beige-border)] bg-white p-6 text-center text-[#6B2E2E]">
           <p className="font-semibold">Refgrow non configuré</p>
           <p className="mt-2 text-sm text-[#8A4A4A]">
             Ajoute <code className="text-xs">NEXT_PUBLIC_REFGRROW_PROJECT_ID</code> sur Vercel puis redéploie.
           </p>
-          <Link href="/menu" className="mt-4 inline-block text-sm font-semibold text-[#D44A4A] underline">
+          <Link href="/menu" className="mt-4 inline-block text-sm font-semibold text-[#E94E77] underline">
             Retour
           </Link>
         </div>
@@ -77,7 +77,7 @@ export default async function ParrainagePage() {
               href="https://foodlane.refgrow.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="font-semibold text-[#D44A4A] underline"
+              className="font-semibold text-[#E94E77] underline"
             >
               foodlane.refgrow.com
             </a>

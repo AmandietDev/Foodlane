@@ -24,7 +24,7 @@ function StarRow({
             onClick={() => onChange(n)}
             className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-colors ${
               value >= n
-                ? "bg-[#D44A4A] border-[#D44A4A] text-white"
+                ? "bg-[#E94E77] border-[#E94E77] text-white"
                 : "bg-white border-[var(--beige-border)] text-[var(--foreground)]"
             }`}
           >
@@ -120,7 +120,7 @@ export default function UserFeedback() {
         <button
           type="submit"
           disabled={sending}
-          className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white text-xs font-semibold transition-colors disabled:opacity-60"
+          className="w-full px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#D63D56] text-white text-xs font-semibold transition-colors disabled:opacity-60"
         >
           {sending ? t("feedback.sending") : t("feedback.submit")}
         </button>

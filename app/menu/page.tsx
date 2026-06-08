@@ -848,14 +848,14 @@ export default function MenuPage() {
               <div className="space-y-3">
                 <Link
                   href="/compte"
-                  className="w-full text-left px-4 py-3 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                  className="w-full text-left px-4 py-3 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
                 >
                   <span className="font-medium">Créer / Modifier mon profil</span>
                   <span>→</span>
                 </Link>
                 <button
                   onClick={() => setActiveSection("profil")}
-                  className="w-full text-left px-4 py-3 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                  className="w-full text-left px-4 py-3 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
                 >
                   <span className="font-medium">Mon profil</span>
                   <span>→</span>
@@ -902,7 +902,7 @@ export default function MenuPage() {
                           setLoginForm({ ...loginForm, email: e.target.value })
                         }
                         placeholder="ton@email.com"
-                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                       />
                     </div>
                     <div>
@@ -917,12 +917,12 @@ export default function MenuPage() {
                           setLoginForm({ ...loginForm, password: e.target.value })
                         }
                         placeholder="••••••••"
-                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                       />
                     </div>
                     <button
                       type="submit"
-                      className="w-full mt-3 px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                      className="w-full mt-3 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
                     >
                       Se connecter
                     </button>
@@ -933,7 +933,7 @@ export default function MenuPage() {
                     </p>
                     <button
                       onClick={() => setShowSignUp(true)}
-                      className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+                      className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
                     >
                       Créer un compte
                     </button>
@@ -963,7 +963,7 @@ export default function MenuPage() {
                             setSignUpForm({ ...signUpForm, prenom: e.target.value })
                           }
                           placeholder="Prénom"
-                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                         />
                       </div>
                       <div>
@@ -978,7 +978,7 @@ export default function MenuPage() {
                             setSignUpForm({ ...signUpForm, nom: e.target.value })
                           }
                           placeholder="Nom"
-                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                         />
                       </div>
                     </div>
@@ -994,7 +994,7 @@ export default function MenuPage() {
                           setSignUpForm({ ...signUpForm, email: e.target.value })
                         }
                         placeholder="ton@email.com"
-                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                       />
                     </div>
                     <div>
@@ -1010,7 +1010,7 @@ export default function MenuPage() {
                           setSignUpForm({ ...signUpForm, password: e.target.value })
                         }
                         placeholder="Au moins 6 caractères"
-                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                       />
                     </div>
                     <div>
@@ -1028,12 +1028,12 @@ export default function MenuPage() {
                           })
                         }
                         placeholder="Répète ton mot de passe"
-                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                        className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                       />
                     </div>
                     <button
                       type="submit"
-                      className="w-full mt-3 px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                      className="w-full mt-3 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
                     >
                       Créer mon compte
                     </button>
@@ -1047,7 +1047,7 @@ export default function MenuPage() {
                         setShowSignUp(false);
                         setLoginError("");
                       }}
-                      className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+                      className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
                     >
                       Se connecter
                     </button>
@@ -1087,7 +1087,7 @@ export default function MenuPage() {
                 </h2>
                 <button
                   onClick={handleLogout}
-                  className="px-3 py-1.5 text-xs font-semibold text-white bg-[#D44A4A] hover:bg-[#C03A3A] rounded-lg transition-colors"
+                  className="px-3 py-1.5 text-xs font-semibold text-white bg-[#E94E77] hover:bg-[#D63D56] rounded-lg transition-colors"
                 >
                   Se déconnecter
                 </button>
@@ -1103,7 +1103,7 @@ export default function MenuPage() {
                       value={preferences.prenom}
                       onChange={(e) => updatePreference("prenom", e.target.value)}
                       placeholder="Prénom"
-                      className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                      className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                     />
                   </div>
                   <div>
@@ -1115,7 +1115,7 @@ export default function MenuPage() {
                       value={preferences.nom}
                       onChange={(e) => updatePreference("nom", e.target.value)}
                       placeholder="Nom"
-                      className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                      className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                     />
                   </div>
                 </div>
@@ -1128,7 +1128,7 @@ export default function MenuPage() {
                     value={preferences.email}
                     onChange={(e) => updatePreference("email", e.target.value)}
                     placeholder="ton@email.com"
-                    className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                    className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                   />
                 </div>
                 <div>
@@ -1140,12 +1140,12 @@ export default function MenuPage() {
                     value={preferences.telephone}
                     onChange={(e) => updatePreference("telephone", e.target.value)}
                     placeholder="06 12 34 56 78"
-                    className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                    className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="w-full mt-3 px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                  className="w-full mt-3 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
                 >
                   Enregistrer les modifications
                 </button>
@@ -1185,7 +1185,7 @@ export default function MenuPage() {
               </div>
               <button
                 onClick={() => router.push("/premium")}
-                className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                className="w-full px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
               >
                 Passer à Premium
               </button>
@@ -1250,7 +1250,7 @@ export default function MenuPage() {
                     alert(error instanceof Error ? error.message : "Erreur lors de l'ouverture du portail de gestion");
                   }
                 }}
-                className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+                className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
               >
                 Historique de facturation / Voir sur le store
               </button>
@@ -1461,7 +1461,7 @@ export default function MenuPage() {
                 onClick={() =>
                   setShowLegalDoc(showLegalDoc === "mentions" ? null : "mentions")
                 }
-                className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
               >
                 <span>Mentions légales</span>
                 <span>{showLegalDoc === "mentions" ? "−" : "+"}</span>
@@ -1470,7 +1470,7 @@ export default function MenuPage() {
                 onClick={() =>
                   setShowLegalDoc(showLegalDoc === "cgu" ? null : "cgu")
                 }
-                className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
               >
                 <span>Conditions Générales d&apos;Utilisation (CGU)</span>
                 <span>{showLegalDoc === "cgu" ? "−" : "+"}</span>
@@ -1481,7 +1481,7 @@ export default function MenuPage() {
                     showLegalDoc === "confidentialite" ? null : "confidentialite"
                   )
                 }
-                className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
               >
                 <span>Politique de confidentialité</span>
                 <span>{showLegalDoc === "confidentialite" ? "−" : "+"}</span>
@@ -1491,7 +1491,7 @@ export default function MenuPage() {
                   onClick={() =>
                     setShowLegalDoc(showLegalDoc === "cgv" ? null : "cgv")
                   }
-                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
                 >
                   <span>Conditions de vente (CGV)</span>
                   <span>{showLegalDoc === "cgv" ? "−" : "+"}</span>
@@ -1501,7 +1501,7 @@ export default function MenuPage() {
                 onClick={() =>
                   setShowLegalDoc(showLegalDoc === "cookies" ? null : "cookies")
                 }
-                className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
               >
                 <span>Politique cookies</span>
                 <span>{showLegalDoc === "cookies" ? "−" : "+"}</span>
@@ -1563,7 +1563,7 @@ export default function MenuPage() {
                     }
                     className={`relative w-12 h-6 rounded-full transition-colors ${
                       preferences.notificationsNewRecipes
-                        ? "bg-[#D44A4A]"
+                        ? "bg-[#E94E77]"
                         : "bg-[#D4C4B8]"
                     }`}
                   >
@@ -1591,7 +1591,7 @@ export default function MenuPage() {
                     }
                     className={`relative w-12 h-6 rounded-full transition-colors ${
                       preferences.notificationsMenuIdeas
-                        ? "bg-[#D44A4A]"
+                        ? "bg-[#E94E77]"
                         : "bg-[#D4C4B8]"
                     }`}
                   >
@@ -1620,7 +1620,7 @@ export default function MenuPage() {
                     }
                     className={`relative w-12 h-6 rounded-full transition-colors ${
                       preferences.notificationsReminders
-                        ? "bg-[#D44A4A]"
+                        ? "bg-[#E94E77]"
                         : "bg-[#D4C4B8]"
                     }`}
                   >
@@ -1649,7 +1649,7 @@ export default function MenuPage() {
                 {!isPremium && (
                   <button
                     onClick={() => router.push("/premium")}
-                    className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                    className="w-full px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
                   >
                     Passer à Premium sans publicités
                   </button>
@@ -1711,7 +1711,7 @@ export default function MenuPage() {
                   <button
                     onClick={toggleTheme}
                     className={`relative w-12 h-6 rounded-full transition-colors ${
-                      theme === "dark" ? "bg-[#D44A4A]" : "bg-[#D4C4B8]"
+                      theme === "dark" ? "bg-[#E94E77]" : "bg-[#D4C4B8]"
                     }`}
                   >
                     <span
@@ -1736,7 +1736,7 @@ export default function MenuPage() {
                       setLocale(newLang);
                       setLocaleFromContext(newLang);
                     }}
-                    className="rounded-lg bg-[var(--background)] border border-[var(--beige-border)] px-3 py-1 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                    className="rounded-lg bg-[var(--background)] border border-[var(--beige-border)] px-3 py-1 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                   >
                     <option value="fr">Français</option>
                     <option value="en">English</option>
@@ -1756,7 +1756,7 @@ export default function MenuPage() {
                   onClick={() =>
                     setShowLegalDoc(showLegalDoc === "mentions" ? null : "mentions")
                   }
-                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
                 >
                   <span>Mentions légales</span>
                   <span>{showLegalDoc === "mentions" ? "−" : "+"}</span>
@@ -1765,7 +1765,7 @@ export default function MenuPage() {
                   onClick={() =>
                     setShowLegalDoc(showLegalDoc === "cgu" ? null : "cgu")
                   }
-                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
                 >
                   <span>Conditions Générales d&apos;Utilisation (CGU)</span>
                   <span>{showLegalDoc === "cgu" ? "−" : "+"}</span>
@@ -1776,7 +1776,7 @@ export default function MenuPage() {
                       showLegalDoc === "confidentialite" ? null : "confidentialite"
                     )
                   }
-                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
                 >
                   <span>Politique de confidentialité</span>
                   <span>{showLegalDoc === "confidentialite" ? "−" : "+"}</span>
@@ -1785,7 +1785,7 @@ export default function MenuPage() {
                   onClick={() =>
                     setShowLegalDoc(showLegalDoc === "cgv" ? null : "cgv")
                   }
-                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
                 >
                   <span>Conditions de vente (CGV)</span>
                   <span>{showLegalDoc === "cgv" ? "−" : "+"}</span>
@@ -1794,7 +1794,7 @@ export default function MenuPage() {
                   onClick={() =>
                     setShowLegalDoc(showLegalDoc === "cookies" ? null : "cookies")
                   }
-                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#D44A4A] transition-colors flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
                 >
                   <span>Politique cookies</span>
                   <span>{showLegalDoc === "cookies" ? "−" : "+"}</span>
@@ -1919,7 +1919,7 @@ export default function MenuPage() {
                       isPremium
                         ? billingProfile?.subscription_tier === "premium_plus"
                           ? "bg-[#8B3A5C] text-white"
-                          : "bg-[#D44A4A] text-white"
+                          : "bg-[#E94E77] text-white"
                         : "bg-[var(--beige-card-alt)] text-[var(--beige-text-muted)]"
                     }`}
                   >
@@ -1963,7 +1963,7 @@ export default function MenuPage() {
                   </div>
                   <button
                     onClick={() => router.push("/premium")}
-                    className="w-full mt-3 px-4 py-3 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-sm font-semibold transition-colors"
+                    className="w-full mt-3 px-4 py-3 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-sm font-semibold transition-colors"
                   >
                     Passer à Premium
                   </button>
@@ -2024,7 +2024,7 @@ export default function MenuPage() {
                         alert(error instanceof Error ? error.message : "Erreur lors de l'ouverture du portail de gestion");
                       }
                     }}
-                    className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+                    className="w-full px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
                   >
                     Historique de facturation / Portail Stripe
                   </button>
@@ -2096,7 +2096,7 @@ export default function MenuPage() {
                 </p>
                 <button
                   onClick={() => setShowContactForm(true)}
-                  className="w-full px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#C03A3A] text-white text-xs font-semibold transition-colors"
+                  className="w-full px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#D63D56] text-white text-xs font-semibold transition-colors"
                 >
                   Nous contacter
                 </button>
@@ -2107,7 +2107,7 @@ export default function MenuPage() {
                   <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">Nous contacter</h2>
                   {contactSubmitted ? (
                     <div className="text-center py-4">
-                      <p className="text-sm text-[#D44A4A] font-semibold">
+                      <p className="text-sm text-[#E94E77] font-semibold">
                         ✓ Message envoyé avec succès !
                       </p>
                       <p className="text-xs text-[#9A6A6A] mt-1">
@@ -2132,7 +2132,7 @@ export default function MenuPage() {
                               })
                             }
                             placeholder="Prénom"
-                            className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                            className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                           />
                         </div>
                         <div>
@@ -2150,7 +2150,7 @@ export default function MenuPage() {
                               })
                             }
                             placeholder="Nom"
-                            className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                            className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                           />
                         </div>
                       </div>
@@ -2169,7 +2169,7 @@ export default function MenuPage() {
                             })
                           }
                           placeholder="ton@email.com"
-                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                         />
                       </div>
                       <div>
@@ -2186,7 +2186,7 @@ export default function MenuPage() {
                             })
                           }
                           placeholder="06 12 34 56 78"
-                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                         />
                       </div>
                       <div>
@@ -2202,7 +2202,7 @@ export default function MenuPage() {
                               objet: e.target.value,
                             })
                           }
-                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A]"
+                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77]"
                         >
                           <option value="">Sélectionner un objet</option>
                           {CONTACT_SUBJECTS.map((subject) => (
@@ -2227,7 +2227,7 @@ export default function MenuPage() {
                           }
                           placeholder="Décris ton problème ou ta question..."
                           rows={5}
-                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#D44A4A] resize-none"
+                          className="w-full rounded-xl bg-[var(--background)] border border-[var(--beige-border)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[#E94E77] resize-none"
                         />
                       </div>
                       <div className="flex gap-2">
@@ -2244,13 +2244,13 @@ export default function MenuPage() {
                               message: "",
                             });
                           }}
-                          className="flex-1 px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#D44A4A] transition-colors"
+                          className="flex-1 px-4 py-2 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] text-xs font-semibold hover:border-[#E94E77] transition-colors"
                         >
                           Annuler
                         </button>
                         <button
                           type="submit"
-                          className="flex-1 px-4 py-2 rounded-xl bg-[#D44A4A] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                          className="flex-1 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
                         >
                           Envoyer
                         </button>

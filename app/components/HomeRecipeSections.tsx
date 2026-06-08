@@ -48,7 +48,7 @@ function RecipeStrip({
           <li key={recipe.id} className="min-w-[9.5rem] max-w-[9.5rem] snap-start shrink-0">
             <Link
               href={`/recette/${recipe.id}`}
-              className="block rounded-xl border border-[#E8A0A0] bg-white overflow-hidden hover:shadow-md transition-shadow"
+              className="block rounded-xl border border-[var(--beige-border)] bg-white overflow-hidden hover:shadow-md transition-shadow"
             >
               <div className="h-28 bg-[#f8f2f2]">
                 <RecipeImage
