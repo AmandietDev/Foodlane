@@ -399,6 +399,10 @@ export interface PlannedMeal {
   is_batch_origin?: boolean | null;
   /** Nombre total de portions preparees (= household_size * nb_creneaux du batch). */
   batch_servings?: number | null;
+  /** Adaptation foyer : scale | batch_portions */
+  portion_adaptation?: "scale" | "batch_portions" | null;
+  /** Libellé affiché (ex. quantités adaptées pour 2 pers.) */
+  portion_note?: string | null;
 }
 
 export interface LockedSlot {

@@ -1,6 +1,6 @@
 /**
  * Moteur d'analyse journalière : calcule le score et génère les conseils
- * Basé sur la variété, structure, fibres, régularité, satiété, alignement objectif
+ * Le score est la moyenne des repas effectivement saisis (pas de pénalité pour les créneaux vides).
  */
 
 import { ParsedMeal } from "./foodParser";
@@ -20,6 +20,7 @@ export interface DailySummary {
   meta: {
     components_found: string[];
     rules_triggered: string[];
+    meals_analyzed: number;
   };
 }
 
@@ -31,229 +32,166 @@ export interface MealEntry {
 }
 
 export interface UserContext {
-  objective?: string; // weight_loss, muscle_gain, cook_more, reduce_meat, better_energy, digestive_comfort
+  objective?: string;
   allergies?: string[];
-  diets?: string[]; // vegetarian, vegan, no_pork, lactose_free, etc.
-  behavioral_preferences?: string[]; // "je grignote le soir", "je manque de temps", etc.
+  diets?: string[];
+  behavioral_preferences?: string[];
+}
+
+const FAST_FOOD_TOKENS = ["burger", "frite", "pizza", "kebab", "macdo"];
+const MEAT_TOKENS = ["poulet", "viande", "bœuf", "boeuf", "porc", "jambon"];
+const VEG_PROTEIN_TOKENS = ["lentilles", "haricots", "tofu", "tempeh"];
+
+const MEAL_LABELS: Record<MealEntry["meal_type"], string> = {
+  breakfast: "Petit-déjeuner",
+  lunch: "Déjeuner",
+  dinner: "Dîner",
+  snack: "Collation",
+};
+
+function clampScore(score: number): number {
+  return Math.max(0, Math.min(100, score));
+}
+
+function mealHasFastFood(meal: MealEntry): boolean {
+  return meal.parsed.components.treat.some((t) =>
+    FAST_FOOD_TOKENS.some((ff) => t.includes(ff))
+  );
 }
 
 /**
- * Calcule le score de qualité (0-100) basé sur plusieurs critères
+ * Score d'un seul repas saisi (0-100).
  */
-function calculateScore(meals: MealEntry[], context: UserContext): number {
+export function calculateMealScore(meal: MealEntry, context: UserContext): number {
+  const { protein, veggie, carb, fruit } = meal.parsed.components;
   let score = 0;
-  const rulesTriggered: string[] = [];
-  
-  // Compter les repas structurés (pas juste des collations)
-  const structuredMeals = meals.filter(m => 
-    m.meal_type !== "snack" || 
-    (m.parsed.components.protein.length > 0 || m.parsed.components.veggie.length > 0)
-  );
-  
-  // +20 si légumes présents dans ≥1 repas
-  const hasVeggies = meals.some(m => m.parsed.components.veggie.length > 0);
-  if (hasVeggies) {
-    score += 20;
-    rulesTriggered.push("has_veggies");
+
+  const isLightSnack =
+    meal.meal_type === "snack" &&
+    protein.length === 0 &&
+    veggie.length === 0 &&
+    carb.length === 0;
+
+  if (isLightSnack) {
+    if (fruit.length > 0) score += 85;
+    else if (mealHasFastFood(meal)) score += 35;
+    else score += 55;
+    if (meal.satiety_after !== undefined && meal.satiety_after >= 4) score += 5;
+    return clampScore(score);
   }
-  
-  // +15 si protéines présentes dans ≥2 repas
-  const proteinMeals = meals.filter(m => m.parsed.components.protein.length > 0);
-  if (proteinMeals.length >= 2) {
-    score += 15;
-    rulesTriggered.push("protein_distributed");
-  } else if (proteinMeals.length === 1) {
+
+  if (veggie.length > 0) score += 28;
+  if (protein.length > 0) score += 28;
+  if (carb.length > 0) score += 18;
+  if (fruit.length > 0) score += 12;
+  if (!mealHasFastFood(meal)) score += 10;
+
+  if (meal.satiety_after !== undefined && meal.satiety_after >= 4) score += 5;
+
+  if (protein.length === 0 && veggie.length === 0 && carb.length === 0) {
+    score = Math.max(15, score - 30);
+  }
+
+  if (context.objective === "weight_loss" && veggie.length > 0 && !mealHasFastFood(meal)) {
+    score += 8;
+  } else if (context.objective === "muscle_gain" && protein.length > 0) {
+    score += 8;
+  } else if (
+    context.objective === "reduce_meat" &&
+    protein.length > 0 &&
+    protein.every((p) => VEG_PROTEIN_TOKENS.some((v) => p.includes(v)))
+  ) {
     score += 8;
   }
-  
-  // +10 si fruits présents
-  const hasFruits = meals.some(m => m.parsed.components.fruit.length > 0);
-  if (hasFruits) {
-    score += 10;
-    rulesTriggered.push("has_fruits");
-  }
-  
-  // +10 si féculents présents au dîner (satiété) OU si prise de masse
-  const dinnerMeal = meals.find(m => m.meal_type === "dinner");
-  const dinnerHasCarbs = Boolean(dinnerMeal?.parsed?.components?.carb && dinnerMeal.parsed.components.carb.length > 0);
-  if (dinnerHasCarbs && (context.objective === "weight_loss" || context.objective === "muscle_gain")) {
-    score += 10;
-    rulesTriggered.push("dinner_carbs_for_satiety");
-  }
-  
-  // +10 si "fait maison" détectable (pas de fast food)
-  const hasFastFood = meals.some(m => m.parsed.components.treat.some(t => 
-    ["burger", "frite", "pizza", "kebab", "macdo"].some(ff => t.includes(ff))
-  ));
-  if (!hasFastFood && structuredMeals.length >= 2) {
-    score += 10;
-    rulesTriggered.push("home_cooked");
-  }
-  
-  // +10 si régularité (au moins 2 repas structurés)
-  if (structuredMeals.length >= 2) {
-    score += 10;
-    rulesTriggered.push("regular_meals");
-  }
-  
-  // Bonus satiété si données disponibles
-  const avgSatiety = meals
-    .filter(m => m.satiety_after !== undefined)
-    .map(m => m.satiety_after!)
-    .reduce((sum, val, _, arr) => sum + val / arr.length, 0);
-  if (avgSatiety >= 4) {
-    score += 5;
-    rulesTriggered.push("good_satiety");
-  }
-  
-  // Bonus alignement objectif
-  if (context.objective === "weight_loss" && hasVeggies && !hasFastFood) {
-    score += 10;
-    rulesTriggered.push("aligned_weight_loss");
-  } else if (context.objective === "muscle_gain" && proteinMeals.length >= 2) {
-    score += 10;
-    rulesTriggered.push("aligned_muscle_gain");
-  } else if (context.objective === "reduce_meat" && proteinMeals.every(m => 
-    m.parsed.components.protein.some(p => 
-      ["lentilles", "haricots", "tofu", "tempeh"].some(v => p.includes(v))
-    )
-  )) {
-    score += 10;
-    rulesTriggered.push("aligned_reduce_meat");
-  }
-  
-  // Pénalités
-  // -30 si repas très incomplets répétés
-  const incompleteMeals = meals.filter(m => 
-    m.parsed.components.protein.length === 0 &&
-    m.parsed.components.veggie.length === 0 &&
-    m.parsed.components.carb.length === 0
-  );
-  if (incompleteMeals.length >= 2) {
-    score -= 30;
-    rulesTriggered.push("many_incomplete_meals");
-  }
-  
-  // Bonus compatibilité régime
+
   if (context.diets?.includes("vegetarian") || context.diets?.includes("vegan")) {
-    const hasMeat = meals.some(m => m.parsed.components.protein.some(p => 
-      ["poulet", "viande", "bœuf", "boeuf", "porc", "jambon"].some(meat => p.includes(meat))
-    ));
-    if (!hasMeat) {
-      score += 5;
-      rulesTriggered.push("diet_compliant");
-    }
+    const hasMeat = protein.some((p) => MEAT_TOKENS.some((meat) => p.includes(meat)));
+    if (!hasMeat) score += 5;
   }
-  
-  // Plafonner entre 0 et 100
-  score = Math.max(0, Math.min(100, score));
-  
-  return score;
+
+  return clampScore(score);
 }
 
 /**
- * Génère les points forts (2-3 max)
+ * Moyenne des scores des repas saisis uniquement.
  */
+function calculateScore(meals: MealEntry[], context: UserContext): number {
+  if (meals.length === 0) return 0;
+  const scores = meals.map((m) => calculateMealScore(m, context));
+  const avg = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+  return Math.round(avg);
+}
+
 function generateStrengths(meals: MealEntry[], score: number): string[] {
   const strengths: string[] = [];
-  
-  const hasVeggies = meals.some(m => m.parsed.components.veggie.length > 0);
-  const proteinMeals = meals.filter(m => m.parsed.components.protein.length > 0);
-  const hasFruits = meals.some(m => m.parsed.components.fruit.length > 0);
-  const structuredMeals = meals.filter(m => m.meal_type !== "snack");
-  
-  if (hasVeggies) {
-    strengths.push("Bonne présence de légumes");
+
+  for (const meal of meals) {
+    const label = MEAL_LABELS[meal.meal_type];
+    const { protein, veggie, fruit } = meal.parsed.components;
+
+    if (veggie.length > 0) strengths.push(`${label} : bonne présence de légumes`);
+    if (protein.length > 0) strengths.push(`${label} : protéines présentes`);
+    if (fruit.length > 0) strengths.push(`${label} : fruit inclus`);
+    if (!mealHasFastFood(meal) && (protein.length > 0 || veggie.length > 0)) {
+      strengths.push(`${label} : repas équilibré`);
+    }
   }
-  if (proteinMeals.length >= 2) {
-    strengths.push("Protéines bien réparties sur la journée");
-  } else if (proteinMeals.length === 1) {
-    strengths.push("Protéines présentes dans tes repas");
+
+  if (strengths.length === 0 && score >= 50) {
+    strengths.push("Tu as commencé à suivre tes repas, c'est une bonne base");
   }
-  if (hasFruits) {
-    strengths.push("Fruits inclus dans ta journée");
+  if (score >= 75 && meals.length > 0) {
+    strengths.push("Bonne qualité sur les repas saisis");
   }
-  if (structuredMeals.length >= 3) {
-    strengths.push("Régularité des repas respectée");
-  }
-  if (score >= 70) {
-    strengths.push("Équilibre global de qualité");
-  }
-  
-  // Limiter à 3
+
   return strengths.slice(0, 3);
 }
 
-/**
- * Génère le conseil prioritaire (1 seul, hyper clair)
- */
 function generatePriorityTip(meals: MealEntry[], context: UserContext): string {
-  const hasVeggies = meals.some(m => m.parsed.components.veggie.length > 0);
-  const proteinMeals = meals.filter(m => m.parsed.components.protein.length > 0);
-  const hasFruits = meals.some(m => m.parsed.components.fruit.length > 0);
-  const structuredMeals = meals.filter(m => m.meal_type !== "snack");
-  const dinnerMeal = meals.find(m => m.meal_type === "dinner");
-  const dinnerHasCarbs = Boolean(dinnerMeal?.parsed?.components?.carb && dinnerMeal.parsed.components.carb.length > 0);
-  
-  // Priorité selon objectif
-  if (context.objective === "weight_loss") {
-    if (!hasVeggies) {
-      return "Ajoute des légumes à au moins un repas pour mieux caler ta faim et augmenter tes fibres";
-    }
-    if (!dinnerHasCarbs && structuredMeals.length >= 2) {
-      return "Inclus une petite portion de féculents au dîner pour éviter les fringales nocturnes";
-    }
-    if (proteinMeals.length < 2) {
-      return "Répartis tes protéines sur au moins 2 repas pour maintenir ta masse musculaire";
-    }
-  } else if (context.objective === "muscle_gain") {
-    if (proteinMeals.length < 2) {
-      return "Ajoute des protéines à chaque repas principal (minimum 2 repas) pour soutenir ta prise de masse";
-    }
-    if (structuredMeals.length < 3) {
-      return "Mange au moins 3 repas complets par jour pour apporter assez de calories et nutriments";
-    }
-  } else if (context.objective === "reduce_meat") {
-    const hasMeat = meals.some(m => m.parsed.components.protein.some(p => 
-      ["poulet", "viande", "bœuf", "boeuf", "porc", "jambon"].some(meat => p.includes(meat))
-    ));
-    if (hasMeat) {
-      return "Remplace une source de viande par des légumineuses (lentilles, haricots) ou du tofu pour réduire ta consommation";
-    }
+  if (meals.length === 0) {
+    return "Ajoute un repas pour lancer l'analyse de ta journée";
   }
-  
-  // Conseils généraux par priorité
-  if (!hasVeggies) {
-    return "Ajoute une source de légumes à au moins un repas pour augmenter tes fibres et vitamines";
+
+  const ranked = [...meals].sort(
+    (a, b) => calculateMealScore(a, context) - calculateMealScore(b, context)
+  );
+  const weakest = ranked[0];
+  const label = MEAL_LABELS[weakest.meal_type];
+  const { protein, veggie, carb, fruit } = weakest.parsed.components;
+
+  if (veggie.length === 0 && (weakest.meal_type !== "snack" || protein.length > 0)) {
+    return `Pour ton ${label.toLowerCase()}, ajoute une portion de légumes pour augmenter tes fibres`;
   }
-  if (proteinMeals.length < 2 && structuredMeals.length >= 2) {
-    return "Répartis tes protéines sur au moins 2 repas pour un meilleur équilibre";
+  if (protein.length === 0 && weakest.meal_type !== "snack") {
+    return `Pour ton ${label.toLowerCase()}, ajoute une source de protéines (œufs, légumineuses, poisson ou viande maigre)`;
   }
-  if (!hasFruits) {
-    return "Inclus un fruit dans ta journée (au petit-déj ou en collation) pour compléter tes apports en vitamines";
+  if (carb.length === 0 && (weakest.meal_type === "lunch" || weakest.meal_type === "dinner")) {
+    return `Pour ton ${label.toLowerCase()}, une petite portion de féculents complets peut améliorer ta satiété`;
   }
-  if (structuredMeals.length < 2) {
-    return "Essaie de prendre au moins 2 repas structurés par jour pour maintenir ton énergie";
+  if (fruit.length === 0 && weakest.meal_type === "breakfast") {
+    return `Pour ton ${label.toLowerCase()}, un fruit compléterait bien tes apports en vitamines`;
   }
-  
-  return "Continue à varier tes repas comme tu le fais, c'est parfait !";
+  if (mealHasFastFood(weakest)) {
+    return `Pour ton ${label.toLowerCase()}, une version maison équivalente serait plus nutritive`;
+  }
+
+  if (meals.length === 1) {
+    return `Ton ${label.toLowerCase()} est noté : enregistre tes autres repas pour suivre toute ta journée`;
+  }
+
+  return "Continue à varier tes repas saisis, tu es sur la bonne voie !";
 }
 
-/**
- * Génère 2 alternatives simples
- */
 function generateTipOptions(meals: MealEntry[], priorityTip: string): string[] {
   const options: string[] = [];
-  
-  const hasVeggies = meals.some(m => m.parsed.components.veggie.length > 0);
-  const proteinMeals = meals.filter(m => m.parsed.components.protein.length > 0);
-  const hasFruits = meals.some(m => m.parsed.components.fruit.length > 0);
-  
-  // Générer des alternatives qui ne répètent pas le conseil prioritaire
+  const hasVeggies = meals.some((m) => m.parsed.components.veggie.length > 0);
+  const hasProtein = meals.some((m) => m.parsed.components.protein.length > 0);
+  const hasFruits = meals.some((m) => m.parsed.components.fruit.length > 0);
+
   if (!priorityTip.includes("légumes") && !hasVeggies) {
     options.push("Option 1 : une poignée de crudités en entrée");
     options.push("Option 2 : un légume cuit en accompagnement");
-  } else if (!priorityTip.includes("protéines") && proteinMeals.length < 2) {
+  } else if (!priorityTip.includes("protéines") && !hasProtein) {
     options.push("Option 1 : un œuf au petit-déjeuner");
     options.push("Option 2 : une portion de légumineuses au déjeuner");
   } else if (!priorityTip.includes("fruit") && !hasFruits) {
@@ -261,10 +199,31 @@ function generateTipOptions(meals: MealEntry[], priorityTip: string): string[] {
     options.push("Option 2 : un fruit au petit-déjeuner");
   } else {
     options.push("Option 1 : varier les couleurs dans ton assiette");
-    options.push("Option 2 : inclure une source de fibres à chaque repas");
+    options.push("Option 2 : inclure une source de fibres à chaque repas saisi");
   }
-  
+
   return options.slice(0, 2);
+}
+
+function generateMissingComponents(meals: MealEntry[]): string[] {
+  const missing: string[] = [];
+
+  for (const meal of meals) {
+    const label = MEAL_LABELS[meal.meal_type];
+    const { protein, veggie, fruit } = meal.parsed.components;
+
+    if (veggie.length === 0 && meal.meal_type !== "snack") {
+      missing.push(`légumes au ${label.toLowerCase()}`);
+    }
+    if (protein.length === 0 && meal.meal_type !== "snack") {
+      missing.push(`protéines au ${label.toLowerCase()}`);
+    }
+    if (fruit.length === 0 && (meal.meal_type === "breakfast" || meal.meal_type === "snack")) {
+      missing.push(`fruit au ${label.toLowerCase()}`);
+    }
+  }
+
+  return [...new Set(missing)].slice(0, 4);
 }
 
 function uniqueTokens(values: string[], max: number): string[] {
@@ -292,10 +251,6 @@ function collectComponents(meals: MealEntry[], key: keyof ParsedMeal["components
   return uniqueTokens(acc, 8);
 }
 
-/**
- * Conseils concrets pour le lendemain (repas par créneau) : actions mesurables,
- * pas des formules génériques « protéine + féculent ».
- */
 function generatePlanForTomorrow(
   meals: MealEntry[],
   context: UserContext
@@ -320,7 +275,6 @@ function generatePlanForTomorrow(
   const dinner: string[] = [];
   const snack: string[] = [];
 
-  // — Petit-déjeuner
   if (!hasBreakfast) {
     breakfast.push(
       "Demain matin, bloque 12 minutes : flocons d’avoine 40 g + lait (ou boisson végétale) au micro-ondes 2 min, 1 c. à s. de graines (lin ou chia) et 1 fruit (clémentine ou pomme)."
@@ -359,7 +313,6 @@ function generatePlanForTomorrow(
       "Si tu pars tôt : shaker préparé la veille (boisson au riz + protéine en poudre sans gluten + banane mixée) à boire dès le réveil.";
   }
 
-  // — Déjeuner
   if (!hasVeggies) {
     lunch.push(
       "Demain midi, vise une assiette « moitié légumes » : poêlée 300 g (brocoli, carotte, courgette) à l’huile d’olive (1 c. à s.), ail, citron — cuisson wok 5–6 min."
@@ -396,7 +349,6 @@ function generatePlanForTomorrow(
       "Si cantine / extérieur : repère une assiette où tu vois des légumes visibles + une protéine identifiable (évite la formule 100 % frites + soda).";
   }
 
-  // — Dîner
   if (obj === "weight_loss") {
     dinner.push(
       "Demain soir : 400–500 mL de soupe maison de légumes + 100–120 g de poisson blanc vapeur + 3 c. à s. de riz complet cuit (≈ 60 g cuit) pour finir léger mais nourri."
@@ -427,7 +379,6 @@ function generatePlanForTomorrow(
       "Repère au frigo 2 légumes + 1 protéine + 1 féculent avant la journée : moins de décision « à froid » le soir.";
   }
 
-  // — Collation
   if (!hasFruits) {
     snack.push(
       "Entre 16 h et 18 h : 1 fruit + 7 amandes ou noisettes (≈ 15 g) pour tenir jusqu’au dîner sans craquer sur le sucre ultra-transformé."
@@ -452,42 +403,21 @@ function generatePlanForTomorrow(
   };
 }
 
-/**
- * Analyse principale : génère le résumé journalier complet
- */
-export function analyzeDaily(
-  meals: MealEntry[],
-  context: UserContext = {}
-): DailySummary {
+export function analyzeDaily(meals: MealEntry[], context: UserContext = {}): DailySummary {
   const score = calculateScore(meals, context);
   const strengths = generateStrengths(meals, score);
   const priorityTip = generatePriorityTip(meals, context);
   const tipOptions = generateTipOptions(meals, priorityTip);
   const planForTomorrow = generatePlanForTomorrow(meals, context);
-  
-  // Identifier les composants manquants
-  const missingComponents: string[] = [];
-  const hasVeggies = meals.some(m => m.parsed.components.veggie.length > 0);
-  const proteinMeals = meals.filter(m => m.parsed.components.protein.length > 0);
-  const hasFruits = meals.some(m => m.parsed.components.fruit.length > 0);
-  const dinnerMeal = meals.find(m => m.meal_type === "dinner");
-  const dinnerHasCarbs = Boolean(dinnerMeal?.parsed?.components?.carb && dinnerMeal.parsed.components.carb.length > 0);
-  
-  if (!hasVeggies) missingComponents.push("fibres");
-  if (proteinMeals.length < 2) missingComponents.push("protéines au dîner");
-  if (!hasFruits) missingComponents.push("fruits");
-  if (!dinnerHasCarbs && context.objective === "weight_loss") {
-    missingComponents.push("féculents au dîner");
-  }
-  
-  // Meta pour debug
-  const allComponents = meals.flatMap(m => [
+  const missingComponents = generateMissingComponents(meals);
+
+  const allComponents = meals.flatMap((m) => [
     ...m.parsed.components.protein,
     ...m.parsed.components.veggie,
     ...m.parsed.components.carb,
-    ...m.parsed.components.fruit
+    ...m.parsed.components.fruit,
   ]);
-  
+
   return {
     score,
     strengths,
@@ -497,8 +427,8 @@ export function analyzeDaily(
     plan_for_tomorrow: planForTomorrow,
     meta: {
       components_found: [...new Set(allComponents)],
-      rules_triggered: []
-    }
+      rules_triggered: [],
+      meals_analyzed: meals.length,
+    },
   };
 }
-

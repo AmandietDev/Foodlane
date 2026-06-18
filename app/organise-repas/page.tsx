@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { buildMetadata, faqSchema, softwareSchema } from "../src/lib/seo";
+import { PublicLegalFooter } from "../components/legal/PublicLegalFooter";
 
 export const metadata: Metadata = buildMetadata({
   title: "Organise facilement tes repas de la semaine",
@@ -143,6 +144,8 @@ export default function OrganiseRepasPage() {
           ))}
         </div>
       </section>
+
+      <PublicLegalFooter />
     </main>
   );
 }

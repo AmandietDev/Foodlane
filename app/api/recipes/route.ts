@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchRecipesFromSheet } from "../../src/lib/recipes";
 
+import {
+  ingredientTermsMatchAll,
+  normalizeIngredientSearch,
+  recipeSearchBlob,
+  scoreRecipeByTerms,
+} from "../../src/lib/ingredientSearchMatch";
+
 export const dynamic = "force-dynamic";
 
 // Lightweight fields for the recipe list — no instructions, no equipements
@@ -21,30 +28,7 @@ function sanitizeTerm(s: string): string {
 }
 
 function normalizeStr(s: string): string {
-  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
-}
-
-/**
- * Score a recipe for a list of search terms.
- * Title match scores highest, then description, then ingredients.
- * Returns 0 if no term matches (recipe should be excluded).
- */
-function scoreRecipe(r: Record<string, unknown>, terms: string[]): number {
-  const nom = normalizeStr(String(r.nom_recette || ""));
-  const desc = normalizeStr(String(r.description_courte || ""));
-  const ing = normalizeStr(String(r.ingredients_quantites || r.ingredients || ""));
-  let score = 0;
-  for (const term of terms) {
-    const t = normalizeStr(term);
-    if (!t) continue;
-    // Exact word in title scores more than substring
-    const nomWord = new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(nom);
-    if (nomWord) score += 12;
-    else if (nom.includes(t)) score += 8;
-    if (desc.includes(t)) score += 4;
-    if (ing.includes(t)) score += 2;
-  }
-  return score;
+  return normalizeIngredientSearch(s);
 }
 
 /**
@@ -95,7 +79,8 @@ export async function GET(request: NextRequest) {
 
         // Rank by relevance: more matches + better positions = higher score
         const ranked = (data as Record<string, unknown>[])
-          .map((r) => ({ r, score: scoreRecipe(r, terms) }))
+          .filter((r) => ingredientTermsMatchAll(recipeSearchBlob(r), terms))
+          .map((r) => ({ r, score: scoreRecipeByTerms(r, terms) }))
           .filter(({ score }) => score > 0)
           .sort((a, b) => b.score - a.score);
 
@@ -144,7 +129,11 @@ export async function GET(request: NextRequest) {
 
     if (terms.length > 0) {
       const scored = all
-        .map((r) => ({ r, score: scoreRecipe(r as unknown as Record<string, unknown>, terms) }))
+        .filter((r) => ingredientTermsMatchAll(recipeSearchBlob(r as unknown as Record<string, unknown>), terms))
+        .map((r) => ({
+          r,
+          score: scoreRecipeByTerms(r as unknown as Record<string, unknown>, terms),
+        }))
         .filter(({ score }) => score > 0)
         .sort((a, b) => b.score - a.score);
       const slice = scored.slice(offset, offset + limit).map(({ r }) => r);

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { BLOG_POSTS, LANDING_PAGES, SITE_URL } from "./src/lib/seo";
+import { LEGAL_PUBLIC_PATHS } from "./src/lib/publicRoutes";
 
 const staticPages = [
   "/",
@@ -10,6 +11,7 @@ const staticPages = [
   "/premium",
   "/login",
   "/blog",
+  ...LEGAL_PUBLIC_PATHS,
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

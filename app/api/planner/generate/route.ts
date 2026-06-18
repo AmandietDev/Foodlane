@@ -6,6 +6,7 @@ import {
   buildWeeklyPlan,
   buildExclusionList,
   filterRecipesByStrictExclusions,
+  getEffectiveRecipePortions,
   mergePlannerPreferences,
   scoreRecipeForPlanner,
   type PlannerGenerateInput,
@@ -21,7 +22,11 @@ import type { Locale } from "../../../src/lib/i18n";
 import { filterRecipesByStructuredDietaryRules } from "../../../src/lib/dietaryStructured";
 import { filterRecipesForSeasonalPool, getCurrentSeason } from "../../../src/lib/seasonalFilter";
 import { repairPlanQuality } from "../../../src/lib/qualityControl";
-import { applyBatchCooking, isBatchCookingEnabled } from "../../../src/lib/batchCooking";
+import {
+  applyBatchCooking,
+  applyPortionAdaptations,
+  isBatchCookingEnabled,
+} from "../../../src/lib/batchCooking";
 import type { Recipe } from "../../../src/lib/recipes";
 import { FREE_MENU_GENERATIONS_PER_MONTH } from "../../../src/lib/freemiumLimits";
 import { monthPeriodKey, tryConsumeFreemiumQuota } from "../../../src/lib/usageQuotasServer";
@@ -299,17 +304,21 @@ export async function POST(request: NextRequest) {
   const plan = repaired.plan;
   sanitizePlanRecipes(plan);
 
-  // ── Batch cooking ───────────────────────────────────────────────────────
-  // Si l'utilisateur a coché l'objectif "batch", on détecte les recettes
-  // batchables (gâteaux, granolas, soupes, mijotés, etc.) et on les réplique
-  // sur les jours suivants pour éviter la sur-cuisine.
+  // ── Adaptation portions foyer (scale ou batch si scaling complexe) ─────
+  const effectivePortions = getEffectiveRecipePortions(merged);
+  const portionInfo = applyPortionAdaptations(plan, {
+    householdPortions: effectivePortions,
+    lockedSlots,
+  });
+
+  // ── Batch cooking (objectif utilisateur) ────────────────────────────────
   let batchInfo: { batches_created: number; meals_replaced: number } = {
     batches_created: 0,
     meals_replaced: 0,
   };
   if (isBatchCookingEnabled(merged.objectives)) {
     batchInfo = applyBatchCooking(plan, {
-      householdSize: merged.household_size,
+      householdSize: effectivePortions,
       lockedSlots,
     });
   }
@@ -336,6 +345,7 @@ export async function POST(request: NextRequest) {
         carb_counts_after: repaired.report_after.carb_counts,
         dish_counts_after: repaired.report_after.dish_counts,
       },
+      portion_adaptation: portionInfo,
       batch_cooking: {
         enabled: isBatchCookingEnabled(merged.objectives),
         batches_created: batchInfo.batches_created,

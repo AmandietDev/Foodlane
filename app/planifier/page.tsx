@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
@@ -39,6 +39,8 @@ interface PlannedMeal {
   batch_group_id?: string | null;
   is_batch_origin?: boolean | null;
   batch_servings?: number | null;
+  portion_adaptation?: "scale" | "batch_portions" | null;
+  portion_note?: string | null;
 }
 
 interface PlannedDay {
@@ -661,18 +663,43 @@ function SlotCard({
             letterSpacing: 0.2,
           }}
           title={
-            isBatchOrigin
+            meal.portion_note ||
+            (isBatchOrigin
               ? `Préparation en lot pour ${meal.batch_servings ?? "?"} portions`
-              : `Restes de ${batchOriginDayLabel ?? "ce plat"}`
+              : `Restes de ${batchOriginDayLabel ?? "ce plat"}`)
           }
         >
           {isBatchOrigin ? (
-            <>🍱 À PRÉPARER{meal.batch_servings ? ` · ${meal.batch_servings} portions` : ""}</>
+            <>
+              {meal.portion_adaptation === "batch_portions" ? "🍱 BATCH" : "🍱 À PRÉPARER"}
+              {meal.batch_servings ? ` · ${meal.batch_servings} portions` : ""}
+            </>
           ) : (
             <>♻️ RESTES{batchOriginDayLabel ? ` DE ${batchOriginDayLabel.toUpperCase()}` : ""}</>
           )}
         </div>
       )}
+
+      {meal.portion_note && !batchColor && !isRegenerating ? (
+        <div
+          style={{
+            padding: "4px 10px",
+            fontSize: 10,
+            fontWeight: 600,
+            color: "#9A6A6A",
+            background: "#FFF5F7",
+            borderBottom: "1px solid #F5DDE5",
+          }}
+          title={meal.portion_note}
+        >
+          {meal.portion_adaptation === "batch_portions" ? "🍱 " : "⚖️ "}
+          {meal.portion_adaptation === "scale"
+            ? `Pour ton foyer`
+            : meal.portion_adaptation === "batch_portions"
+              ? "Plusieurs repas"
+              : "Adapté"}
+        </div>
+      ) : null}
 
       {/* Contenu */}
       <div style={{ flex: 1, padding: "10px 12px 4px" }}>
@@ -925,6 +952,8 @@ export default function PlanifierPage() {
   const [menuId, setMenuId] = useState<string | null>(null);
   const [lockedSlots, setLockedSlots] = useState<Set<string>>(new Set());
   const [regeneratingSlot, setRegeneratingSlot] = useState<string | null>(null);
+  /** Historique des recettes déjà proposées par créneau (évite les répétitions). */
+  const slotRegenHistoryRef = useRef<Map<string, number[]>>(new Map());
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -986,6 +1015,7 @@ export default function PlanifierPage() {
     setPlan(null);
     setMenuId(null);
     setLockedSlots(new Set());
+    slotRegenHistoryRef.current.clear();
     clearPlanifierDraft();
     if (typeof window !== "undefined") {
       window.history.replaceState({}, "", "/planifier");
@@ -1097,6 +1127,7 @@ export default function PlanifierPage() {
       setPlan(newPlan);
       setMenuId(newMenuId);
       setLockedSlots(new Set());
+      slotRegenHistoryRef.current.clear();
       savePlanifierDraft({
         plan: newPlan as unknown as StoredPlannedWeek,
         menuId: newMenuId,
@@ -1138,15 +1169,34 @@ export default function PlanifierPage() {
         )
       : [];
 
-    const excludeIds = plan.days.flatMap((d) => d.meals.map((m) => m.recipe_id)).filter(Number.isFinite);
+    const weekRecipeIds = plan.days
+      .flatMap((d) => d.meals.map((m) => m.recipe_id))
+      .filter((id): id is number => Number.isFinite(id));
+    const previousHistory = slotRegenHistoryRef.current.get(key) ?? [];
+    const currentRecipeId = targetMeal?.recipe_id;
+    const rejectedRecipeIds = [
+      ...new Set([
+        ...previousHistory,
+        ...(Number.isFinite(currentRecipeId) ? [currentRecipeId] : []),
+      ]),
+    ];
     try {
       const res = await plannerFetch("/slots/regenerate", {
         method: "POST",
-        body: JSON.stringify({ meal_type: mealType, week_start_date: weekStart, exclude_recipe_ids: excludeIds }),
+        body: JSON.stringify({
+          meal_type: mealType,
+          week_start_date: weekStart,
+          exclude_recipe_ids: weekRecipeIds,
+          rejected_recipe_ids: rejectedRecipeIds,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Impossible de régénérer");
       const r = data.recipe as RecipePayload & { nom_recette?: string };
+      const nextHistory = [...new Set([...previousHistory, targetMeal?.recipe_id, r.id])]
+        .filter((id): id is number => Number.isFinite(id))
+        .slice(-15);
+      slotRegenHistoryRef.current.set(key, nextHistory);
       setPlan((prev) => {
         if (!prev) return prev;
         return {

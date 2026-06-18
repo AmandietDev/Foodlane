@@ -41,10 +41,10 @@ const translations: Translations = {
   },
   /** Navigation principale (4 onglets) — préférer ces clés côté UI */
   "nav.menus": {
-    fr: "Menus",
-    en: "Meal plans",
-    es: "Menús",
-    de: "Speisepläne",
+    fr: "Accueil",
+    en: "Home",
+    es: "Inicio",
+    de: "Start",
   },
   "nav.recettes": {
     fr: "Recettes",

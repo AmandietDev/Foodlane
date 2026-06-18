@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { plannerFetch } from "../src/lib/plannerClient";
@@ -10,6 +9,8 @@ import type { PlannerPreferences } from "../src/lib/weeklyPlanner";
 import PlannerProfileForm from "../components/PlannerProfileForm";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { useTranslation } from "../components/TranslationProvider";
+import { MobileAppScreen } from "../components/app/MobileAppScreen";
+import { appLayoutTheme } from "../components/app/appLayoutTheme";
 
 export default function PreferencesPage() {
   const { t } = useTranslation();
@@ -44,25 +45,27 @@ export default function PreferencesPage() {
 
   if (sessionLoading || !user || !loaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FFF8F6]">
+      <div
+        className="flex min-h-screen items-center justify-center"
+        style={{ backgroundColor: appLayoutTheme.pageBg }}
+      >
         <LoadingSpinner message={t("preferences.page.loading")} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF8F6] pt-6 px-4 pb-8 md:px-8 md:pt-10">
-      <div className="max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-between mb-4">
-        <Link href="/tableau" className="text-sm text-[#8A4A4A]">
-          {t("preferences.page.back")}
-        </Link>
-      </div>
-      <div className="max-w-2xl lg:max-w-3xl mx-auto mb-6">
-        <h1 className="text-2xl font-bold text-[#4a2c2c]">{t("preferences.page.title")}</h1>
-        {saved && (
-          <p className="text-sm text-green-700 mt-2">{t("preferences.page.saved")}</p>
-        )}
-      </div>
+    <MobileAppScreen
+      title={t("preferences.page.title")}
+      subtitle="Régimes, allergies, équipements et objectifs"
+      backHref="/menu"
+      contentClassName="px-4 pt-2 pb-8 space-y-4"
+    >
+      {saved ? (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {t("preferences.page.saved")}
+        </p>
+      ) : null}
       <PlannerProfileForm
         key={user.id}
         initial={initial}
@@ -86,6 +89,6 @@ export default function PreferencesPage() {
           setTimeout(() => setSaved(false), 3000);
         }}
       />
-    </div>
+    </MobileAppScreen>
   );
 }

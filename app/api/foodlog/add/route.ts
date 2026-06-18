@@ -50,9 +50,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!["breakfast", "lunch", "dinner", "snack"].includes(meal_type)) {
+    if (!["breakfast", "lunch", "dinner", "snack", "hydration"].includes(meal_type)) {
       return NextResponse.json(
-        { error: "meal_type doit être breakfast, lunch, dinner ou snack" },
+        { error: "meal_type doit être breakfast, lunch, dinner, snack ou hydration" },
         { status: 400 }
       );
     }
@@ -137,12 +137,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Convertir les repas en format MealEntry pour l'analyse
-    const mealEntries: MealEntry[] = (allMeals || []).map((m) => ({
-      meal_type: m.meal_type as "breakfast" | "lunch" | "dinner" | "snack",
-      parsed: coerceParsedMeal(m.parsed),
-      hunger_before: m.hunger_before || undefined,
-      satiety_after: m.satiety_after || undefined,
-    }));
+    const mealEntries: MealEntry[] = (allMeals || [])
+      .filter((m) => m.meal_type !== "hydration")
+      .map((m) => ({
+        meal_type: m.meal_type as "breakfast" | "lunch" | "dinner" | "snack",
+        parsed: coerceParsedMeal(m.parsed),
+        hunger_before: m.hunger_before || undefined,
+        satiety_after: m.satiety_after || undefined,
+      }));
 
     // Analyser la journée
     const context = {
@@ -173,6 +175,7 @@ export async function POST(request: NextRequest) {
         meta: {
           components_found: [],
           rules_triggered: ["analysis_fallback"],
+          meals_analyzed: mealEntries.length,
         },
       };
     }

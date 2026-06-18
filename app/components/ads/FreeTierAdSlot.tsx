@@ -8,9 +8,12 @@
  */
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { getCookieConsent } from "../CookieConsentBanner";
 import { usePremium } from "../../contexts/PremiumContext";
 import { getAdsensePublisherId, getAdsenseSlot, type AdPlacement } from "../../src/lib/adsConfig";
+import { isAdPlacementAllowed } from "../../src/lib/publicRoutes";
 
 declare global {
   interface Window {
@@ -51,10 +54,28 @@ type Props = {
 };
 
 export function FreeTierAdSlot({ placement, className = "", oncePerSession = false }: Props) {
+  const pathname = usePathname();
   const { isPremium, loading } = usePremium();
   const insRef = useRef<HTMLModElement>(null);
   const pushedRef = useRef(false);
   const [error, setError] = useState(false);
+  const [marketingAllowed, setMarketingAllowed] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const sync = () => {
+      if (!mounted) return;
+      setMarketingAllowed(Boolean(getCookieConsent()?.marketing));
+    };
+
+    sync();
+    window.addEventListener("foodlane:cookie-consent-changed", sync);
+    return () => {
+      mounted = false;
+      window.removeEventListener("foodlane:cookie-consent-changed", sync);
+    };
+  }, []);
 
   const publisherId = getAdsensePublisherId();
   const slotId = getAdsenseSlot(placement);
@@ -64,7 +85,7 @@ export function FreeTierAdSlot({ placement, className = "", oncePerSession = fal
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (loading || isPremium || !configured || !publisherId || !slotId) return;
+    if (loading || isPremium || !marketingAllowed || !configured || !publisherId || !slotId) return;
     if (oncePerSession && sessionStorage.getItem(sessionBlockKey)) return;
     if (pushedRef.current) return;
 
@@ -88,10 +109,12 @@ export function FreeTierAdSlot({ placement, className = "", oncePerSession = fal
     return () => {
       cancelled = true;
     };
-  }, [loading, isPremium, configured, publisherId, slotId, placement, oncePerSession, sessionBlockKey]);
+  }, [loading, isPremium, marketingAllowed, configured, publisherId, slotId, placement, oncePerSession, sessionBlockKey]);
 
   if (loading) return null;
   if (isPremium) return null;
+  if (!isAdPlacementAllowed(pathname)) return null;
+  if (!marketingAllowed) return null;
   if (oncePerSession && typeof window !== "undefined" && sessionStorage.getItem(sessionBlockKey)) {
     return null;
   }

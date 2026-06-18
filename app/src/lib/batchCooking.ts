@@ -20,6 +20,7 @@ import type { Recipe } from "./recipes";
 import type { PlannerMealType } from "./plannerConstants";
 import type { PlannedWeek, PlannedMeal, LockedSlot } from "./weeklyPlanner";
 import { getDishType, normalizeText } from "./recipeFields";
+import { resolvePortionStrategy } from "./recipePortionStrategy";
 
 // ─────────────────────────────────────────────────────────────────────
 // Liste des dish_type considere comme "batchable"
@@ -296,6 +297,113 @@ export function applyBatchCooking(
   }
 
   return { batches_created: batchesCreated, meals_replaced: mealsReplaced };
+}
+
+export interface ApplyPortionAdaptationOptions {
+  householdPortions: number;
+  lockedSlots?: LockedSlot[];
+}
+
+/**
+ * Adapte chaque repas au foyer : annotation scale + batch portions si scaling trop complexe.
+ * Le batch portions cuisine la recette telle quelle (nombre_personnes) sur plusieurs créneaux.
+ */
+export function applyPortionAdaptations(
+  plan: PlannedWeek,
+  options: ApplyPortionAdaptationOptions
+): { portion_batch_count: number; scaled_count: number } {
+  const { householdPortions, lockedSlots } = options;
+  let portionBatchCount = 0;
+  let scaledCount = 0;
+  const consumedByBatch = new Set<string>();
+  const keyOf = (d: number, m: string) => `${d}|${m}`;
+
+  for (const day of plan.days) {
+    for (const meal of day.meals) {
+      if (meal.batch_group_id) continue;
+      const strategy = resolvePortionStrategy(meal.recipe_payload, householdPortions);
+      if (strategy.mode === "scale") {
+        meal.portion_adaptation = "scale";
+        meal.portion_note = strategy.detailFr;
+        scaledCount++;
+      } else if (strategy.mode === "none") {
+        meal.portion_adaptation = null;
+        meal.portion_note = null;
+      }
+    }
+  }
+
+  for (let dayIdx = 0; dayIdx < plan.days.length; dayIdx++) {
+    const day = plan.days[dayIdx];
+
+    for (const meal of day.meals) {
+      if (consumedByBatch.has(keyOf(dayIdx, meal.meal_type))) continue;
+      if (meal.batch_group_id) continue;
+      if (isLocked(dayIdx, meal.meal_type, lockedSlots)) continue;
+
+      const recipe = meal.recipe_payload;
+      const strategy = resolvePortionStrategy(recipe, householdPortions);
+      if (strategy.mode !== "batch_portions" || !strategy.batchMealCount) continue;
+
+      const category = getBatchCategory(recipe);
+      if (!category) continue;
+
+      const neededTargets = strategy.batchMealCount - 1;
+      const eligibleTypes = getEligibleTargetMealTypes(meal.meal_type, category);
+      const targets: { dayIndex: number; mealRef: PlannedMeal }[] = [];
+
+      for (
+        let nextDay = dayIdx;
+        nextDay < plan.days.length && targets.length < neededTargets;
+        nextDay++
+      ) {
+        const nextDayObj = plan.days[nextDay];
+        for (const candidate of nextDayObj.meals) {
+          if (nextDay === dayIdx && candidate.meal_type === meal.meal_type) continue;
+          if (!eligibleTypes.includes(candidate.meal_type)) continue;
+          if (consumedByBatch.has(keyOf(nextDay, candidate.meal_type))) continue;
+          if (candidate.batch_group_id) continue;
+          if (isLocked(nextDay, candidate.meal_type, lockedSlots)) continue;
+
+          targets.push({ dayIndex: nextDay, mealRef: candidate });
+          if (targets.length >= neededTargets) break;
+        }
+      }
+
+      if (targets.length < neededTargets) {
+        meal.portion_adaptation = "scale";
+        meal.portion_note = `Quantités adaptées pour ${householdPortions} pers. (recette de base ${strategy.recipePortions} pers.).`;
+        scaledCount++;
+        continue;
+      }
+
+      const groupId = randomUUID();
+      const recipePortions = strategy.recipePortions;
+
+      meal.batch_group_id = groupId;
+      meal.is_batch_origin = true;
+      meal.batch_servings = recipePortions;
+      meal.portion_adaptation = "batch_portions";
+      meal.portion_note = strategy.detailFr;
+      consumedByBatch.add(keyOf(dayIdx, meal.meal_type));
+
+      for (const t of targets) {
+        t.mealRef.recipe_id = recipe.id;
+        t.mealRef.recipe_name = recipe.nom_recette || meal.recipe_name;
+        t.mealRef.recipe_payload = recipe;
+        t.mealRef.batch_group_id = groupId;
+        t.mealRef.is_batch_origin = false;
+        t.mealRef.batch_servings = recipePortions;
+        t.mealRef.portion_adaptation = "batch_portions";
+        t.mealRef.portion_note = strategy.detailFr;
+        consumedByBatch.add(keyOf(t.dayIndex, t.mealRef.meal_type));
+      }
+
+      portionBatchCount++;
+    }
+  }
+
+  return { portion_batch_count: portionBatchCount, scaled_count: scaledCount };
 }
 
 /**

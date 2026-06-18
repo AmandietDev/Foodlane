@@ -26,6 +26,7 @@ import UserFeedback from "../components/UserFeedback";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSwipeBack } from "../hooks/useSwipeBack";
+import { useMenuNavigation, type MenuSectionId } from "../hooks/useMenuNavigation";
 import { usePremium } from "../contexts/PremiumContext";
 import { formatDateFrDMY } from "../src/lib/subscriptionDisplay";
 import PlannerProfileForm from "../components/PlannerProfileForm";
@@ -38,16 +39,10 @@ import {
   CGVContent,
   CookiesContent,
 } from "../components/LegalDocuments";
+import { SettingsHub } from "../components/settings/SettingsHub";
+import { appLayoutTheme } from "../components/app/appLayoutTheme";
 
-type MenuSection =
-  | "profil"
-  | "parametres"
-  | "abonnement"
-  | "confidentialite"
-  | "aide"
-  | "apropos"
-  | "legales"
-  | null;
+type MenuSection = MenuSectionId | "aide" | "parametres" | "abonnement" | null;
 
 type LegalDocType = "mentions" | "cgu" | "confidentialite" | "cgv" | "cookies" | null;
 
@@ -69,6 +64,16 @@ const EQUIPEMENTS = [
 export default function MenuPage() {
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
+  const {
+    activeTab,
+    activeSection,
+    isHub,
+    openTab,
+    openSection,
+    openProfilSection,
+    backToHub,
+    backOneLevel,
+  } = useMenuNavigation();
   const { setLocale: setLocaleFromContext, t } = useTranslation();
   const { user, profile, loading: sessionLoading } = useSupabaseSession();
   const { isPremium, profile: billingProfile, refreshProfile, subscriptionTier } = usePremium();
@@ -94,8 +99,6 @@ export default function MenuPage() {
   });
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactSubmitted, setContactSubmitted] = useState(false);
-  const [activeTab, setActiveTab] = useState<"compte" | "parametres" | "notifications" | "foyer" | "contact" | "abonnement" | null>(null);
-  const [activeSection, setActiveSection] = useState<MenuSection>(null);
   const [showLegalDoc, setShowLegalDoc] = useState<LegalDocType>(null);
   const [recipeScalingPortionsMenu, setRecipeScalingPortionsMenu] = useState<number | null>(null);
   const [foyerPlannerPrefs, setFoyerPlannerPrefs] = useState<PlannerPreferences>(DEFAULT_PLANNER_PREFERENCES);
@@ -118,14 +121,15 @@ export default function MenuPage() {
     if (portalReturnHandledRef.current) return;
     portalReturnHandledRef.current = true;
     if (sp.get("tab") === "abonnement") {
-      setActiveTab("abonnement");
+      router.replace("/menu?tab=abonnement", { scroll: false });
+    } else {
+      window.history.replaceState({}, "", window.location.pathname);
     }
     void (async () => {
       await refreshProfile();
       setPreferences(loadPreferences());
     })();
-    window.history.replaceState({}, "", window.location.pathname);
-  }, [refreshProfile]);
+  }, [refreshProfile, router]);
 
   useEffect(() => {
     if (activeTab !== "abonnement" || !user?.id) return;
@@ -280,12 +284,12 @@ export default function MenuPage() {
 
   // Geste de balayage pour revenir en arrière dans les sections
   useSwipeBack(() => {
-    if (activeSection) {
-      setActiveSection(null);
-    } else if (showLegalDoc) {
+    if (showLegalDoc) {
       setShowLegalDoc(null);
+    } else if (activeSection || activeTab) {
+      backOneLevel();
     }
-  }, activeSection !== null || showLegalDoc !== null);
+  }, showLegalDoc !== null || !isHub);
 
   const CONTACT_SUBJECTS = [
     "Question générale",
@@ -543,21 +547,29 @@ export default function MenuPage() {
   }
 
   return (
-    <main className="max-w-md mx-auto bg-[var(--background)] min-h-screen pb-32">
+    <main
+      className="mx-auto min-h-screen max-w-md"
+      style={{ backgroundColor: appLayoutTheme.pageBg }}
+    >
       {/* Header */}
-      <header className="sticky top-0 bg-[var(--background)] border-b border-gray-200 px-4 py-3 z-10">
+      {!isHub && (
+      <header
+        className="sticky top-0 z-10 border-b px-4 py-3"
+        style={{ backgroundColor: appLayoutTheme.pageBg, borderColor: appLayoutTheme.cardPinkBorder }}
+      >
         <div className="flex items-center gap-3">
-          {(activeTab || activeSection) && (
-            <button
-              onClick={() => {
-                if (activeSection) {
-                  setActiveSection(null);
-                } else {
-                  setActiveTab(null);
-                }
-              }}
-              className="p-2 -ml-2"
-            >
+          <button
+            type="button"
+            onClick={() => {
+              if (showLegalDoc) {
+                setShowLegalDoc(null);
+              } else {
+                backOneLevel();
+              }
+            }}
+            className="p-2 -ml-2"
+            aria-label="Retour aux réglages"
+          >
               <svg 
                 width="24" 
                 height="24" 
@@ -574,273 +586,116 @@ export default function MenuPage() {
                 />
               </svg>
             </button>
-          )}
-          <h1 className="text-xl font-bold text-[var(--foreground)]">
-            {activeTab === "notifications" ? "Notifications" :
-             activeTab === "parametres" ? "Paramètres" :
-             activeTab === "foyer" ? "Foyer" :
-             activeTab === "contact" ? "Contact" :
-             activeTab === "abonnement" ? "Abonnement" :
-             ""}
+          <h1 className="text-xl font-bold text-[#4A2C2A]">
+            {activeTab === "notifications"
+              ? "Notifications"
+              : activeTab === "parametres"
+              ? "Paramètres"
+              : activeTab === "foyer"
+              ? "Foyer"
+              : activeTab === "contact"
+              ? "Aide et support"
+              : activeTab === "abonnement"
+              ? "Abonnement"
+              : activeSection === "confidentialite"
+              ? "Sécurité et confidentialité"
+              : activeSection === "apropos"
+              ? "À propos de Foodlane"
+              : activeSection === "legales"
+              ? "Mentions légales"
+              : ""}
           </h1>
         </div>
       </header>
+      )}
 
       {/* Menu principal - affiché seulement si aucune section détaillée n'est active */}
-      {!activeTab && !activeSection && (
-        <div className="px-4 py-6 space-y-6">
-          {/* Section GENERAL */}
-          <section>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 px-4">
-              GÉNÉRAL
-            </h2>
-            <div className="bg-[var(--background)] rounded-lg border border-gray-200 overflow-hidden">
-              <MenuItem
-                icon={
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path 
-                      d="M10 10C12.7614 10 15 7.76142 15 5C15 2.23858 12.7614 0 10 0C7.23858 0 5 2.23858 5 5C5 7.76142 7.23858 10 10 10Z" 
-                      stroke="currentColor" 
-                      strokeWidth="1.5" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
-                    />
-                    <path 
-                      d="M17.59 20C17.59 16.13 13.74 13 10 13C6.26 13 2.41 16.13 2.41 20" 
-                      stroke="currentColor" 
-                      strokeWidth="1.5" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+      {isHub && (
+        <div className="px-4 pt-4">
+          <SettingsHub
+            displayName={`${preferences.prenom || profile?.prenom || "Utilisateur"}${preferences.prenom || profile?.prenom ? " 🍓" : ""}`}
+            email={user.email || preferences.email || ""}
+            isPremium={isPremium}
+            subscriptionLabel={isPremium ? "Abonnement actif" : "Découvrir Premium"}
+            notificationsEnabled={Boolean(
+              preferences.notificationsNewRecipes ||
+                preferences.notificationsMenuIdeas ||
+                preferences.notificationsReminders
+            )}
+            themeLabel={theme === "dark" ? "Sombre" : "Clair"}
+            languageLabel={preferences.langue === "en" ? "English" : "Français"}
+            onOpenNotifications={() => openTab("notifications")}
+            onOpenFoyer={() => openTab("foyer")}
+            onOpenParametres={() => openTab("parametres")}
+            onOpenAbonnement={() => openTab("abonnement")}
+            onOpenAide={() => openTab("contact")}
+            onOpenApropos={() => openSection("apropos")}
+            onOpenConfidentialite={() => openSection("confidentialite")}
+            onToggleNotifications={(enabled) => {
+              setPreferences((prev) => ({
+                ...prev,
+                notificationsNewRecipes: enabled,
+                notificationsMenuIdeas: enabled,
+                notificationsReminders: enabled,
+              }));
+              savePreferences({
+                ...preferences,
+                notificationsNewRecipes: enabled,
+                notificationsMenuIdeas: enabled,
+                notificationsReminders: enabled,
+              });
+            }}
+            onLogout={() => {
+              if (confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {
+                void handleLogout();
+              }
+            }}
+            onDeleteAccount={() => {
+              void (async () => {
+                if (!confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) {
+                  return;
                 }
-                label="Compte"
-                href="/compte"
-              />
-              <div className="border-t border-gray-200">
-                <MenuItem
-                  icon={
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path 
-                        d="M10 2C5.58172 2 2 5.58172 2 10C2 14.4183 5.58172 18 10 18C14.4183 18 18 14.4183 18 10C18 5.58172 14.4183 2 10 2Z" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5"
-                      />
-                      <path 
-                        d="M10 6V10L13 13" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5" 
-                        strokeLinecap="round"
-                      />
-                    </svg>
+                try {
+                  const {
+                    data: { session },
+                  } = await supabase.auth.getSession();
+                  if (!session?.access_token) {
+                    alert("Session expirée. Reconnecte-toi puis réessaie.");
+                    return;
                   }
-                  label="Notifications"
-                  onClick={() => setActiveTab("notifications")}
-                />
-              </div>
-              <div className="border-t border-gray-200">
-                <MenuItem
-                  icon={
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path 
-                        d="M2 6L10 1L18 6V16C18 16.5304 17.7893 17.0391 17.4142 17.4142C17.0391 17.7893 16.5304 18 16 18H4C3.46957 18 2.96086 17.7893 2.58579 17.4142C2.21071 17.0391 2 16.5304 2 16V6Z" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round"
-                      />
-                      <path 
-                        d="M7 18V10H13V18" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                  const res = await fetch("/api/account/delete", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${session.access_token}` },
+                  });
+                  const j = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    alert(
+                      typeof j.error === "string" && j.error.trim()
+                        ? j.error
+                        : "La suppression du compte a échoué. Réessaie plus tard."
+                    );
+                    return;
                   }
-                  label="Foyer"
-                  onClick={() => setActiveTab("foyer")}
-                />
-              </div>
-              <div className="border-t border-gray-200">
-                <MenuItem
-                  icon={
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <circle 
-                        cx="10" 
-                        cy="10" 
-                        r="3" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5"
-                      />
-                      <path 
-                        d="M10 2V4M10 16V18M18 10H16M4 10H2M15.6569 4.34315L14.2426 5.75737M5.75737 14.2426L4.34315 15.6569M15.6569 15.6569L14.2426 14.2426M5.75737 5.75737L4.34315 4.34315" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  }
-                  label="Paramètres"
-                  onClick={() => setActiveTab("parametres")}
-                />
-              </div>
-              <div className="border-t border-gray-200">
-                <MenuItem
-                  icon={
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path 
-                        d="M10 2L12.5 7.5L18.5 8.5L14.5 12.5L15.5 18.5L10 15.5L4.5 18.5L5.5 12.5L1.5 8.5L7.5 7.5L10 2Z" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  }
-                  label="Abonnement"
-                  onClick={() => {
-                    setActiveTab("abonnement");
-                  }}
-                />
-              </div>
-              <div className="border-t border-gray-200">
-                <MenuItem
-                  icon={
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path 
-                        d="M10 2C5.58172 2 2 5.58172 2 10C2 10.5523 2.44772 11 3 11C3.55228 11 4 10.5523 4 10C4 6.68629 6.68629 4 10 4C13.3137 4 16 6.68629 16 10C16 13.3137 13.3137 16 10 16C9.44772 16 9 16.4477 9 17C9 17.5523 9.44772 18 10 18C14.4183 18 18 14.4183 18 10C18 5.58172 14.4183 2 10 2Z" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <circle 
-                        cx="7" 
-                        cy="10" 
-                        r="1" 
-                        fill="currentColor"
-                      />
-                      <circle 
-                        cx="10" 
-                        cy="10" 
-                        r="1" 
-                        fill="currentColor"
-                      />
-                      <circle 
-                        cx="13" 
-                        cy="10" 
-                        r="1" 
-                        fill="currentColor"
-                      />
-                    </svg>
-                  }
-                  label="Contact"
-                  onClick={() => setActiveTab("contact")}
-                />
-              </div>
-              <div className="border-t border-gray-200">
-                <MenuItem
-                  icon={
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path 
-                        d="M4 4H16V16H4V4Z" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round"
-                      />
-                      <path 
-                        d="M4 4L10 10L16 4" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  }
-                  label="Déconnexion"
-                  onClick={async () => {
-                    if (confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {
-                      await handleLogout();
-                    }
-                  }}
-                  danger
-                />
-              </div>
-              <div className="border-t border-gray-200">
-                <MenuItem
-                  icon={
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path 
-                        d="M4 5H16V15H4V5Z" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round"
-                      />
-                      <path 
-                        d="M8 5V3C8 2.46957 8.21071 1.96086 8.58579 1.58579C8.96086 1.21071 9.46957 1 10 1C10.5304 1 11.0391 1.21071 11.4142 1.58579C11.7893 1.96086 12 2.46957 12 3V5" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round"
-                      />
-                      <path 
-                        d="M8 9V11M12 9V11" 
-                        stroke="currentColor" 
-                        strokeWidth="1.5" 
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  }
-                  label="Supprimer le compte"
-                  onClick={async () => {
-                    if (!confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) {
-                      return;
-                    }
-                    try {
-                      const {
-                        data: { session },
-                      } = await supabase.auth.getSession();
-                      if (!session?.access_token) {
-                        alert("Session expirée. Reconnecte-toi puis réessaie.");
-                        return;
-                      }
-                      const res = await fetch("/api/account/delete", {
-                        method: "POST",
-                        headers: { Authorization: `Bearer ${session.access_token}` },
-                      });
-                      const j = await res.json().catch(() => ({}));
-                      if (!res.ok) {
-                        alert(
-                          typeof j.error === "string" && j.error.trim()
-                            ? j.error
-                            : "La suppression du compte a échoué. Réessaie plus tard."
-                        );
-                        return;
-                      }
-                      await logout();
-                      window.location.href = "/login?deleted=1";
-                    } catch (e) {
-                      console.error("[Menu] delete account", e);
-                      alert("Erreur réseau lors de la suppression du compte.");
-                    }
-                  }}
-                  danger
-                />
-              </div>
-            </div>
-          </section>
-
+                  await logout();
+                  window.location.href = "/login?deleted=1";
+                } catch (e) {
+                  console.error("[Menu] delete account", e);
+                  alert("Erreur réseau lors de la suppression du compte.");
+                }
+              })();
+            }}
+          />
         </div>
       )}
 
       {/* Contenu des sections détaillées */}
-      {activeTab === "compte" && (
+      {(activeTab === "compte" ||
+        activeSection === "confidentialite" ||
+        activeSection === "apropos" ||
+        activeSection === "legales") && (
         <>
           {/* Vue par défaut de l'onglet compte */}
-          {!activeSection && (
+          {activeTab === "compte" && !activeSection && (
             <section className="space-y-4">
               <h2 className="text-xl font-bold text-[var(--foreground)] mb-4">
                 Mon compte
@@ -854,7 +709,7 @@ export default function MenuPage() {
                   <span>→</span>
                 </Link>
                 <button
-                  onClick={() => setActiveSection("profil")}
+                  onClick={() => openProfilSection()}
                   className="w-full text-left px-4 py-3 rounded-xl bg-[var(--beige-card)] border border-[var(--beige-border)] text-[var(--foreground)] hover:border-[#E94E77] transition-colors flex items-center justify-between"
                 >
                   <span className="font-medium">Mon profil</span>
@@ -868,7 +723,7 @@ export default function MenuPage() {
         <section className="space-y-4">
           <div className="flex items-center gap-3 mb-4">
             <button
-              onClick={() => setActiveSection(null)}
+              onClick={() => backOneLevel()}
               className="text-[var(--beige-text-muted)] hover:text-[var(--foreground)]"
             >
               ← Retour
@@ -880,7 +735,7 @@ export default function MenuPage() {
           {!loggedIn ? (
             <>
               {!showSignUp ? (
-                <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+                <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
                   <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
                     Connexion
                   </h2>
@@ -922,7 +777,7 @@ export default function MenuPage() {
                     </div>
                     <button
                       type="submit"
-                      className="w-full mt-3 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                      className="w-full mt-3 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#D63D66] text-white text-xs font-semibold transition-colors"
                     >
                       Se connecter
                     </button>
@@ -940,7 +795,7 @@ export default function MenuPage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+                <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
                   <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
                     Créer un compte
                   </h2>
@@ -1033,7 +888,7 @@ export default function MenuPage() {
                     </div>
                     <button
                       type="submit"
-                      className="w-full mt-3 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                      className="w-full mt-3 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#D63D66] text-white text-xs font-semibold transition-colors"
                     >
                       Créer mon compte
                     </button>
@@ -1056,7 +911,7 @@ export default function MenuPage() {
               )}
             </>
           ) : (
-            <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+            <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
               {/* Informations de connexion */}
               <div className="mb-4 pb-4 border-b border-[var(--beige-border)]">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">
@@ -1145,7 +1000,7 @@ export default function MenuPage() {
                 </div>
                 <button
                   type="submit"
-                  className="w-full mt-3 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                  className="w-full mt-3 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#D63D66] text-white text-xs font-semibold transition-colors"
                 >
                   Enregistrer les modifications
                 </button>
@@ -1154,7 +1009,7 @@ export default function MenuPage() {
           )}
 
           {!isPremium && (
-            <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+            <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
               <h2 className="text-base font-semibold mb-2 text-[var(--foreground)]">
                 Plan Premium{" "}
                 <span className="text-xs text-[#BB8C78] uppercase tracking-wide">
@@ -1185,7 +1040,7 @@ export default function MenuPage() {
               </div>
               <button
                 onClick={() => router.push("/premium")}
-                className="w-full px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                className="w-full px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#D63D66] text-white text-xs font-semibold transition-colors"
               >
                 Passer à Premium
               </button>
@@ -1193,7 +1048,7 @@ export default function MenuPage() {
           )}
 
           {isPremium && (
-            <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+            <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
               <h2 className="text-base font-semibold mb-2 text-[var(--foreground)]">
                 {billingProfile?.subscription_tier === "premium_plus"
                   ? "Abonnement Premium Plus"
@@ -1212,7 +1067,7 @@ export default function MenuPage() {
                   type="button"
                   onClick={() => void handleUpgradeToPremiumPlus()}
                   disabled={upgradeToPlusLoading || cancelSubscriptionLoading}
-                  className="w-full mb-2 px-4 py-2 rounded-xl bg-[#8B3A5C] hover:bg-[#6d2e49] disabled:opacity-60 text-white text-xs font-semibold transition-colors"
+                  className="w-full mb-2 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#D63D66] disabled:opacity-60 text-white text-xs font-semibold transition-colors"
                 >
                   {upgradeToPlusLoading ? "Mise à niveau…" : "Passer à Premium Plus"}
                 </button>
@@ -1280,21 +1135,9 @@ export default function MenuPage() {
           )}
 
 
-          {activeTab === "compte" && activeSection === "confidentialite" && (
-        <section className="space-y-4">
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              onClick={() => setActiveSection(null)}
-              className="text-[var(--beige-text-muted)] hover:text-[var(--foreground)]"
-            >
-              ← Retour
-            </button>
-            <h2 className="text-xl font-bold text-[var(--foreground)]">
-              Données & confidentialité
-            </h2>
-          </div>
-
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+          {activeSection === "confidentialite" && (
+        <section className="space-y-4 px-4 py-6">
+          <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] px-4 py-4 shadow-[0_4px_20px_rgba(233,78,119,0.08)]">
             <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
               Politique de confidentialité
             </h2>
@@ -1391,21 +1234,9 @@ export default function MenuPage() {
         </section>
           )}
 
-          {activeTab === "compte" && activeSection === "apropos" && (
-        <section className="space-y-4">
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              onClick={() => setActiveSection(null)}
-              className="text-[var(--beige-text-muted)] hover:text-[var(--foreground)]"
-            >
-              ← Retour
-            </button>
-            <h2 className="text-xl font-bold text-[var(--foreground)]">
-              À propos de Foodlane
-            </h2>
-          </div>
-
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4 space-y-3 text-sm text-[var(--beige-text-light)]">
+          {activeSection === "apropos" && (
+        <section className="space-y-4 px-4 py-6">
+          <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] px-4 py-4 space-y-3 text-sm text-[#8A6F6F] shadow-[0_4px_20px_rgba(233,78,119,0.08)]">
             <div>
               <h3 className="font-semibold text-[var(--foreground)] mb-2">
                 Foodlane
@@ -1438,24 +1269,9 @@ export default function MenuPage() {
         </section>
           )}
 
-          {activeTab === "compte" && activeSection === "legales" && (
-        <section className="space-y-4">
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              onClick={() => {
-                setActiveSection(null);
-                setShowLegalDoc(null);
-              }}
-              className="text-[var(--beige-text-muted)] hover:text-[var(--foreground)]"
-            >
-              ← Retour
-            </button>
-            <h2 className="text-xl font-bold text-[var(--foreground)]">
-              Infos légales
-            </h2>
-          </div>
-
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+          {activeSection === "legales" && (
+        <section className="space-y-4 px-4 py-6">
+          <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] px-4 py-4 shadow-[0_4px_20px_rgba(233,78,119,0.08)]">
             <div className="space-y-2 text-sm">
               <button
                 onClick={() =>
@@ -1547,8 +1363,8 @@ export default function MenuPage() {
       {activeTab === "notifications" && (
         <>
           <section className="px-4 py-6 space-y-4">
-            <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-              <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">Notifications</h2>
+            <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] px-4 py-4 shadow-[0_4px_20px_rgba(233,78,119,0.08)]">
+              <h2 className="text-base font-semibold mb-3 text-[#4A2C2A]">Notifications</h2>
               <div className="space-y-4 text-sm">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1636,8 +1452,8 @@ export default function MenuPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-              <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
+            <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] px-4 py-4 shadow-[0_4px_20px_rgba(233,78,119,0.08)]">
+              <h2 className="text-base font-semibold mb-3 text-[#4A2C2A]">
                 Publicités
               </h2>
               <div className="space-y-3 text-sm">
@@ -1649,7 +1465,7 @@ export default function MenuPage() {
                 {!isPremium && (
                   <button
                     onClick={() => router.push("/premium")}
-                    className="w-full px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                    className="w-full px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#D63D66] text-white text-xs font-semibold transition-colors"
                   >
                     Passer à Premium sans publicités
                   </button>
@@ -1657,8 +1473,8 @@ export default function MenuPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
-              <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
+            <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] px-4 py-4 shadow-[0_4px_20px_rgba(233,78,119,0.08)]">
+              <h2 className="text-base font-semibold mb-3 text-[#4A2C2A]">
                 Performance / usage
               </h2>
               <div className="space-y-3 text-sm">
@@ -1698,7 +1514,7 @@ export default function MenuPage() {
       {activeTab === "parametres" && (
         <>
           <section className="px-4 py-6 space-y-4">
-            <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+            <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
               <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">Apparence</h2>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -1747,7 +1563,7 @@ export default function MenuPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+            <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
               <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
                 Infos légales
               </h2>
@@ -1838,7 +1654,7 @@ export default function MenuPage() {
 
       {activeTab === "foyer" && (
         <section className="px-4 py-6 space-y-4">
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+          <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
             <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">{t("menu.foyer.title")}</h2>
             <p className="text-sm text-[var(--text-secondary)] mb-3">{t("menu.foyer.intro")}</p>
             <Link
@@ -1897,7 +1713,7 @@ export default function MenuPage() {
 
       {activeTab === "abonnement" && (
         <section className="px-4 py-6 space-y-4">
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+          <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
             <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
               Abonnement
             </h2>
@@ -1918,7 +1734,7 @@ export default function MenuPage() {
                     className={`text-xs px-2 py-1 rounded-full ${
                       isPremium
                         ? billingProfile?.subscription_tier === "premium_plus"
-                          ? "bg-[#8B3A5C] text-white"
+                          ? "bg-[#E94E77] text-white"
                           : "bg-[#E94E77] text-white"
                         : "bg-[var(--beige-card-alt)] text-[var(--beige-text-muted)]"
                     }`}
@@ -1963,7 +1779,7 @@ export default function MenuPage() {
                   </div>
                   <button
                     onClick={() => router.push("/premium")}
-                    className="w-full mt-3 px-4 py-3 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-sm font-semibold transition-colors"
+                    className="w-full mt-3 px-4 py-3 rounded-xl bg-[#E94E77] hover:bg-[#D63D66] text-white text-sm font-semibold transition-colors"
                   >
                     Passer à Premium
                   </button>
@@ -1979,7 +1795,7 @@ export default function MenuPage() {
                     type="button"
                     onClick={() => void handleUpgradeToPremiumPlus()}
                     disabled={upgradeToPlusLoading || cancelSubscriptionLoading}
-                    className="w-full px-4 py-3 rounded-xl bg-[#8B3A5C] hover:bg-[#6d2e49] disabled:opacity-60 text-white text-sm font-semibold transition-colors"
+                    className="w-full px-4 py-3 rounded-xl bg-[#E94E77] hover:bg-[#D63D66] disabled:opacity-60 text-white text-sm font-semibold transition-colors"
                   >
                     {upgradeToPlusLoading ? "Mise à niveau…" : "Passer à Premium Plus"}
                   </button>
@@ -2062,7 +1878,7 @@ export default function MenuPage() {
           </h2>
 
           {/* FAQ */}
-          <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+          <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
             <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">
               {t("contact.faq.title")}
             </h2>
@@ -2090,7 +1906,7 @@ export default function MenuPage() {
               <UserFeedback />
 
               {/* Formulaire de contact classique */}
-              <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4 text-center">
+              <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4 text-center">
                 <p className="text-sm text-[var(--foreground)] mb-3">
                   {t("contact.form.not_found")}
                 </p>
@@ -2103,7 +1919,7 @@ export default function MenuPage() {
               </div>
             </div>
           ) : (
-                <div className="rounded-2xl bg-[var(--beige-card)] border border-[var(--beige-border)] px-4 py-4">
+                <div className="rounded-2xl border border-[#F5DDE5] bg-[#FFF0F3] shadow-[0_4px_20px_rgba(233,78,119,0.08)] px-4 py-4">
                   <h2 className="text-base font-semibold mb-3 text-[var(--foreground)]">Nous contacter</h2>
                   {contactSubmitted ? (
                     <div className="text-center py-4">
@@ -2250,7 +2066,7 @@ export default function MenuPage() {
                         </button>
                         <button
                           type="submit"
-                          className="flex-1 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#7A5F3F] text-white text-xs font-semibold transition-colors"
+                          className="flex-1 px-4 py-2 rounded-xl bg-[#E94E77] hover:bg-[#D63D66] text-white text-xs font-semibold transition-colors"
                         >
                           Envoyer
                         </button>

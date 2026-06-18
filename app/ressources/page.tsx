@@ -7,6 +7,7 @@ import { loadFavorites, saveFavorites } from "../src/lib/favorites";
 import FavoritesRecipesHero from "../components/FavoritesRecipesHero";
 import RecipeImage from "../components/RecipeImage";
 import { detectDietaryBadges, DIETARY_BADGE_ICONS } from "../src/lib/dietaryProfiles";
+import { MobileAppScreen, MobileSectionCard } from "../components/app/MobileAppScreen";
 
 const RESOURCE_ITEMS = [
   {
@@ -142,36 +143,29 @@ export default function RessourcesPage() {
   }
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-6 pb-24">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-[var(--foreground)]">Ressources</h1>
-        <p className="text-sm text-[var(--beige-text-light)] mt-2">
-          Tes recettes favorites, listes de courses et contenus nutritionnels
-        </p>
-      </header>
-
-      {/* Menu de la semaine */}
-      <section className="mb-6">
-        <Link
-          href="/menu-semaine"
-          className="block rounded-2xl border border-[var(--beige-border)] bg-[var(--beige-card)] px-4 py-4 hover:border-[#E94E77] transition-colors"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <h3 className="font-semibold text-sm mb-1 text-[var(--foreground)]">
-                📅 Menu de la semaine
-              </h3>
-              <p className="text-xs text-[var(--beige-text-light)]">
+    <MobileAppScreen
+      title="Ressources"
+      subtitle="Favoris, listes de courses et contenus nutritionnels"
+      backHref="/recettes"
+      contentClassName="px-4 pt-2 pb-8 space-y-4"
+    >
+      <MobileSectionCard>
+        <Link href="/menu-semaine" className="block">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="mb-1 text-sm font-semibold text-[#4A2C2A]">📅 Menu de la semaine</h3>
+              <p className="text-xs text-[#8A6F6F]">
                 Organise tes repas et génère ta liste de courses
               </p>
             </div>
-            <span className="text-[var(--beige-text-muted)] text-lg">→</span>
+            <span className="text-lg text-[#E94E77]" aria-hidden>
+              ›
+            </span>
           </div>
         </Link>
-      </section>
+      </MobileSectionCard>
 
-      {/* Recettes favorites */}
-      <section className="mb-6 rounded-2xl border border-[var(--beige-border)] bg-[var(--beige-card)] px-4 py-4">
+      <MobileSectionCard title="Recettes favorites">
         <FavoritesRecipesHero className="mb-3 -mx-1" heightClass="h-32" caption={false} />
         <div className="flex items-center justify-between gap-2 mb-3">
           <div>
@@ -255,31 +249,18 @@ export default function RessourcesPage() {
             ))}
           </ul>
         )}
-      </section>
+      </MobileSectionCard>
 
-      {/* Listes de courses sauvegardées */}
-      <section className="mb-6 rounded-2xl border border-dashed border-[var(--beige-border)] bg-[var(--beige-card)] px-4 py-4">
-        <h2 className="text-base font-semibold mb-2 text-[var(--foreground)]">
-          Listes de courses sauvegardées
-        </h2>
-        <p className="text-xs text-[var(--beige-text-light)] mb-3">
+      <MobileSectionCard title="Listes de courses sauvegardées">
+        <p className="mb-3 text-xs text-[#8A6F6F]">
           Tes listes de courses générées depuis les menus seront disponibles ici.
         </p>
-        <div className="rounded-xl border border-dashed border-[var(--beige-border)] px-3 py-3 text-center text-xs text-[var(--beige-text-light)]">
+        <div className="rounded-xl border border-dashed border-[#F5DDE5] bg-[#FFF8FA] px-3 py-3 text-center text-xs text-[#8A6F6F]">
           Aucune liste sauvegardée pour le moment
         </div>
-      </section>
+      </MobileSectionCard>
 
-      {/* Ressources & contenus */}
-      <section className="mb-6 rounded-2xl border border-[var(--beige-border)] bg-[var(--beige-card)] px-4 py-4">
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <div>
-            <h2 className="text-base font-semibold text-[var(--foreground)]">Ressources & contenus</h2>
-            <p className="text-xs text-[var(--beige-text-light)]">
-              Newsletters, guides nutritionnels et articles
-            </p>
-          </div>
-        </div>
+      <MobileSectionCard title="Ressources & contenus">
         <div className="space-y-3">
           {/* Formulaire Newsletter */}
           <article className="rounded-xl border border-[var(--beige-border)] bg-white px-3 py-3">
@@ -354,7 +335,7 @@ export default function RessourcesPage() {
             </a>
           </article>
         </div>
-      </section>
+      </MobileSectionCard>
 
       {/* Modal de détail de recette */}
       {selectedRecipe && (
@@ -445,7 +426,7 @@ export default function RessourcesPage() {
         </div>
       )}
 
-    </main>
+    </MobileAppScreen>
   );
 }
 

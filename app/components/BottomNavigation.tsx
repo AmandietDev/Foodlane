@@ -5,13 +5,13 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "./TranslationProvider";
 import { usePremium } from "../contexts/PremiumContext";
-import { FreeTierAdSlot } from "./ads/FreeTierAdSlot";
-
-const HIDDEN_PATH_PREFIXES = ["/", "/login", "/forgot-password", "/reset-password", "/coming-soon"];
+import { isMarketingPublicPath } from "../src/lib/publicRoutes";
 
 function hideGlobalNav(pathname: string | null): boolean {
   if (!pathname) return false;
-  return HIDDEN_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  if (isMarketingPublicPath(pathname)) return true;
+  const authOnlyPrefixes = ["/login", "/forgot-password", "/reset-password"];
+  return authOnlyPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 function menusTabActive(pathname: string | null): boolean {
@@ -53,7 +53,7 @@ function parametresTabActive(pathname: string | null): boolean {
 }
 
 export default function BottomNavigation() {
-  const { isPremium, loading, canAccessDietAssistant } = usePremium();
+  const { isPremium, canAccessDietAssistant } = usePremium();
   const { t } = useTranslation();
   const pathname = usePathname();
 
@@ -62,8 +62,10 @@ export default function BottomNavigation() {
   }
 
   const linkClassMobile = (active: boolean) =>
-    `flex flex-col items-center gap-1 py-2 px-2.5 min-w-[3.75rem] rounded-xl transition-all active:scale-[0.97] ${
-      active ? "text-[#6B2E2E] bg-white/70" : "text-[#8A4A4A] hover:text-[#6B2E2E]"
+    `flex flex-col items-center gap-0.5 py-2 px-3 min-w-[4rem] rounded-2xl transition-all active:scale-[0.97] ${
+      active
+        ? "text-[#E94E77] bg-[#FFE8EE] font-semibold"
+        : "text-[#8A6F6F] hover:text-[#6B2E2E]"
     }`;
 
   const linkClassDesktop = (active: boolean) =>
@@ -72,8 +74,6 @@ export default function BottomNavigation() {
         ? "bg-[#FFD9D9] text-[#4a2c2c] border border-[var(--beige-border)]"
         : "text-[#7A3A3A] hover:bg-[#FFF6F6] border border-transparent"
     }`;
-
-  const showMobileAd = !loading && !isPremium;
 
   const desktopPremiumHint = !isPremium && (
     <div className="hidden md:block mt-auto p-3 border-t border-[var(--beige-border)] bg-[var(--surface-muted)]">
@@ -132,9 +132,9 @@ export default function BottomNavigation() {
       </aside>
 
       <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col md:hidden pb-[env(safe-area-inset-bottom,0px)]">
-        {showMobileAd ? <FreeTierAdSlot placement="mobile_bottom" /> : null}
         <nav
-          className="min-h-14 bg-[#FFF0F0]/95 backdrop-blur-md border-t border-[var(--beige-border)] flex items-stretch justify-around text-[11px] leading-tight shadow-[0_-4px_20px_rgba(233,78,119,0.08)]"
+          className="min-h-[3.75rem] border-t flex items-stretch justify-around bg-[#FFF9F5] px-1 pt-1 text-[10px] leading-tight shadow-[0_-4px_24px_rgba(233,78,119,0.08)]"
+          style={{ borderColor: "#F5DDE5" }}
           aria-label="Navigation principale"
         >
           <Link href="/tableau" className={`${linkClassMobile(menusTabActive(pathname))} flex-1`}>

@@ -5,20 +5,29 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Challenge, Tip } from "../../src/lib/dailyTips";
 import {
+  HYDRATION_BEVERAGES,
   MEAL_TYPES,
   MEAL_TYPE_ICONS,
   MEAL_TYPE_LABELS,
   MEAL_TYPE_STYLES,
-  countFilledMealSlots,
+  formatHydrationEntry,
+  formatWeekdayShortFr,
+  getTodayISO,
+  getWeekDayISOList,
+  logEntryTypeLabel,
   mealSlotStatusLabel,
-  scoreBalanceLabel,
+  buildLoggedMealsScoreContext,
+  buildNutritionalQualityComment,
+  uniqueLoggedMealTypes,
+  type HydrationBeverage,
+  type LogEntryType,
   type MealType,
 } from "./dietDiaryUtils";
 
 export interface DiaryFoodLogEntry {
   id: string;
   date: string;
-  meal_type: MealType;
+  meal_type: LogEntryType;
   raw_text: string;
   parsed?: { items?: { name?: string }[] };
   confidence: number;
@@ -39,11 +48,18 @@ export interface DiaryDailySummary {
 type DietitianNote = {
   title: string;
   intro: string;
+  scopeLine: string;
+  coverageWarning: string | null;
   highlights: string[];
   improvements: string[];
 };
 
-type DiaryScreen = "diary" | "analysis" | "challenge";
+type WeeklyInsights = {
+  patterns: Record<string, string>;
+  one_action: string;
+};
+
+type DiaryScreen = "diary" | "analysis" | "challenge" | "week";
 
 type DietDiaryDayViewProps = {
   selectedDate: string;
@@ -52,25 +68,32 @@ type DietDiaryDayViewProps = {
   canGoNext: boolean;
   onPrevDay: () => void;
   onNextDay: () => void;
+  onSelectDate?: (iso: string) => void;
   meals: DiaryFoodLogEntry[];
   summary: DiaryDailySummary | null;
   dietitianNote: DietitianNote;
   defiDuJour: Challenge | null;
   conseilDuJour: Tip | null;
+  weekMeals: DiaryFoodLogEntry[];
+  weekMealsLoading: boolean;
+  weeklyInsights: WeeklyInsights | null;
+  onWeekOpen: () => void | Promise<void>;
   addingMeal: boolean;
   canUsePhotoScan: boolean;
   loadingScan: boolean;
   subscriptionTier: string | null;
-  onAddMeal: (mealType: MealType, rawText: string) => Promise<void>;
+  onAddMeal: (mealType: LogEntryType, rawText: string) => Promise<void>;
   onDeleteMeal: (id: string) => void;
+  onEditMeal?: (entry: DiaryFoodLogEntry) => void;
   onAddFeeling: (id: string) => void;
   onPhotoScanClick: (mealType: MealType) => void;
 };
 
-function CompletionRing({ percent }: { percent: number }) {
+function ScoreRing({ score }: { score: number | null }) {
   const r = 36;
   const c = 2 * Math.PI * r;
-  const dash = (percent / 100) * c;
+  const pct = score != null ? Math.max(0, Math.min(100, score)) : 0;
+  const dash = (pct / 100) * c;
 
   return (
     <div className="relative h-[5.5rem] w-[5.5rem] shrink-0">
@@ -89,26 +112,27 @@ function CompletionRing({ percent }: { percent: number }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center px-1 text-center">
-        <span className="text-lg font-bold leading-none text-[#6B2E2E]">{percent}%</span>
-        <span className="mt-0.5 text-[8px] leading-tight text-[#726566]">repas saisis</span>
+        <span className="text-lg font-bold leading-none text-[#6B2E2E]">
+          {score != null ? score : "—"}
+        </span>
+        <span className="mt-0.5 text-[8px] leading-tight text-[#726566]">/ 100</span>
       </div>
     </div>
   );
 }
 
-function MascotProgressBar({ filledCount }: { filledCount: number }) {
-  const total = MEAL_TYPES.length;
-  const progressPct = total === 0 ? 0 : (filledCount / total) * 100;
+function MascotProgressBar({ score }: { score: number | null }) {
+  const progressPct = score != null ? Math.max(0, Math.min(100, score)) : 0;
 
   return (
     <div className="mt-5 border-t border-[#F0E6E8] pt-4 pb-1">
       <div
         className="relative h-11 px-3"
         role="progressbar"
-        aria-valuenow={filledCount}
+        aria-valuenow={progressPct}
         aria-valuemin={0}
-        aria-valuemax={total}
-        aria-label={`${filledCount} repas sur ${total} saisis`}
+        aria-valuemax={100}
+        aria-label={`Score des repas saisis : ${score != null ? score : "non calculé"} sur 100`}
       >
         <div
           className="absolute left-3 right-3 top-1/2 h-2.5 -translate-y-1/2 rounded-full bg-[#FFE4E4]"
@@ -137,21 +161,66 @@ function MascotProgressBar({ filledCount }: { filledCount: number }) {
   );
 }
 
+function LoggedMealsScoreNotice({
+  scopeLine,
+  coverageWarning,
+  compact = false,
+}: {
+  scopeLine: string;
+  coverageWarning: string | null;
+  compact?: boolean;
+}) {
+  if (!scopeLine && !coverageWarning) return null;
+
+  return (
+    <div
+      className={`rounded-xl border border-[#F0E6E8] bg-[#FFF8F6] ${
+        compact ? "px-3 py-2" : "px-3 py-2.5"
+      }`}
+      role="note"
+    >
+      {scopeLine ? (
+        <p className={`font-medium text-[#6B2E2E] ${compact ? "text-[11px]" : "text-xs"}`}>
+          {scopeLine}
+        </p>
+      ) : null}
+      {coverageWarning ? (
+        <p
+          className={`leading-relaxed text-[#8A6F6F] ${
+            scopeLine ? "mt-1" : ""
+          } ${compact ? "text-[10px]" : "text-[11px]"}`}
+        >
+          {coverageWarning}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function DiarySummaryCard({
   score,
-  filledCount,
+  summary,
+  hasMealEntries,
+  mealsAnalyzed,
+  mealTypes,
 }: {
   score: number | null;
-  filledCount: number;
+  summary: DiaryDailySummary | null;
+  hasMealEntries: boolean;
+  mealsAnalyzed: number;
+  mealTypes: MealType[];
 }) {
-  const completionPct = Math.round((filledCount / MEAL_TYPES.length) * 100);
+  const scoreContext = buildLoggedMealsScoreContext(mealsAnalyzed, mealTypes, score);
+  const qualityComment = buildNutritionalQualityComment(summary, hasMealEntries);
+  const strengthHint =
+    summary?.strengths && summary.strengths.length > 1 ? summary.strengths[1] : null;
 
   return (
     <section className="overflow-hidden rounded-[1.75rem] border border-[#F0E6E8] bg-white p-4 shadow-[0_8px_32px_rgba(233,78,119,0.08)]">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9A8585]">
-            Score d&apos;équilibre
+            Score des repas saisis
           </p>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-4xl font-bold leading-none text-[#6B2E2E]">
@@ -159,14 +228,27 @@ function DiarySummaryCard({
             </span>
             <span className="text-sm font-medium text-[#726566]">/100</span>
           </div>
-          <p className="mt-1.5 text-xs font-medium text-[#E94E77]">
-            {scoreBalanceLabel(score)}{" "}
+          <p className="mt-1.5 text-xs font-semibold text-[#E94E77]">
+            {scoreContext.balanceLabel}{" "}
             <span aria-hidden>♥</span>
           </p>
+          {hasMealEntries ? (
+            <div className="mt-2">
+              <LoggedMealsScoreNotice
+                scopeLine={scoreContext.scopeLine}
+                coverageWarning={scoreContext.coverageWarning}
+                compact
+              />
+            </div>
+          ) : null}
+          <p className="mt-2 text-xs leading-relaxed text-[#726566]">{qualityComment}</p>
+          {strengthHint ? (
+            <p className="mt-1 text-[11px] leading-relaxed text-[#9A8585]">+ {strengthHint}</p>
+          ) : null}
         </div>
-        <CompletionRing percent={completionPct} />
+        <ScoreRing score={score} />
       </div>
-      <MascotProgressBar filledCount={filledCount} />
+      <MascotProgressBar score={score} />
     </section>
   );
 }
@@ -207,36 +289,283 @@ function WeekNavBar({
   canGoNext,
   onPrevDay,
   onNextDay,
+  onOpenWeek,
 }: {
   canGoPrev: boolean;
   canGoNext: boolean;
   onPrevDay: () => void;
   onNextDay: () => void;
+  onOpenWeek: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-2xl border border-[#F0E6E8] bg-white p-1.5 shadow-sm" aria-label="Navigation hebdomadaire">
+    <div
+      className="flex items-center gap-1 rounded-full border border-[#F5E8EB] bg-white p-1.5 shadow-[0_4px_20px_rgba(233,78,119,0.08)]"
+      aria-label="Navigation journalière et accès à la semaine"
+    >
       <button
         type="button"
         onClick={onPrevDay}
         disabled={!canGoPrev}
-        aria-label="Semaine précédente"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg text-[#6B2E2E] transition hover:bg-[#FFF8F6] disabled:opacity-30"
+        aria-label="Jour précédent"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg font-medium text-[#4A2C2A] transition hover:bg-[#FFF8F6] disabled:opacity-30"
       >
         ‹
       </button>
-      <div className="flex flex-1 items-center justify-center rounded-lg bg-[#E94E77] px-3 py-2.5 text-sm font-semibold text-white shadow-sm">
+      <button
+        type="button"
+        onClick={onOpenWeek}
+        className="mx-0.5 flex flex-1 items-center justify-center rounded-xl bg-[#E94E77] px-3 py-2.5 text-sm font-bold text-white shadow-[0_4px_14px_rgba(233,78,119,0.32)] transition hover:bg-[#D63D56] active:scale-[0.98]"
+      >
         Ma semaine
-      </div>
+      </button>
       <button
         type="button"
         onClick={onNextDay}
         disabled={!canGoNext}
-        aria-label="Semaine suivante"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg text-[#6B2E2E] transition hover:bg-[#FFF8F6] disabled:opacity-30"
+        aria-label="Jour suivant"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg font-medium text-[#4A2C2A] transition hover:bg-[#FFF8F6] disabled:opacity-30"
       >
         ›
       </button>
     </div>
+  );
+}
+
+function WeekAnalysisView({
+  weekMeals,
+  weekMealsLoading,
+  weeklyInsights,
+  onSelectDay,
+}: {
+  weekMeals: DiaryFoodLogEntry[];
+  weekMealsLoading: boolean;
+  weeklyInsights: WeeklyInsights | null;
+  onSelectDay: (iso: string) => void;
+}) {
+  const weekDays = getWeekDayISOList();
+  const todayIso = getTodayISO();
+  const mealsByDay = new Map<string, DiaryFoodLogEntry[]>();
+  for (const day of weekDays) {
+    mealsByDay.set(day, []);
+  }
+  for (const meal of weekMeals) {
+    const list = mealsByDay.get(meal.date);
+    if (list) list.push(meal);
+  }
+
+  const formatDayMonth = (iso: string) => {
+    const p = iso.split("-").map(Number);
+    if (p.length !== 3 || !p[0] || !p[1] || !p[2]) return iso;
+    return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "short",
+    });
+  };
+  const weekLabel = `Semaine du ${formatDayMonth(weekDays[0])} au ${formatDayMonth(weekDays[6])}`;
+
+  if (weekMealsLoading) {
+    return <p className="text-sm text-[#726566]">Chargement de ta semaine…</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs font-medium text-[#9A8585]">{weekLabel}</p>
+
+      {weeklyInsights ? (
+        <div className="space-y-3 rounded-2xl border border-[#F0E6E8] bg-[#FFF8F6] p-4">
+          <p className="text-sm font-bold text-[#4A2C2A]">Analyse de la semaine</p>
+          {Object.entries(weeklyInsights.patterns).map(([key, value]) => (
+            <p key={key} className="text-sm leading-relaxed text-[#5C4040]">
+              {value}
+            </p>
+          ))}
+          {weeklyInsights.one_action ? (
+            <div className="rounded-xl border border-[#E94E77]/20 bg-white px-3 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#E94E77]">
+                Action prioritaire
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-[#4A2C2A]">{weeklyInsights.one_action}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-sm leading-relaxed text-[#726566]">
+          Note quelques repas cette semaine pour débloquer l&apos;analyse personnalisée.
+        </p>
+      )}
+
+      <div>
+        <h3 className="mb-3 text-sm font-bold text-[#4A2C2A]">Historique des repas</h3>
+        <div className="space-y-2.5">
+          {weekDays.map((day) => {
+            const dayMeals = mealsByDay.get(day) ?? [];
+            const isToday = day === todayIso;
+            return (
+              <div
+                key={day}
+                className="overflow-hidden rounded-2xl border border-[#F0E6E8] bg-white shadow-[0_2px_12px_rgba(233,78,119,0.05)]"
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectDay(day)}
+                  className="flex w-full items-center justify-between gap-2 px-3.5 py-3 text-left transition hover:bg-[#FFF8F6]"
+                >
+                  <span className="text-sm font-semibold text-[#4A2C2A]">
+                    {isToday ? "Aujourd'hui" : formatWeekdayShortFr(day)}
+                  </span>
+                  <span className="text-xs text-[#9A8585]">
+                    {dayMeals.length > 0
+                      ? `${dayMeals.length} repas · voir`
+                      : "Aucun repas · ajouter"}
+                  </span>
+                </button>
+                {dayMeals.length > 0 ? (
+                  <ul className="space-y-1.5 border-t border-[#F5E8EB] px-3.5 py-2.5">
+                    {dayMeals.map((meal) => (
+                      <li
+                        key={meal.id}
+                        className="flex items-start gap-2 rounded-xl bg-[#FFF8F6] px-2.5 py-2 text-xs text-[#5C4040]"
+                      >
+                        <span className="shrink-0 font-medium text-[#E94E77]">
+                          {logEntryTypeLabel(meal.meal_type)}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{meal.raw_text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HydrationSection({
+  entries,
+  isExpanded,
+  onToggle,
+  glasses,
+  setGlasses,
+  beverage,
+  setBeverage,
+  onSave,
+  onDelete,
+  addingMeal,
+}: {
+  entries: DiaryFoodLogEntry[];
+  isExpanded: boolean;
+  onToggle: () => void;
+  glasses: number;
+  setGlasses: (n: number) => void;
+  beverage: HydrationBeverage;
+  setBeverage: (b: HydrationBeverage) => void;
+  onSave: () => void;
+  onDelete: (id: string) => void;
+  addingMeal: boolean;
+}) {
+  const hasEntries = entries.length > 0;
+  const preview = hasEntries ? entries.map((e) => e.raw_text).join(" · ") : undefined;
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-[#D4E8F5] bg-[#F4FAFF] shadow-sm">
+      <div className="flex items-center gap-3 px-3.5 py-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#E0F2FC] text-lg">
+          💧
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-[#3E2A2A]">Hydratation</h3>
+          <p className={`truncate text-xs ${hasEntries ? "text-[#726566]" : "text-[#9A8585]"}`}>
+            {preview ?? "Nombre de verres et type de boisson"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label="Ajouter hydratation"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#5BB8E8] text-xl font-light text-white shadow-[0_4px_14px_rgba(91,184,232,0.35)] transition hover:bg-[#4AA8D8]"
+        >
+          {isExpanded ? "−" : "+"}
+        </button>
+      </div>
+
+      {hasEntries ? (
+        <div className="space-y-2 border-t border-white/60 px-3.5 py-2">
+          {entries.map((entry) => (
+            <div
+              key={entry.id}
+              className="flex items-center justify-between gap-2 rounded-xl bg-white/80 px-2.5 py-2"
+            >
+              <p className="text-sm text-[#3E2A2A]">{entry.raw_text}</p>
+              <button
+                type="button"
+                onClick={() => onDelete(entry.id)}
+                className="rounded-lg bg-red-50 px-2 py-1 text-xs text-red-600"
+                title="Supprimer"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {isExpanded ? (
+        <div className="space-y-4 border-t border-white/60 bg-white/50 px-3.5 py-3">
+          <div>
+            <p className="mb-2 text-xs font-semibold text-[#4A2C2A]">Nombre de verres</p>
+            <div className="flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => setGlasses(Math.max(1, glasses - 1))}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#D4E8F5] bg-white text-lg font-semibold text-[#4A2C2A]"
+                aria-label="Moins un verre"
+              >
+                −
+              </button>
+              <span className="min-w-[3rem] text-center text-2xl font-bold text-[#2E7AB8]">{glasses}</span>
+              <button
+                type="button"
+                onClick={() => setGlasses(Math.min(20, glasses + 1))}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#D4E8F5] bg-white text-lg font-semibold text-[#4A2C2A]"
+                aria-label="Plus un verre"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold text-[#4A2C2A]">Type de boisson</p>
+            <div className="flex flex-wrap gap-2">
+              {HYDRATION_BEVERAGES.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setBeverage(option)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                    beverage === option
+                      ? "bg-[#5BB8E8] text-white shadow-sm"
+                      : "border border-[#D4E8F5] bg-white text-[#5C4040]"
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={addingMeal}
+            className="w-full rounded-full bg-[#5BB8E8] py-3 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(91,184,232,0.3)] disabled:opacity-50"
+          >
+            {addingMeal ? "…" : "Enregistrer"}
+          </button>
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -280,7 +609,7 @@ function TomorrowPlanSection({
   plan: Record<MealType, string[]>;
 }) {
   return (
-    <div className="rounded-xl border border-[#F3E8FF] bg-[#FBF8FF] p-3">
+    <div className="rounded-xl border border-[#F5DDE5] bg-[#FFF5F8] p-3">
       <p className="mb-1 flex items-center gap-2 text-xs font-semibold text-[#6B2E2E]">
         <span aria-hidden>🗓️</span>
         Pour demain
@@ -371,18 +700,25 @@ function ChallengePreviewCard({
   onOpen: () => void;
 }) {
   return (
-    <section className="rounded-[1.75rem] border border-[#F0E6E8] bg-white p-4 shadow-[0_8px_32px_rgba(233,78,119,0.08)]">
-      <p className="flex items-center gap-2 text-sm font-bold text-[#6B2E2E]">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FFE4EC] text-base">
-          🎯
-        </span>
-        Défi du jour
-      </p>
-      <p className="mt-2 text-sm leading-relaxed text-[#5C4040]">{defi.action}</p>
+    <section className="rounded-[2rem] border border-[#F5E8EB] bg-white p-5 shadow-[0_8px_32px_rgba(233,78,119,0.08)]">
+      <div className="flex items-center gap-3">
+        <div className="relative h-11 w-11 shrink-0">
+          <Image
+            src="/equilibre/defi/target-icon.png"
+            alt=""
+            width={44}
+            height={44}
+            className="h-full w-full object-contain"
+            unoptimized
+          />
+        </div>
+        <p className="text-base font-bold text-[#4A2C2A]">Défi du jour</p>
+      </div>
+      <p className="mt-3 text-sm leading-relaxed text-[#4A2C2A]">{defi.action}</p>
       <button
         type="button"
         onClick={onOpen}
-        className="mt-4 w-full rounded-full bg-[#E94E77] py-3 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(233,78,119,0.35)] transition hover:bg-[#D63D56] active:scale-[0.98]"
+        className="mt-5 w-full rounded-full bg-[#E94E77] py-3.5 text-sm font-bold text-white shadow-[0_6px_20px_rgba(233,78,119,0.35)] transition hover:bg-[#D63D56] active:scale-[0.98]"
       >
         Relever le défi
       </button>
@@ -397,22 +733,31 @@ export default function DietDiaryDayView({
   canGoNext,
   onPrevDay,
   onNextDay,
+  onSelectDate,
   meals,
   summary,
   dietitianNote,
   defiDuJour,
   conseilDuJour,
+  weekMeals,
+  weekMealsLoading,
+  weeklyInsights,
+  onWeekOpen,
   addingMeal,
   canUsePhotoScan,
   loadingScan,
   subscriptionTier,
   onAddMeal,
   onDeleteMeal,
+  onEditMeal,
   onAddFeeling,
   onPhotoScanClick,
 }: DietDiaryDayViewProps) {
   const [screen, setScreen] = useState<DiaryScreen>("diary");
   const [expandedSlot, setExpandedSlot] = useState<MealType | null>(null);
+  const [hydrationExpanded, setHydrationExpanded] = useState(false);
+  const [hydrationGlasses, setHydrationGlasses] = useState(1);
+  const [hydrationBeverage, setHydrationBeverage] = useState<HydrationBeverage>("Eau");
   const [slotInputs, setSlotInputs] = useState<Record<MealType, string>>({
     breakfast: "",
     lunch: "",
@@ -420,8 +765,15 @@ export default function DietDiaryDayView({
     snack: "",
   });
 
-  const filledCount = countFilledMealSlots(meals);
+  const mealEntries = meals.filter((m) => m.meal_type !== "hydration");
+  const hydrationEntries = meals.filter((m) => m.meal_type === "hydration");
+  const loggedMealTypes = uniqueLoggedMealTypes(mealEntries);
   const displayScore = summary?.score ?? null;
+  const scoreContext = buildLoggedMealsScoreContext(
+    mealEntries.length,
+    loggedMealTypes,
+    displayScore
+  );
 
   const advicePreview =
     conseilDuJour?.text ||
@@ -437,6 +789,7 @@ export default function DietDiaryDayView({
   useEffect(() => {
     setScreen("diary");
     setExpandedSlot(null);
+    setHydrationExpanded(false);
   }, [selectedDate]);
 
   const toggleSlot = (mealType: MealType) => {
@@ -453,21 +806,51 @@ export default function DietDiaryDayView({
 
   const goBack = () => setScreen("diary");
 
+  const openWeek = () => {
+    void onWeekOpen();
+    setScreen("week");
+  };
+
+  const selectDayFromWeek = (iso: string) => {
+    onSelectDate?.(iso);
+    setScreen("diary");
+  };
+
+  if (screen === "week") {
+    return (
+      <SubScreen title="Ma semaine" onBack={goBack}>
+        <WeekAnalysisView
+          weekMeals={weekMeals}
+          weekMealsLoading={weekMealsLoading}
+          weeklyInsights={weeklyInsights}
+          onSelectDay={selectDayFromWeek}
+        />
+      </SubScreen>
+    );
+  }
+
   if (screen === "analysis") {
     return (
       <SubScreen title="Conseils & analyses" onBack={goBack}>
-        {meals.length === 0 && !showTomorrowPlan ? (
+        {mealEntries.length === 0 && !showTomorrowPlan ? (
           <p className="text-sm leading-relaxed text-[#726566]">
             Saisis au moins un repas pour recevoir l&apos;analyse de ton assistant diététicien.
           </p>
         ) : (
           <div className="space-y-4">
-            {meals.length > 0 ? (
+            {mealEntries.length > 0 ? (
               <>
             {summary ? (
-              <div className="flex items-center justify-between rounded-xl bg-[#FFF8F6] px-4 py-3">
-                <span className="text-sm font-semibold text-[#6B2E2E]">Score du jour</span>
-                <span className="text-2xl font-bold text-[#6B2E2E]">{summary.score}/100</span>
+              <div className="space-y-2 rounded-xl bg-[#FFF8F6] px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-[#6B2E2E]">Score des repas saisis</span>
+                  <span className="text-2xl font-bold text-[#6B2E2E]">{summary.score}/100</span>
+                </div>
+                <LoggedMealsScoreNotice
+                  scopeLine={dietitianNote.scopeLine || scoreContext.scopeLine}
+                  coverageWarning={dietitianNote.coverageWarning ?? scoreContext.coverageWarning}
+                  compact
+                />
               </div>
             ) : null}
             <div>
@@ -555,9 +938,15 @@ export default function DietDiaryDayView({
     <div className="space-y-5">
       <AssistantHero />
 
-      <DiarySummaryCard score={displayScore} filledCount={filledCount} />
+      <DiarySummaryCard
+        score={displayScore}
+        summary={summary}
+        hasMealEntries={mealEntries.length > 0}
+        mealsAnalyzed={mealEntries.length}
+        mealTypes={loggedMealTypes}
+      />
 
-      {!summary && meals.length > 0 ? (
+      {!summary && mealEntries.length > 0 ? (
         <p className="-mt-2 text-center text-[11px] text-[#726566]">Calcul du score en cours…</p>
       ) : null}
 
@@ -571,7 +960,7 @@ export default function DietDiaryDayView({
         <h2 className="mb-3 text-base font-bold text-[#6B2E2E]">Vos repas du jour</h2>
         <div className="space-y-2.5">
           {MEAL_TYPES.map((mealType) => {
-            const mealsOfType = meals.filter((m) => m.meal_type === mealType);
+            const mealsOfType = mealEntries.filter((m) => m.meal_type === mealType);
             const isExpanded = expandedSlot === mealType;
             const hasEntries = mealsOfType.length > 0;
             const style = MEAL_TYPE_STYLES[mealType];
@@ -629,6 +1018,16 @@ export default function DietDiaryDayView({
                           ) : null}
                         </div>
                         <div className="flex shrink-0 gap-1">
+                          {onEditMeal ? (
+                            <button
+                              type="button"
+                              onClick={() => onEditMeal(entry)}
+                              className="rounded-lg bg-[#FFECE8] px-2 py-1 text-xs"
+                              title="Modifier les aliments"
+                            >
+                              ✎
+                            </button>
+                          ) : null}
                           {!entry.hunger_before || !entry.satiety_after ? (
                             <button
                               type="button"
@@ -729,6 +1128,27 @@ export default function DietDiaryDayView({
               </article>
             );
           })}
+
+          <HydrationSection
+            entries={hydrationEntries}
+            isExpanded={hydrationExpanded}
+            onToggle={() => setHydrationExpanded((v) => !v)}
+            glasses={hydrationGlasses}
+            setGlasses={setHydrationGlasses}
+            beverage={hydrationBeverage}
+            setBeverage={setHydrationBeverage}
+            onSave={() =>
+              void onAddMeal("hydration", formatHydrationEntry(hydrationGlasses, hydrationBeverage)).then(
+                () => {
+                  setHydrationExpanded(false);
+                  setHydrationGlasses(1);
+                  setHydrationBeverage("Eau");
+                }
+              )
+            }
+            onDelete={onDeleteMeal}
+            addingMeal={addingMeal}
+          />
         </div>
       </section>
 
@@ -749,6 +1169,7 @@ export default function DietDiaryDayView({
         canGoNext={canGoNext}
         onPrevDay={onPrevDay}
         onNextDay={onNextDay}
+        onOpenWeek={openWeek}
       />
     </div>
   );

@@ -10,6 +10,7 @@ import { usePremium } from "../contexts/PremiumContext";
 import { getSubscriptionAccountMessage } from "../src/lib/subscriptionDisplay";
 import { supabase } from "../src/lib/supabaseClient";
 import ErrorMessage from "../components/ErrorMessage";
+import { MobileAppScreen } from "../components/app/MobileAppScreen";
 import {
   PLAN_COMPARISON_ROWS,
   PREMIUM_PRICE_MONTHLY,
@@ -316,17 +317,20 @@ export default function PremiumPage() {
   const showSuccessBanner = Boolean(searchParams.get("success") && !error);
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-28 pt-6">
-      <header className="mx-auto mb-8 max-w-2xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+    <MobileAppScreen
+      title="Premium"
+      subtitle="Choisis la formule qui te ressemble"
+      backHref="/menu"
+      contentClassName="px-4 pt-2 pb-28"
+    >
+      <div className="mx-auto max-w-md">
+      <header className="mb-6 text-center">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[#8A6F6F]">
           Tarifs Foodlane
         </p>
-        <h1 className="mt-2 text-balance text-3xl font-bold text-[var(--foreground)] md:text-4xl">
-          Choisis la formule qui te ressemble
-        </h1>
-        <p className="mt-3 text-pretty text-sm text-[var(--beige-text-muted)] md:text-base">
-          Gratuit pour découvrir, Premium pour t’organiser au quotidien, Premium Plus pour aller plus
-          loin avec l’assistant avancé.
+        <p className="mt-3 text-pretty text-sm leading-relaxed text-[#8A6F6F]">
+          Gratuit pour découvrir, Premium pour t&apos;organiser au quotidien, Premium Plus pour aller plus
+          loin avec l&apos;assistant avancé.
         </p>
 
         {pricingCtx?.showFounderPricing && (
@@ -794,26 +798,12 @@ export default function PremiumPage() {
         </div>
       </section>
 
-      <footer className="mt-12 space-y-4 border-t border-[var(--beige-border)] pt-8 text-center">
-        <p className="text-xs text-[var(--beige-text-muted)]">
-          Paiement sécurisé par Stripe. Résiliation possible depuis cette page ou le menu (fin de période) ;
-          factures et carte bancaire via le portail Stripe.
+      <footer className="mt-8 space-y-3 border-t border-[#F5DDE5] pt-6 text-center">
+        <p className="text-xs text-[#8A6F6F]">
+          Paiement sécurisé par Stripe. Résiliation possible depuis cette page ou le menu.
         </p>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Link
-            href="/tableau"
-            className="inline-flex rounded-2xl bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)]"
-          >
-            Retour aux menus
-          </Link>
-          <Link
-            href="/"
-            className="inline-flex rounded-2xl border border-[var(--beige-border)] bg-[var(--surface)] px-5 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:border-[var(--accent)]"
-          >
-            Accueil
-          </Link>
-        </div>
       </footer>
-    </main>
+      </div>
+    </MobileAppScreen>
   );
 }

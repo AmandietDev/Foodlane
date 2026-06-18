@@ -264,22 +264,24 @@ export default function LandingPageClient({ recipes: recipesProp }: LandingPageC
         <div className="mx-auto flex max-w-6xl flex-col gap-6 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
           <LandingLogo wordmarkStyle={{ fontFamily: pacifico.style.fontFamily }} />
           <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-[#7A5C5C] sm:gap-x-6" aria-label="Pied de page">
-            <button type="button" className="hover:text-[#E94E77]" onClick={() => setLegalDoc("mentions")}>
+            <Link href="/mentions-legales" className="hover:text-[#E94E77]">
               Mentions légales
-            </button>
-            <button type="button" className="hover:text-[#E94E77]" onClick={() => setContactOpen(true)}>
+            </Link>
+            <Link href="/contact" className="hover:text-[#E94E77]">
               Contact
-            </button>
-            <button
-              type="button"
-              className="hover:text-[#E94E77]"
-              onClick={() => setLegalDoc("confidentialite")}
-            >
+            </Link>
+            <Link href="/confidentialite" className="hover:text-[#E94E77]">
               Confidentialité
-            </button>
-            <button type="button" className="hover:text-[#E94E77]" onClick={() => setLegalDoc("cgu")}>
+            </Link>
+            <Link href="/cookies" className="hover:text-[#E94E77]">
+              Cookies
+            </Link>
+            <Link href="/cgu" className="hover:text-[#E94E77]">
               CGU
-            </button>
+            </Link>
+            <Link href="/cgv" className="hover:text-[#E94E77]">
+              CGV
+            </Link>
           </nav>
           <a
             href={INSTAGRAM_HREF}

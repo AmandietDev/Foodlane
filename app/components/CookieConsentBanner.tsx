@@ -18,6 +18,7 @@
  *     if (consent?.audience) { /* charger l'outil analytics ... *\/ }
  */
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "foodlane_cookie_consent_v1";
@@ -199,8 +200,11 @@ export default function CookieConsentBanner() {
               fonctionnement du service (session, sécurité, paiement). Avec
               ton accord, certains cookies optionnels peuvent aussi nous
               aider à mesurer l&apos;audience, à attribuer un parrainage ou
-              à diffuser des contenus marketing. Tu peux accepter, refuser
-              ou personnaliser à tout moment.
+              à diffuser des publicités personnalisées via Google AdSense. Tu
+              peux accepter, refuser ou personnaliser à tout moment.{" "}
+              <a href="/confidentialite" className="underline underline-offset-2 hover:text-[#E94E77]">
+                Politique de confidentialité
+              </a>
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <button
@@ -227,8 +231,14 @@ export default function CookieConsentBanner() {
             </div>
             <p className="mt-3 text-[11px] text-[var(--beige-text-muted)]">
               Plus d&apos;informations dans la{" "}
-              <span className="underline">Politique de cookies</span> et la{" "}
-              <span className="underline">Politique de confidentialité</span>.
+              <Link href="/cookies" className="underline hover:text-[#E94E77]">
+                Politique de cookies
+              </Link>{" "}
+              et la{" "}
+              <Link href="/confidentialite" className="underline hover:text-[#E94E77]">
+                Politique de confidentialité
+              </Link>
+              .
             </p>
           </>
         ) : (
@@ -273,8 +283,8 @@ export default function CookieConsentBanner() {
               />
 
               <CategoryRow
-                title="Marketing"
-                description="Mesurer l'efficacité d'éventuelles campagnes publicitaires (Meta, TikTok, Google Ads). Aucun outil de ce type n'est actuellement actif."
+                title="Marketing et publicité"
+                description="Afficher des publicités Google AdSense et mesurer l'efficacité d'éventuelles campagnes (Meta, TikTok, Google Ads). Google et ses partenaires peuvent utiliser des cookies pour diffuser des annonces personnalisées. Voir aussi la page Comment Google utilise les données."
                 checked={prefs.marketing}
                 onChange={(v) =>
                   setPrefs((p) => ({ ...p, marketing: v }))

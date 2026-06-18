@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LANDING_PAGES, buildMetadata, faqSchema } from "../src/lib/seo";
+import { PublicLegalFooter } from "../components/legal/PublicLegalFooter";
 
 type Params = { slug: string };
 
@@ -101,6 +102,8 @@ export default async function LandingPage({ params }: { params: Promise<Params> 
           </Link>
         </div>
       </section>
+
+      <PublicLegalFooter />
     </main>
   );
 }

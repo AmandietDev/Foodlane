@@ -186,7 +186,7 @@ export function AppStoreBadge({ href }: { href: string }) {
         <path d="M18.7 12.5c-.1-2.1 1.7-3.1 1.8-3.2-1-.1-2-.6-2.5-1.4-.6-.8-1.5-1.2-2.4-1.2-1 0-2 .6-2.5.6s-1.3-.6-2.2-.6c-1.1 0-2.2.7-2.8 1.7-1.2 2.1-.3 5.2.8 6.9.6.8 1.2 1.7 2.1 1.7.8 0 1.1-.5 2.2-.5 1 0 1.3.5 2.2.5.9 0 1.5-.8 2.1-1.6.7-.9 1-1.9 1-1.9-.1 0-2-.8-2-3.1zM15.5 4.2c.5-.6.9-1.5.8-2.3-.8 0-1.7.5-2.2 1.1-.5.6-1 1.5-.9 2.3.9.1 1.8-.5 2.3-1.1z" />
       </svg>
       <div className="text-left leading-tight">
-        <div className="text-[9px] opacity-80">Télécharger sur</div>
+        <div className="text-[9px] opacity-80">Bientôt sur</div>
         <div className="text-sm font-semibold">App Store</div>
       </div>
     </Link>
@@ -207,7 +207,7 @@ export function GooglePlayBadge({ href }: { href: string }) {
         <path fill="#FFB900" d="M13.5 12 17.5 16 21 12.5 17.5 8 13.5 12z" />
       </svg>
       <div className="text-left leading-tight">
-        <div className="text-[9px] opacity-80">Disponible sur</div>
+        <div className="text-[9px] opacity-80">Bientôt sur</div>
         <div className="text-sm font-semibold">Google Play</div>
       </div>
     </Link>

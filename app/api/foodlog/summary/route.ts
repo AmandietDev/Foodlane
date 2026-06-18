@@ -208,6 +208,7 @@ export async function GET(request: NextRequest) {
         meta: {
           components_found: [],
           rules_triggered: ["analysis_fallback"],
+          meals_analyzed: mealEntries.length,
         },
       };
     }

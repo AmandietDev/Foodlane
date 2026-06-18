@@ -63,7 +63,7 @@ export const FOODLANE_LEGAL_INFO = {
   /** Nom de domaine inscrit au Kbis. */
   kbisDomain: "way-dia.com",
   /** Date de dernière mise à jour de ces documents. */
-  lastUpdate: "26 mai 2026",
+  lastUpdate: "2 juin 2026",
 } as const;
 
 /* ============================================================
@@ -363,6 +363,12 @@ export function CGUContent({
         avancés, etc.).
         <br />
         <br />
+        La version gratuite peut afficher des <strong>publicités</strong>{" "}
+        fournies par <strong>Google AdSense</strong>, clairement identifiées
+        comme telles. Les abonnements payants permettent de retirer ces
+        publicités.
+        <br />
+        <br />
         Le détail des fonctionnalités, des tarifs et des conditions de
         souscription est précisé dans les Conditions Générales de Vente
         (CGV) et au sein de l&apos;application au moment de l&apos;achat.
@@ -571,7 +577,11 @@ export function ConfidentialiteContent({
         fraude, etc.) ;
         <br />
         • le cas échéant, envoyer des informations commerciales ou la
-        newsletter aux utilisateurs ayant donné leur consentement.
+        newsletter aux utilisateurs ayant donné leur consentement ;
+        <br />
+        • afficher des publicités sur la version gratuite via Google
+        AdSense, lorsque l&apos;utilisateur a donné son consentement aux
+        cookies marketing.
       </Section>
 
       <Section variant={variant} title="3. Données collectées">
@@ -712,6 +722,26 @@ export function ConfidentialiteContent({
         <br />
         • <strong>Refgrow</strong> — uniquement le cas échéant, pour la
         gestion du programme de parrainage et d&apos;affiliation.
+        <br />
+        • <strong>Google Ireland Limited / Google LLC</strong> (USA) —
+        diffusion de publicités via <strong>Google AdSense</strong> sur la
+        version gratuite, lorsque l&apos;utilisateur a accepté les cookies
+        marketing. Google peut déposer des cookies ou utiliser des
+        identifiants similaires pour mesurer et personnaliser les annonces.
+        <br />
+        <br />
+        Pour en savoir plus sur l&apos;utilisation des données par Google
+        dans ce cadre :{" "}
+        <a
+          href="https://policies.google.com/technologies/partner-sites"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#E94E77] underline underline-offset-2 hover:text-[#D63D56]"
+        >
+          Comment Google utilise les données des sites ou applications
+          partenaires
+        </a>
+        .
         <br />
         <br />
         Aucune donnée n&apos;est revendue, louée ou cédée à des tiers à des
@@ -1152,13 +1182,35 @@ export function CookiesContent({
         politique serait mise à jour en conséquence.
       </Section>
 
-      <Section variant={variant} title="5. Cookies marketing">
-        À ce jour, Foodlane n&apos;utilise <strong>aucun cookie
-        publicitaire</strong> (pas de Meta Pixel, TikTok Pixel, Google Ads,
-        etc.). Si Foodlane venait à intégrer de tels outils à l&apos;avenir
-        (par exemple pour mesurer une campagne marketing), ces cookies
-        seraient soumis au consentement préalable de l&apos;utilisateur via
-        une bannière de consentement.
+      <Section variant={variant} title="5. Cookies publicitaires (Google AdSense)">
+        Sur la version gratuite de Foodlane, des publicités peuvent être
+        diffusées via <strong>Google AdSense</strong> (Google Ireland
+        Limited / Google LLC).
+        <br />
+        <br />
+        • <strong>Finalité</strong> : affichage de publicités, mesure de
+        performance des annonces, limitation de la fréquence d&apos;affichage,
+        lutte contre la fraude publicitaire.
+        <br />
+        • <strong>Consentement</strong> : le script AdSense et les cookies
+        associés ne sont chargés qu&apos;après acceptation de la catégorie
+        « Marketing » dans la bannière de consentement.
+        <br />
+        • <strong>Durée</strong> : variable selon Google (généralement de
+        quelques minutes à 24 mois selon le cookie).
+        <br />
+        <br />
+        Pour en savoir plus sur l&apos;utilisation des données par Google :{" "}
+        <a
+          href="https://policies.google.com/technologies/partner-sites"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#E94E77] underline underline-offset-2 hover:text-[#D63D56]"
+        >
+          Comment Google utilise les données des sites ou applications
+          partenaires
+        </a>
+        .
       </Section>
 
       <Section variant={variant} title="6. Cookies de parrainage / affiliation">
@@ -1172,8 +1224,9 @@ export function CookiesContent({
         <br />
         • Durée : jusqu&apos;à 90 jours après le clic initial.
         <br />
-        • Consentement : ce cookie n&apos;est déposé que si
-        l&apos;utilisateur arrive via un lien de parrainage / affiliation.
+        • Consentement : le script Refgrow n&apos;est chargé qu&apos;après
+        acceptation de la catégorie « Parrainage / affiliation » dans la
+        bannière de consentement.
       </Section>
 
       <Section

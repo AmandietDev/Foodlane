@@ -17,6 +17,7 @@ import { getSubscriptionAccountMessage } from "../src/lib/subscriptionDisplay";
 import { refgrowTrackSignup } from "../src/lib/refgrowClient";
 import ErrorMessage from "../components/ErrorMessage";
 import { CGUContent } from "../components/LegalDocuments";
+import { MobileAppScreen } from "../components/app/MobileAppScreen";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -343,15 +344,18 @@ export default function AccountPage() {
   };
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-6 pb-32">
-      <header className="mb-6">
-      </header>
-
-      <div className="bg-[var(--beige-card)] rounded-lg p-6 shadow-sm border border-[var(--beige-border)]">
-        <h1 className="text-2xl font-bold text-[var(--foreground)] mb-4">
-          {isNewAccount && !showLoginForm ? "Créer mon compte" : showLoginForm ? "Se connecter" : "Mon profil"}
-        </h1>
-        
+    <MobileAppScreen
+      title={
+        isNewAccount && !showLoginForm
+          ? "Créer mon compte"
+          : showLoginForm
+          ? "Se connecter"
+          : "Mon profil"
+      }
+      backHref="/menu"
+      contentClassName="px-4 pt-2 pb-8"
+    >
+      <div className="rounded-[1.5rem] border border-[#F5DDE5] bg-[#FFF0F3] p-5 shadow-[0_4px_20px_rgba(233,78,119,0.08)]">
         {/* Boutons pour basculer entre connexion et création de compte */}
         {isNewAccount && !isEditing && (
           <div className="mb-6 flex gap-2">
@@ -800,7 +804,7 @@ export default function AccountPage() {
         </div>
       )}
 
-    </main>
+    </MobileAppScreen>
   );
 }
 

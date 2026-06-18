@@ -1,3 +1,6 @@
+import type { Recipe } from "./recipes";
+import { getCurrentSeason, scoreRecipeSeasonRelevance } from "./seasonalFilter";
+
 const STORAGE_KEY = "foodlane_recent_home_recipes";
 const MAX_RECENT = 48;
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -31,27 +34,77 @@ export function rememberHomeRecipeIds(newIds: number[]): void {
   }
 }
 
-/** Rotation légère côté client (page recettes). */
+function shuffleInPlace<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+type ScorableRecipe = Recipe & {
+  personalization_score?: number;
+};
+
+/**
+ * Propositions aléatoires avec priorité saison + profil, sans ordre BDD.
+ * Les recettes de saison remontent en tête du pool, puis tirage aléatoire
+ * dans une bande large pour varier les suggestions.
+ */
+export function pickDisplayRecipes<T extends ScorableRecipe>(
+  items: T[],
+  limit: number,
+  excludeIds: number[] = []
+): T[] {
+  if (items.length === 0) return [];
+
+  const exclude = new Set(excludeIds);
+  const season = getCurrentSeason();
+
+  const scored = items
+    .filter((item) => !exclude.has(item.id))
+    .map((recipe) => {
+      const seasonPts = scoreRecipeSeasonRelevance(recipe, season);
+      const profilePts = (recipe.personalization_score ?? 0) * 0.4;
+      const jitter = Math.random() * 18;
+      return { recipe, score: seasonPts * 2.2 + profilePts + jitter };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const bandSize = Math.max(limit * 6, 36);
+  const band = scored.slice(0, Math.min(scored.length, bandSize));
+  const shuffled = shuffleInPlace([...band]);
+
+  const out: T[] = [];
+  const used = new Set<number>();
+
+  for (const row of shuffled) {
+    if (used.has(row.recipe.id)) continue;
+    used.add(row.recipe.id);
+    out.push(row.recipe);
+    if (out.length >= limit) break;
+  }
+
+  if (out.length < limit) {
+    for (const row of scored) {
+      if (used.has(row.recipe.id)) continue;
+      used.add(row.recipe.id);
+      out.push(row.recipe);
+      if (out.length >= limit) break;
+    }
+  }
+
+  return out;
+}
+
+/** @deprecated Utiliser pickDisplayRecipes */
 export function rotateScoredRecipes<T extends { id: number }>(
   items: T[],
   limit: number,
   excludeIds: number[] = []
 ): T[] {
-  const exclude = new Set(excludeIds);
-  const eligible = items.filter((item) => !exclude.has(item.id));
-  const band = eligible.slice(0, Math.max(limit * 4, 24));
-  const shuffled = [...band];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  const out: T[] = [];
-  const used = new Set<number>();
-  for (const item of shuffled) {
-    if (used.has(item.id)) continue;
-    used.add(item.id);
-    out.push(item);
-    if (out.length >= limit) break;
-  }
-  return out;
+  return pickDisplayRecipes(items as ScorableRecipe[], limit, excludeIds) as T[];
 }
+
+
+

@@ -6,7 +6,9 @@ import { usePremium } from "../contexts/PremiumContext";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import { supabase } from "../src/lib/supabaseClient";
 import LoadingSpinner from "../components/LoadingSpinner";
-import DietDiaryDayView from "../components/equilibre/DietDiaryDayView";
+import DietDiaryDayView, { type DiaryFoodLogEntry } from "../components/equilibre/DietDiaryDayView";
+import { ScanMealReviewModal } from "../components/equilibre/ScanMealReviewModal";
+import { MealIngredientsEditor } from "../components/equilibre/MealIngredientsEditor";
 import { getTodayISO, shiftDateISO } from "../components/equilibre/dietDiaryUtils";
 import { loadPreferences } from "../src/lib/userPreferences";
 import {
@@ -20,11 +22,16 @@ import {
 import { getTodayTips, getRecentIds, addToHistory } from "../src/lib/dailyTipsHistory";
 import { getLocale } from "../src/lib/i18n";
 import { sessionAuthHeaders } from "../src/lib/plannerClient";
+import { NutritionDisclaimer } from "../components/legal/NutritionDisclaimer";
+import {
+  buildLoggedMealsScoreContext,
+  uniqueLoggedMealTypes,
+} from "../components/equilibre/dietDiaryUtils";
 
 interface FoodLogEntry {
   id: string;
   date: string;
-  meal_type: "breakfast" | "lunch" | "dinner" | "snack";
+  meal_type: "breakfast" | "lunch" | "dinner" | "snack" | "hydration";
   raw_text: string;
   parsed: any;
   confidence: number;
@@ -84,7 +91,7 @@ function formatWeekdayFr(isoDate: string) {
 
 function DietAssistantFreePreview() {
   return (
-    <main className="max-w-md mx-auto px-4 pt-6 pb-24">
+    <main className="max-w-md mx-auto px-4 pt-6 pb-2">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-[var(--foreground)] tracking-tight">Assistant diététicien</h1>
         <p className="text-sm text-[var(--beige-text-light)] mt-2 leading-relaxed">
@@ -162,7 +169,6 @@ export default function EquilibrePage() {
   const [currentMeal, setCurrentMeal] = useState<"breakfast" | "lunch" | "dinner" | "snack">("breakfast");
   const [mealInput, setMealInput] = useState("");
   const [addingMeal, setAddingMeal] = useState(false);
-  const [showWeeklyInsights, setShowWeeklyInsights] = useState(false);
   const [hungerBefore, setHungerBefore] = useState<number | null>(null);
   const [satietyAfter, setSatietyAfter] = useState<number | null>(null);
   const [showFeelingModal, setShowFeelingModal] = useState(false);
@@ -378,7 +384,7 @@ export default function EquilibrePage() {
 
   async function handleAddMealWithRawText(
     rawText: string,
-    mealType: "breakfast" | "lunch" | "dinner" | "snack" = currentMeal
+    mealType: "breakfast" | "lunch" | "dinner" | "snack" | "hydration" = currentMeal
   ) {
     if (!rawText.trim()) return;
 
@@ -462,6 +468,47 @@ export default function EquilibrePage() {
     }
   }
 
+  async function handleUpdateMeal(entryId: string, rawText: string) {
+    if (!rawText.trim()) return;
+    setAddingMeal(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        alert("Tu dois être connecté pour modifier un repas");
+        return;
+      }
+
+      const res = await fetch(`/api/foodlog/${entryId}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ raw_text: rawText.trim() }),
+      });
+
+      const payload = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        entry?: FoodLogEntry;
+        summary?: DailySummary;
+      };
+
+      if (!res.ok) {
+        throw new Error(payload.error || "Erreur lors de la modification");
+      }
+
+      if (payload.summary) setSummary(payload.summary);
+      await loadTodayData(selectedDate, { silent: true });
+      await reloadWeekData();
+    } catch (error) {
+      console.error("[Equilibre] Erreur modification repas:", error);
+      alert(error instanceof Error ? error.message : "Erreur lors de la modification");
+    } finally {
+      setAddingMeal(false);
+    }
+  }
+
   async function handleDeleteMeal(entryId: string) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -523,11 +570,12 @@ export default function EquilibrePage() {
     lunch: "Déjeuner",
     dinner: "Dîner",
     snack: "Collation",
+    hydration: "Hydratation",
   };
 
   if (sessionLoading || premiumLoading) {
     return (
-      <main className="max-w-md mx-auto px-4 pt-6 pb-24">
+      <main className="max-w-md mx-auto px-4 pt-6 pb-2">
         <LoadingSpinner message="Chargement..." />
       </main>
     );
@@ -535,7 +583,7 @@ export default function EquilibrePage() {
 
   if (!user) {
     return (
-      <main className="max-w-md mx-auto px-4 pt-6 pb-24 text-center">
+      <main className="max-w-md mx-auto px-4 pt-6 pb-2 text-center">
         <p className="text-sm text-[var(--beige-text-light)] mb-4">
           Connecte-toi pour accéder à l’assistant diététicien.
         </p>
@@ -556,7 +604,7 @@ export default function EquilibrePage() {
   const canUsePhotoScan = subscriptionTier === "premium_plus";
 
   return loading ? (
-    <main className="max-w-md mx-auto px-4 pt-6 pb-24">
+    <main className="max-w-md mx-auto px-4 pt-6 pb-2">
       <LoadingSpinner message="Chargement..." />
     </main>
   ) : (
@@ -571,8 +619,6 @@ export default function EquilibrePage() {
       mealInput={mealInput}
       setMealInput={setMealInput}
       addingMeal={addingMeal}
-      showWeeklyInsights={showWeeklyInsights}
-      setShowWeeklyInsights={setShowWeeklyInsights}
       hungerBefore={hungerBefore}
       setHungerBefore={setHungerBefore}
       satietyAfter={satietyAfter}
@@ -590,10 +636,16 @@ export default function EquilibrePage() {
       onPrevDay={goPrevDay}
       onNextDay={goNextDay}
       onGoToday={goToday}
+      onSelectDate={(date) => {
+        setSelectedDate(date);
+        setLoading(true);
+        void loadTodayData(date);
+      }}
       subscriptionTier={subscriptionTier}
       handleAddMeal={handleAddMeal}
       handleAddMealWithRawText={handleAddMealWithRawText}
       handleDeleteMeal={handleDeleteMeal}
+      handleUpdateMeal={handleUpdateMeal}
       handleAddFeeling={handleAddFeeling}
       handleSaveFeeling={handleSaveFeeling}
       setCurrentMeal={setCurrentMeal}
@@ -619,8 +671,6 @@ interface EquilibrePageContentProps {
   mealInput: string;
   setMealInput: (value: string) => void;
   addingMeal: boolean;
-  showWeeklyInsights: boolean;
-  setShowWeeklyInsights: (value: boolean) => void;
   hungerBefore: number | null;
   setHungerBefore: (value: number | null) => void;
   satietyAfter: number | null;
@@ -638,10 +688,15 @@ interface EquilibrePageContentProps {
   onPrevDay: () => void;
   onNextDay: () => void;
   onGoToday: () => void;
+  onSelectDate: (date: string) => void;
   subscriptionTier: string | null;
   handleAddMeal: () => Promise<void>;
-  handleAddMealWithRawText: (rawText: string, mealType?: "breakfast" | "lunch" | "dinner" | "snack") => Promise<void>;
+  handleAddMealWithRawText: (
+    rawText: string,
+    mealType?: "breakfast" | "lunch" | "dinner" | "snack" | "hydration"
+  ) => Promise<void>;
   handleDeleteMeal: (id: string) => Promise<void>;
+  handleUpdateMeal: (id: string, rawText: string) => Promise<void>;
   handleAddFeeling: (id: string) => void;
   handleSaveFeeling: () => Promise<void>;
   setCurrentMeal: (meal: "breakfast" | "lunch" | "dinner" | "snack") => void;
@@ -651,6 +706,8 @@ interface EquilibrePageContentProps {
 type DietitianDailyNote = {
   title: string;
   intro: string;
+  scopeLine: string;
+  coverageWarning: string | null;
   highlights: string[];
   improvements: string[];
 };
@@ -660,23 +717,47 @@ function buildDailyDietitianNote(
   meals: FoodLogEntry[],
   mealTypeLabels: Record<string, string>
 ): DietitianDailyNote {
-  const totalMeals = meals.length;
-  const mealTypesPresent = [...new Set(meals.map((m) => m.meal_type))];
-  const prettyMealTypes = mealTypesPresent
+  const foodMeals = meals.filter((m) => m.meal_type !== "hydration");
+  const totalMeals = foodMeals.length;
+  const loggedMealTypes = uniqueLoggedMealTypes(foodMeals);
+  const scoreContext = buildLoggedMealsScoreContext(
+    totalMeals,
+    loggedMealTypes,
+    summary?.score ?? null
+  );
+  const prettyMealTypes = loggedMealTypes
     .map((m) => mealTypeLabels[m] || m)
     .join(", ");
 
   const title =
-    summary && summary.score >= 75
-      ? "Excellent rythme aujourd'hui"
-      : summary && summary.score >= 55
-      ? "Bonne base, on affine"
-      : "On consolide ton équilibre";
+    totalMeals === 0
+      ? "Commence ton suivi"
+      : totalMeals === 1
+        ? summary && summary.score >= 70
+          ? "Bon repas — journée à compléter"
+          : "Analyse sur un repas"
+        : totalMeals < 3
+          ? summary && summary.score >= 75
+            ? "Bonne qualité sur les repas saisis"
+            : "Journée partiellement suivie"
+          : summary && summary.score >= 75
+            ? "Excellent rythme sur tes repas saisis"
+            : summary && summary.score >= 55
+              ? "Bonne base, on affine"
+              : "On consolide ton équilibre";
 
   const intro =
     totalMeals === 0
-      ? "Aucun repas enregistré pour cette journée. Ajoute au moins 1 repas pour recevoir une note personnalisée."
-      : `Tu as noté ${totalMeals} repas (${prettyMealTypes}). Voici ma lecture rapide de ta journée.`;
+      ? "Aucun repas enregistré pour cette journée. Ajoute au moins un repas pour analyser la qualité nutritionnelle de tes apports."
+      : totalMeals === 1
+        ? `Ton score reflète uniquement ${prettyMealTypes ? `ton ${prettyMealTypes.toLowerCase()}` : "le repas saisi"}. ${
+            summary?.priority_tip || summary?.strengths?.[0] || "C'est un bon point de départ — enregistre tes autres repas pour une vision d'ensemble."
+          }`
+        : summary?.priority_tip
+          ? summary.priority_tip
+          : summary?.strengths?.[0]
+            ? summary.strengths[0]
+            : `J'analyse la composition de tes ${totalMeals} repas saisis${prettyMealTypes ? ` (${prettyMealTypes})` : ""} pour t'orienter vers un meilleur équilibre nutritionnel.`;
 
   const highlights =
     summary?.strengths?.slice(0, 3).length
@@ -689,9 +770,17 @@ function buildDailyDietitianNote(
       : ["Commence par noter ton prochain repas pour lancer le suivi."];
 
   const improvements: string[] = [];
-  if (summary?.priority_tip) improvements.push(summary.priority_tip);
+  if (totalMeals > 0 && totalMeals < 3) {
+    improvements.push(
+      totalMeals === 1
+        ? "Enregistre au moins le déjeuner et le dîner pour que ton score reflète mieux ta journée."
+        : "Ajoute tes repas manquants pour compléter l'analyse de ta journée."
+    );
+  }
   if (summary?.missing_components?.length) {
-    improvements.push(`Pense à intégrer: ${summary.missing_components.slice(0, 3).join(", ")}.`);
+    improvements.push(`Sur tes repas saisis, tu peux renforcer : ${summary.missing_components.slice(0, 2).join(", ")}.`);
+  } else if (summary?.priority_tip && totalMeals > 1) {
+    improvements.push(summary.priority_tip);
   }
   if (!improvements.length && totalMeals > 0) {
     improvements.push("Vise une assiette avec une protéine + des fibres + une source de bons gras.");
@@ -700,7 +789,14 @@ function buildDailyDietitianNote(
     improvements.push("Ajoute un repas pour débloquer tes recommandations de la journée.");
   }
 
-  return { title, intro, highlights, improvements };
+  return {
+    title,
+    intro,
+    scopeLine: scoreContext.scopeLine,
+    coverageWarning: scoreContext.coverageWarning,
+    highlights,
+    improvements,
+  };
 }
 
 function EquilibrePageContent({
@@ -714,8 +810,6 @@ function EquilibrePageContent({
   mealInput,
   setMealInput,
   addingMeal,
-  showWeeklyInsights,
-  setShowWeeklyInsights,
   hungerBefore,
   setHungerBefore,
   satietyAfter,
@@ -733,8 +827,10 @@ function EquilibrePageContent({
   onPrevDay,
   onNextDay,
   onGoToday,
+  onSelectDate,
   handleAddMealWithRawText,
   handleDeleteMeal,
+  handleUpdateMeal,
   handleAddFeeling,
   handleSaveFeeling,
   setCurrentMeal,
@@ -743,8 +839,9 @@ function EquilibrePageContent({
 }: EquilibrePageContentProps) {
   const [showScanModal, setShowScanModal] = useState(false);
   const [scanAnalysis, setScanAnalysis] = useState<ScanAnalysis | null>(null);
-  const [manualIngredients, setManualIngredients] = useState<string[]>([]);
-  const [manualInput, setManualInput] = useState("");
+  const [scanIngredients, setScanIngredients] = useState<string[]>([]);
+  const [editingMealId, setEditingMealId] = useState<string | null>(null);
+  const [editIngredients, setEditIngredients] = useState<string[]>([]);
   const [loadingScan, setLoadingScan] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -754,6 +851,7 @@ function EquilibrePageContent({
     lunch: "Déjeuner",
     dinner: "Dîner",
     snack: "Collation",
+    hydration: "Hydratation",
   };
   const dietitianNote = buildDailyDietitianNote(summary, meals, mealTypeLabels as Record<string, string>);
 
@@ -786,13 +884,13 @@ function EquilibrePageContent({
         throw new Error(base + detail);
       }
       const data = await res.json();
+      const detected = (data.ingredients || []) as { name: string }[];
       setScanAnalysis({
         ingredients: data.ingredients || [],
         mealName: data.mealName,
         advice: data.advice,
       });
-      setManualIngredients([]);
-      setManualInput("");
+      setScanIngredients(detected.map((i) => i.name).filter(Boolean));
       setShowScanModal(true);
     } catch (e) {
       setScanError(e instanceof Error ? e.message : "Erreur lors de l'analyse de la photo");
@@ -803,23 +901,46 @@ function EquilibrePageContent({
 
   const handleSaveScanAsMeal = async () => {
     if (!scanAnalysis) return;
-    const detected = scanAnalysis.ingredients.map((i) => i.name);
-    const combined = [...detected, ...manualIngredients].filter(Boolean).join(", ");
+    const combined = scanIngredients.filter(Boolean).join(", ");
     if (!combined.trim()) {
-      alert(
-        "Le repas doit être enregistré dans ton journal (avec au moins un ingrédient ou une description) pour être retrouvé dans « Ma semaine ». Ajoute des aliments détectés ou saisis-les à la main, puis réessaie."
-      );
+      alert("Ajoute au moins un aliment avant d'enregistrer le repas.");
       return;
     }
     await handleAddMealWithRawText(combined);
     setShowScanModal(false);
     setScanAnalysis(null);
-    setManualIngredients([]);
-    setManualInput("");
+    setScanIngredients([]);
+  };
+
+  const openEditMeal = (entry: DiaryFoodLogEntry) => {
+    const fromParsed = entry.parsed?.items
+      ?.map((i) => i.name)
+      .filter((n): n is string => Boolean(n));
+    const list =
+      fromParsed && fromParsed.length > 0
+        ? fromParsed
+        : entry.raw_text
+            .split(/[,;]/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+    setEditingMealId(entry.id);
+    setEditIngredients(list.length > 0 ? list : [entry.raw_text]);
+  };
+
+  const handleSaveEditedMeal = async () => {
+    if (!editingMealId) return;
+    const combined = editIngredients.filter(Boolean).join(", ");
+    if (!combined.trim()) {
+      alert("Ajoute au moins un aliment.");
+      return;
+    }
+    await handleUpdateMeal(editingMealId, combined);
+    setEditingMealId(null);
+    setEditIngredients([]);
   };
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-6 pb-24">
+    <main className="max-w-md mx-auto px-4 pt-6 pb-2">
       <input
         ref={fileInputRef}
         type="file"
@@ -844,20 +965,26 @@ function EquilibrePageContent({
         canGoNext={canGoNext}
         onPrevDay={onPrevDay}
         onNextDay={onNextDay}
+        onSelectDate={onSelectDate}
         meals={meals}
         summary={summary}
         dietitianNote={dietitianNote}
         defiDuJour={defiDuJour}
         conseilDuJour={conseilDuJour}
+        weekMeals={weekMeals}
+        weekMealsLoading={weekMealsLoading}
+        weeklyInsights={weeklyInsights}
+        onWeekOpen={onWeekTabOpen}
         addingMeal={addingMeal}
         canUsePhotoScan={canUsePhotoScan}
         loadingScan={loadingScan}
         subscriptionTier={subscriptionTier}
         onAddMeal={async (mealType, rawText) => {
-          setCurrentMeal(mealType);
+          if (mealType !== "hydration") setCurrentMeal(mealType);
           await handleAddMealWithRawText(rawText, mealType);
         }}
         onDeleteMeal={(id) => void handleDeleteMeal(id)}
+        onEditMeal={openEditMeal}
         onAddFeeling={handleAddFeeling}
         onPhotoScanClick={(mealType) => {
           setCurrentMeal(mealType);
@@ -936,102 +1063,53 @@ function EquilibrePageContent({
       )}
 
       {/* Modales globales (visibles quel que soit l'onglet) */}
-      {/* Modal scan : ingrédients détectés + ajout manuel */}
-      {showScanModal && scanAnalysis && (
-        <div className="fixed inset-0 bg-[#6B2E2E]/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-sm bg-[#FFF0F0] rounded-2xl p-5 shadow-xl">
-            <h3 className="text-lg font-bold text-[#6B2E2E] mb-3">
-              {scanAnalysis.mealName ? `« ${scanAnalysis.mealName} »` : "Ingrédients détectés"}
-            </h3>
-            <p className="text-xs text-[#726566] mb-3">
-              L’assistant diététicien a repéré les aliments suivants. Tu peux en ajouter (ex. crème fraîche, parmesan).
+      {showScanModal && scanAnalysis ? (
+        <ScanMealReviewModal
+          mealName={scanAnalysis.mealName}
+          ingredients={scanIngredients}
+          onIngredientsChange={setScanIngredients}
+          advice={scanAnalysis.advice}
+          saving={addingMeal}
+          onSave={() => void handleSaveScanAsMeal()}
+          onCancel={() => {
+            setShowScanModal(false);
+            setScanAnalysis(null);
+            setScanIngredients([]);
+          }}
+        />
+      ) : null}
+
+      {editingMealId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#6B2E2E]/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-[#FFF0F0] p-5 shadow-xl">
+            <h3 className="mb-1 text-lg font-bold text-[#6B2E2E]">Modifier le repas</h3>
+            <p className="mb-3 text-xs text-[#726566]">
+              Corrige les aliments enregistrés pour affiner l&apos;analyse nutritionnelle.
             </p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {scanAnalysis.ingredients.map((i, idx) => (
-                <span
-                  key={idx}
-                  className="px-2.5 py-1 rounded-full bg-[#FFD9D9] text-[#6B2E2E] text-sm"
-                >
-                  {i.name}
-                </span>
-              ))}
-              {manualIngredients.map((name, idx) => (
-                <span
-                  key={`m-${idx}`}
-                  className="px-2.5 py-1 rounded-full bg-[#E94E77] text-white text-sm flex items-center gap-1"
-                >
-                  {name}
-                  <button
-                    type="button"
-                    onClick={() => setManualIngredients((prev) => prev.filter((_, i) => i !== idx))}
-                    className="hover:bg-white/20 rounded-full w-4 h-4 flex items-center justify-center text-xs"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2 mb-4">
-              <input
-                type="text"
-                value={manualInput}
-                onChange={(e) => setManualInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (manualInput.trim()) {
-                      setManualIngredients((prev) => [...prev, manualInput.trim()]);
-                      setManualInput("");
-                    }
-                  }
-                }}
-                placeholder="Ex: crème fraîche, parmesan..."
-                className="flex-1 rounded-xl border border-[var(--beige-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[#E94E77] text-[var(--foreground)]"
-              />
+            <MealIngredientsEditor ingredients={editIngredients} onChange={setEditIngredients} />
+            <div className="mt-4 flex gap-2">
               <button
                 type="button"
                 onClick={() => {
-                  if (manualInput.trim()) {
-                    setManualIngredients((prev) => [...prev, manualInput.trim()]);
-                    setManualInput("");
-                  }
+                  setEditingMealId(null);
+                  setEditIngredients([]);
                 }}
-                disabled={!manualInput.trim()}
-                className="px-3 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold disabled:opacity-50"
-              >
-                +
-              </button>
-            </div>
-            {scanAnalysis.advice?.message && (
-              <p className="text-xs text-[#726566] mb-4 p-2 bg-white/60 rounded-lg">
-                {scanAnalysis.advice.message}
-              </p>
-            )}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowScanModal(false);
-                  setScanAnalysis(null);
-                  setManualIngredients([]);
-                  setManualInput("");
-                }}
-                className="flex-1 py-2 rounded-xl bg-white border border-[var(--beige-border)] text-sm text-[#726566] font-semibold"
+                className="flex-1 rounded-xl border border-[var(--beige-border)] bg-white px-4 py-2 text-sm font-semibold text-[#726566]"
               >
                 Annuler
               </button>
               <button
                 type="button"
-                onClick={handleSaveScanAsMeal}
+                onClick={() => void handleSaveEditedMeal()}
                 disabled={addingMeal}
-                className="flex-1 py-2 rounded-xl bg-[#E94E77] text-white text-sm font-semibold hover:bg-[#D63D56] disabled:opacity-50"
+                className="flex-1 rounded-xl bg-[#E94E77] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {addingMeal ? "..." : "Enregistrer le repas"}
+                {addingMeal ? "Enregistrement…" : "Enregistrer"}
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {scanError && (
         <div className="fixed top-4 left-4 right-4 z-50 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex items-center justify-between">
@@ -1046,6 +1124,7 @@ function EquilibrePageContent({
         </div>
       )}
 
+      <NutritionDisclaimer className="mt-8 pb-4" />
     </main>
   );
 }

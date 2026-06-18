@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BLOG_POSTS, buildMetadata } from "../src/lib/seo";
+import { PublicLegalFooter } from "../components/legal/PublicLegalFooter";
 
 export const metadata: Metadata = buildMetadata({
   title: "Blog nutrition et organisation des repas",
@@ -35,6 +36,8 @@ export default function BlogIndexPage() {
           </article>
         ))}
       </section>
+
+      <PublicLegalFooter />
     </main>
   );
 }

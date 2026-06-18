@@ -82,6 +82,7 @@ export default function RootLayout({
               <PremiumProvider>
                 <SubscriptionUpsellGate />
                 <AppContentShell>{children}</AppContentShell>
+                <AdsenseLoader />
 
                 {/* Zone fixe en bas : pub au-dessus de la barre d'onglets (mobile) */}
                 <BottomNavigation />

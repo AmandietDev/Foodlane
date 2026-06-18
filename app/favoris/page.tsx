@@ -12,6 +12,7 @@ import AestheticIllustration from "../components/AestheticIllustration";
 import { detectDietaryBadges, DIETARY_BADGE_ICONS } from "../src/lib/dietaryProfiles";
 import LoadingSpinner from "../components/LoadingSpinner";
 import EmptyState from "../components/EmptyState";
+import { appLayoutTheme } from "../components/app/appLayoutTheme";
 import {
   type Collection,
   loadCollections,
@@ -443,7 +444,10 @@ export default function FavorisPage() {
   }
 
   return (
-    <main className="max-w-md md:max-w-3xl lg:max-w-4xl mx-auto px-4 md:px-8 pt-6 pb-24 md:pb-10">
+    <main
+      className="mx-auto min-h-screen max-w-md px-4 pt-5 pb-2"
+      style={{ backgroundColor: appLayoutTheme.pageBg }}
+    >
       {/* Message de succès pour l'ajout aux favoris */}
       {favoriteSuccessMessage && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[100] bg-gradient-to-r from-[#E94E77] to-[#D63D56] text-white px-6 py-4 rounded-xl shadow-2xl border-2 border-white/20">
@@ -456,16 +460,15 @@ export default function FavorisPage() {
         </div>
       )}
       {/* En-tête avec recherche - style inspiré de l'image */}
-      <header className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-[#E94E77]">MON CARNET</h1>
-        </div>
+      <header className="mb-5">
+        <h1 className="text-2xl font-bold text-[#4A2C2A]">Mon carnet</h1>
+        <p className="mt-1 text-sm text-[#8A6F6F]">Favoris, collections et menu de la semaine</p>
       </header>
 
       {/* Widget Menu et Liste de courses */}
       {!selectedCollection && (
         <section className="mb-6">
-          <div className="bg-white border border-[var(--beige-border)] rounded-2xl p-4 shadow-sm">
+          <div className="overflow-hidden rounded-[1.5rem] border border-[#F5DDE5] bg-[#FFF0F3] p-4 shadow-[0_4px_20px_rgba(233,78,119,0.08)]">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-[#6B2E2E]">Mon menu de la semaine</h2>
               <Link
@@ -597,7 +600,7 @@ export default function FavorisPage() {
 
       {!selectedCollection && (
         <section className="mb-6">
-          <div className="bg-white border border-[var(--beige-border)] rounded-2xl p-4 shadow-sm">
+          <div className="overflow-hidden rounded-[1.5rem] border border-[#F5DDE5] bg-[#FFF0F3] p-4 shadow-[0_4px_20px_rgba(233,78,119,0.08)]">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-semibold text-[#6B2E2E]">Mes menus enregistrés</h2>
               <Link href="/tableau" className="text-sm text-[#E94E77] font-semibold hover:text-[#D63D56]">

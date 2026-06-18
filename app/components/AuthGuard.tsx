@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import LoadingSpinner from "./LoadingSpinner";
+import { isPublicPath } from "../src/lib/publicRoutes";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -11,33 +12,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useSupabaseSession();
   const [hasRedirected, setHasRedirected] = useState(false);
   const [loadingTimeout, setLoadingTimeout] = useState(false);
-
-  // Pages qui ne nécessitent pas de connexion
-  const publicPages = [
-    "/",
-    "/coming-soon",
-    "/compte",
-    "/login",
-    "/forgot-password",
-    "/reset-password",
-    "/blog",
-    "/organise-repas",
-    "/liste-de-courses",
-    "/organisation-repas",
-    "/meal-planner",
-    "/batch-cooking",
-    "/meal-prep",
-    "/menus-equilibres",
-    "/menus-perte-de-poids",
-    "/idees-repas",
-    "/quoi-manger-ce-soir",
-    "/organisation-alimentaire",
-    "/economies-courses",
-    "/gaspillage-alimentaire",
-    "/assistant-nutrition",
-    "/application-nutrition",
-  ];
-  const isBlogPost = pathname.startsWith("/blog/");
+  const isPublic = isPublicPath(pathname);
 
   // IMPORTANT: Tous les hooks doivent être appelés avant tout return conditionnel
   
@@ -57,14 +32,14 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Si le chargement est terminé et qu'il n'y a pas d'utilisateur, rediriger
-    if (!loading && !user && !hasRedirected && !publicPages.includes(pathname) && !isBlogPost) {
+    if (!loading && !user && !hasRedirected && !isPublic) {
       setHasRedirected(true);
       router.replace("/login");
     }
-  }, [user, loading, router, hasRedirected, pathname, isBlogPost]);
+  }, [user, loading, router, hasRedirected, pathname, isPublic]);
 
   // Si on est sur une page publique, toujours afficher immédiatement (même pendant le chargement)
-  if (publicPages.includes(pathname) || isBlogPost) {
+  if (isPublic) {
     return <>{children}</>;
   }
 
