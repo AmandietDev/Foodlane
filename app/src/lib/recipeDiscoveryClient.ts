@@ -98,12 +98,12 @@ export function pickDisplayRecipes<T extends ScorableRecipe>(
 }
 
 /** @deprecated Utiliser pickDisplayRecipes */
-export function rotateScoredRecipes<T extends { id: number }>(
+export function rotateScoredRecipes<T extends ScorableRecipe>(
   items: T[],
   limit: number,
   excludeIds: number[] = []
 ): T[] {
-  return pickDisplayRecipes(items as ScorableRecipe[], limit, excludeIds) as T[];
+  return pickDisplayRecipes(items, limit, excludeIds);
 }
 
 
